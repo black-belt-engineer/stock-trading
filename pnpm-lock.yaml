@@ -22,7 +22,11 @@ importers:
 
   packages/logger: {}
 
-  packages/types: {}
+  packages/types:
+    devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
 
 packages:
 
@@ -60,6 +64,11 @@ packages:
     resolution: {integrity: sha512-REEB2rVTVDTf4hav1gJ5dIsGylWZrNonvjXFtk1dCi8gND3PhZtnYkyry1bra/Fo+iP6ctTEZbg6vWfdfHq/1A==}
     hasBin: true
 
+  typescript@5.9.3:
+    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
 snapshots:
 
   '@turbo/darwin-64@2.9.8':
@@ -88,3 +97,5 @@ snapshots:
       '@turbo/linux-arm64': 2.9.8
       '@turbo/windows-64': 2.9.8
       '@turbo/windows-arm64': 2.9.8
+
+  typescript@5.9.3: {}

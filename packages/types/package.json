@@ -2,8 +2,24 @@
   "name": "@stock-platform/types",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "node -e \"process.exit(0)\"",
+    "build": "tsc -p tsconfig.json",
     "lint": "node -e \"process.exit(0)\""
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
   }
 }
