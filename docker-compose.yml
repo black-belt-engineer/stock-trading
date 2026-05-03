@@ -1,0 +1,4 @@
+name: stock-trading
+
+# Local orchestration for the stock platform. Add services as apps are containerized.
+services: {}
