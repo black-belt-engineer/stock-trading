@@ -1,4 +1,79 @@
 name: stock-trading
 
-# Local orchestration for the stock platform. Add services as apps are containerized.
-services: {}
+# Local development stack.
+# Optional: copy .env.local.example → .env.local for overrides and so app env matches containers.
+# Compose interpolates ${...} from a `.env` file in this directory or `docker compose --env-file ...`.
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: stock-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      POSTGRES_DB: stockdb
+      POSTGRES_USER: stockuser
+      POSTGRES_PASSWORD: stockpass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - stock-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stockuser -d stockdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: stock-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    env_file:
+      - path: .env.local
+        required: false
+    networks:
+      - stock-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  pubsub:
+    image: gcr.io/google.com/cloudsdktool/cloud-sdk:latest
+    container_name: stock-pubsub-emulator
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      PUBSUB_PROJECT_ID: ${PUBSUB_PROJECT_ID:-local-project}
+    command:
+      - /bin/bash
+      - -c
+      - |
+        set -e
+        gcloud beta emulators pubsub start \
+          --host-port=0.0.0.0:8085 \
+          --project="$${PUBSUB_PROJECT_ID}"
+    networks:
+      - stock-net
+
+networks:
+  stock-net:
+    name: stock-net
+    driver: bridge
+
+volumes:
+  postgres_data:
+    name: stock-postgres-data
