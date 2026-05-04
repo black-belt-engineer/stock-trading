@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stock Pub/Sub Dashboard</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1020;
+        --panel: #131b2e;
+        --panel-soft: #1a243b;
+        --text: #e8edf7;
+        --text-soft: #9fb0d1;
+        --accent: #60a5fa;
+        --good: #34d399;
+        --bad: #f87171;
+        --warning: #fbbf24;
+        --border: #2a3550;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+        background: radial-gradient(circle at top, #121b33, var(--bg) 46%);
+        color: var(--text);
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 24px;
+        letter-spacing: 0.2px;
+      }
+      .subtitle {
+        margin-top: 6px;
+        color: var(--text-soft);
+        font-size: 14px;
+      }
+      .status-row {
+        margin-top: 18px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--border);
+        background: #111935;
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-size: 13px;
+      }
+      .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--warning);
+        box-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
+      }
+      .dot.ok {
+        background: var(--good);
+        box-shadow: 0 0 10px rgba(52, 211, 153, 0.5);
+      }
+      .grid {
+        margin-top: 20px;
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(4, minmax(180px, 1fr));
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px;
+      }
+      .card-label {
+        color: var(--text-soft);
+        font-size: 12px;
+      }
+      .card-value {
+        margin-top: 8px;
+        font-size: 26px;
+        font-weight: 600;
+      }
+      .layout {
+        margin-top: 16px;
+        display: grid;
+        gap: 14px;
+        grid-template-columns: 1.1fr 1fr;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 9px 8px;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+      }
+      th {
+        color: var(--text-soft);
+        font-weight: 500;
+      }
+      .price-up {
+        color: var(--good);
+      }
+      .price-down {
+        color: var(--bad);
+      }
+      .small {
+        color: var(--text-soft);
+        font-size: 12px;
+      }
+      @media (max-width: 1050px) {
+        .grid {
+          grid-template-columns: repeat(2, minmax(180px, 1fr));
+        }
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 620px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <h1>Pub/Sub Emulator Monitor</h1>
+      <div class="subtitle">
+        Local first dashboard for live stock ticks from your ingestor stream.
+      </div>
+
+      <div class="status-row">
+        <div class="pill">
+          <span id="statusDot" class="dot"></span>
+          <span id="statusText">Connecting</span>
+        </div>
+        <div class="pill">SSE clients: <strong id="clients">0</strong></div>
+        <div class="pill">Last update: <strong id="lastUpdate">-</strong></div>
+      </div>
+
+      <section class="grid">
+        <article class="card">
+          <div class="card-label">Messages / sec</div>
+          <div class="card-value" id="mps">0</div>
+        </article>
+        <article class="card">
+          <div class="card-label">Total Messages</div>
+          <div class="card-value" id="total">0</div>
+        </article>
+        <article class="card">
+          <div class="card-label">Tracked Symbols</div>
+          <div class="card-value" id="symbols">0</div>
+        </article>
+        <article class="card">
+          <div class="card-label">Last Message Age</div>
+          <div class="card-value" id="lastAge">-</div>
+        </article>
+      </section>
+
+      <section class="layout">
+        <article class="card">
+          <div class="card-label">Volume By Symbol</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Messages</th>
+              </tr>
+            </thead>
+            <tbody id="symbolRows"></tbody>
+          </table>
+        </article>
+
+        <article class="card">
+          <div class="card-label">Latest Ticks</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Symbol</th>
+                <th>Price</th>
+                <th>Change %</th>
+                <th>Side</th>
+              </tr>
+            </thead>
+            <tbody id="tickRows"></tbody>
+          </table>
+          <div class="small">Showing newest 20 messages</div>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      const statusDot = document.getElementById("statusDot");
+      const statusText = document.getElementById("statusText");
+      const mps = document.getElementById("mps");
+      const total = document.getElementById("total");
+      const symbols = document.getElementById("symbols");
+      const lastAge = document.getElementById("lastAge");
+      const lastUpdate = document.getElementById("lastUpdate");
+      const symbolRows = document.getElementById("symbolRows");
+      const tickRows = document.getElementById("tickRows");
+      const clients = document.getElementById("clients");
+
+      let latestHealth = { clients: 0 };
+
+      function formatRelative(ts) {
+        if (!ts) return "-";
+        const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+        if (diffSec < 2) return "just now";
+        if (diffSec < 60) return `${diffSec}s ago`;
+        const minutes = Math.floor(diffSec / 60);
+        return `${minutes}m ago`;
+      }
+
+      function render(snapshot) {
+        statusText.textContent =
+          snapshot.status === "healthy" ? "Healthy" : "Connecting";
+        statusDot.classList.toggle("ok", snapshot.status === "healthy");
+        mps.textContent = String(snapshot.messagesPerSecond ?? 0);
+        total.textContent = String(snapshot.totalMessages ?? 0);
+
+        const entries = Object.entries(snapshot.bySymbol ?? {}).sort(
+          (a, b) => b[1] - a[1],
+        );
+        symbols.textContent = String(entries.length);
+
+        lastAge.textContent = formatRelative(snapshot.lastMessageAt);
+        lastUpdate.textContent = new Date().toLocaleTimeString();
+        clients.textContent = String(latestHealth.clients ?? 0);
+
+        symbolRows.innerHTML = entries
+          .map(
+            ([symbol, count]) =>
+              `<tr><td>${symbol}</td><td>${count.toLocaleString()}</td></tr>`,
+          )
+          .join("");
+
+        tickRows.innerHTML = (snapshot.latest ?? [])
+          .slice(0, 20)
+          .map((tick) => {
+            const cls = tick.changePercent >= 0 ? "price-up" : "price-down";
+            const sign = tick.changePercent >= 0 ? "+" : "";
+            return `<tr>
+              <td>${new Date(tick.timestamp).toLocaleTimeString()}</td>
+              <td>${tick.symbol}</td>
+              <td>$${Number(tick.price).toFixed(2)}</td>
+              <td class="${cls}">${sign}${Number(tick.changePercent).toFixed(2)}%</td>
+              <td>${tick.side}</td>
+            </tr>`;
+          })
+          .join("");
+      }
+
+      async function pollHealth() {
+        try {
+          const response = await fetch("/api/health");
+          latestHealth = await response.json();
+        } catch (err) {
+          console.error("Failed to fetch health", err);
+        }
+      }
+
+      setInterval(pollHealth, 2000);
+      void pollHealth();
+
+      const source = new EventSource("/api/events");
+      source.addEventListener("update", (event) => {
+        try {
+          render(JSON.parse(event.data));
+        } catch (err) {
+          console.error("Invalid update payload", err);
+        }
+      });
+      source.onerror = () => {
+        statusText.textContent = "Reconnecting";
+        statusDot.classList.remove("ok");
+      };
+    </script>
+  </body>
+</html>
