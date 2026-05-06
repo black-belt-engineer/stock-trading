@@ -6,7 +6,7 @@ name: stock-trading
 
 services:
   postgres:
-    image: postgres:15
+    image: timescale/timescaledb:latest-pg15
     container_name: stock-postgres
     restart: unless-stopped
     ports:
