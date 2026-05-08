@@ -1,0 +1,101 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+@import "tailwindcss";
+@import "./tokens.css";
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.mono {
+  font-family: "JetBrains Mono", monospace;
+}
+
+.card-surface {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--card-shadow);
+}
+
+.text-muted {
+  color: var(--text-secondary);
+}
+
+.flash-up {
+  animation: flashGreen 600ms ease-out;
+}
+
+.flash-down {
+  animation: flashRed 600ms ease-out;
+}
+
+@keyframes flashGreen {
+  0% {
+    color: var(--accent-green);
+  }
+  100% {
+    color: var(--text-primary);
+  }
+}
+
+@keyframes flashRed {
+  0% {
+    color: var(--accent-red);
+  }
+  100% {
+    color: var(--text-primary);
+  }
+}
+
+@keyframes pulseLive {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes pulseReconnecting {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes feedIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

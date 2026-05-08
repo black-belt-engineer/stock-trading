@@ -1,0 +1,26 @@
+:root {
+  --bg-base: #0c0e12;
+  --bg-surface: #13161d;
+  --bg-elevated: #1a1e28;
+  --bg-sidebar: #0f1117;
+  --bg-input: #1e222e;
+
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  --text-primary: #e6e8f0;
+  --text-secondary: #6b7894;
+  --text-muted: #363d52;
+  --text-inverse: #0c0e12;
+
+  --accent-teal: #e2f73f;
+  --accent-teal-dim: rgba(226, 247, 63, 0.16);
+  --accent-lime: #e2f73f;
+  --accent-lime-dim: rgba(226, 247, 63, 0.14);
+  --accent-green: #22c55e;
+  --accent-red: #f0485a;
+  --accent-amber: #f59e0b;
+
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
