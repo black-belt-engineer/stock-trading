@@ -18,3 +18,4 @@ export {
   type KafkaBootstrapConfig,
   type KafkaTopicParams,
 } from "./bootstrap.js";
+export { kafkaEnvSchemaProperties, type KafkaBrokerEnv } from "./env-schema.js";

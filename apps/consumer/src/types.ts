@@ -1,10 +1,7 @@
-export type AppEnv = {
-  KAFKA_BROKERS: string;
-  KAFKA_TOPIC: string;
+import type { KafkaBrokerEnv } from "@stock-platform/kafka";
+
+export type AppEnv = KafkaBrokerEnv & {
   KAFKA_GROUP_ID: string;
-  KAFKA_CLIENT_ID: string;
-  KAFKA_TOPIC_PARTITIONS: number;
-  KAFKA_REPLICATION_FACTOR: number;
   DATABASE_URL: string;
   REDIS_URL: string;
   PORT: number;

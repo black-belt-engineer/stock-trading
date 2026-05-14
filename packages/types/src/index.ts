@@ -1,5 +1,5 @@
 /**
- * Core message flowing through the pipeline (ingest → Pub/Sub → consumer → Redis / DB).
+ * Core message flowing through the pipeline (ingest → Kafka → consumer → Redis / DB).
  */
 export type PriceEvent = {
   symbol: string;

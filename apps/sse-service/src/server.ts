@@ -1,6 +1,7 @@
-import Fastify, { type FastifyInstance } from "fastify";
-import fastifyEnv from "@fastify/env";
+import "./fastify-env.js";
 import type { AppEnv } from "./types.js";
+import fastifyEnv from "@fastify/env";
+import Fastify, { type FastifyInstance } from "fastify";
 
 const envSchema = {
   type: "object",
@@ -10,8 +11,6 @@ const envSchema = {
     PORT: { type: "number", default: 3003 },
   },
 } as const;
-
-type SseServer = FastifyInstance & { config: AppEnv };
 
 export async function createServer(): Promise<FastifyInstance> {
   const fastify = Fastify({ logger: false });
@@ -26,5 +25,5 @@ export async function createServer(): Promise<FastifyInstance> {
 }
 
 export function getServerConfig(fastify: FastifyInstance): AppEnv {
-  return (fastify as unknown as SseServer).config;
+  return fastify.config;
 }

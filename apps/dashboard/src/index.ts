@@ -1,3 +1,4 @@
+import "./fastify-env.js";
 import Fastify from "fastify";
 import fastifyEnv from "@fastify/env";
 import fastifyStatic from "@fastify/static";
@@ -6,19 +7,11 @@ import { fileURLToPath } from "node:url";
 import { loadLocalEnv as loadLocalEnvFiles } from "@stock-platform/env";
 import { createLogger } from "@stock-platform/logger";
 import type { PriceEvent } from "@stock-platform/types";
+import { dashboardEnvSchema } from "./env-schema.js";
 import { startPriceTickKafkaConsumer } from "./kafka-feed.js";
+import type { AppEnv } from "./types.js";
 
 const log = createLogger("dashboard");
-
-type AppEnv = {
-  KAFKA_BROKERS: string;
-  KAFKA_TOPIC: string;
-  DASHBOARD_KAFKA_GROUP_ID: string;
-  KAFKA_CLIENT_ID: string;
-  KAFKA_TOPIC_PARTITIONS: number;
-  KAFKA_REPLICATION_FACTOR: number;
-  DASHBOARD_PORT: number;
-};
 
 type DashboardSnapshot = {
   status: "connecting" | "healthy";
@@ -35,23 +28,11 @@ async function main(): Promise<void> {
 
   await fastify.register(fastifyEnv, {
     confKey: "config",
-    schema: {
-      type: "object",
-      required: ["KAFKA_BROKERS"],
-      properties: {
-        KAFKA_BROKERS: { type: "string", minLength: 1 },
-        KAFKA_TOPIC: { type: "string", default: "stock-prices" },
-        DASHBOARD_KAFKA_GROUP_ID: { type: "string", default: "stock-prices-dashboard" },
-        KAFKA_CLIENT_ID: { type: "string", default: "dashboard" },
-        KAFKA_TOPIC_PARTITIONS: { type: "number", default: 6 },
-        KAFKA_REPLICATION_FACTOR: { type: "number", default: 1 },
-        DASHBOARD_PORT: { type: "number", default: 3200 },
-      },
-    },
+    schema: dashboardEnvSchema,
     dotenv: false,
   });
 
-  const config = (fastify as typeof fastify & { config: AppEnv }).config;
+  const config: AppEnv = fastify.config;
 
   const latestLimit = 120;
   const clients = new Set<import("node:http").ServerResponse>();

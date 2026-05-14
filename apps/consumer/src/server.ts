@@ -1,24 +1,20 @@
-import Fastify, { type FastifyInstance } from "fastify";
-import fastifyEnv from "@fastify/env";
+import "./fastify-env.js";
 import type { AppEnv, HealthStatus } from "./types.js";
+import { kafkaEnvSchemaProperties } from "@stock-platform/kafka";
+import fastifyEnv from "@fastify/env";
+import Fastify, { type FastifyInstance } from "fastify";
 
 const envSchema = {
   type: "object",
   required: ["KAFKA_BROKERS", "DATABASE_URL", "REDIS_URL"],
   properties: {
-    KAFKA_BROKERS: { type: "string", minLength: 1 },
-    KAFKA_TOPIC: { type: "string", default: "stock-prices" },
+    ...kafkaEnvSchemaProperties("consumer"),
     KAFKA_GROUP_ID: { type: "string", default: "stock-prices-consumer" },
-    KAFKA_CLIENT_ID: { type: "string", default: "consumer" },
-    KAFKA_TOPIC_PARTITIONS: { type: "number", default: 6 },
-    KAFKA_REPLICATION_FACTOR: { type: "number", default: 1 },
     DATABASE_URL: { type: "string", minLength: 1 },
     REDIS_URL: { type: "string", minLength: 1 },
     PORT: { type: "number", default: 3002 },
   },
 } as const;
-
-type ConsumerServer = FastifyInstance & { config: AppEnv };
 
 export async function createServer(): Promise<FastifyInstance> {
   const fastify = Fastify({ logger: false });
@@ -33,7 +29,7 @@ export async function createServer(): Promise<FastifyInstance> {
 }
 
 export function getServerConfig(fastify: FastifyInstance): AppEnv {
-  return (fastify as unknown as ConsumerServer).config;
+  return fastify.config;
 }
 
 export function registerHealthRoute(

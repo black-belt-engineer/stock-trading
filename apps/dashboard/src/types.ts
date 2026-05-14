@@ -1,5 +1,6 @@
 import type { KafkaBrokerEnv } from "@stock-platform/kafka";
 
 export type AppEnv = KafkaBrokerEnv & {
-  PORT: number;
+  DASHBOARD_KAFKA_GROUP_ID: string;
+  DASHBOARD_PORT: number;
 };
