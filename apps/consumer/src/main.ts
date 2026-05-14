@@ -6,7 +6,7 @@ import {
   sideToSmallInt,
   upsertRedisLatest,
 } from "./market-data-persistence.js";
-import { setupPubSub } from "./pubsub.js";
+import { setupKafkaConsumer } from "./kafka.js";
 import { createServer, getServerConfig, registerHealthRoute } from "./server.js";
 import type { HealthStatus } from "./types.js";
 import { loadLocalEnv, log } from "./utils.js";
@@ -16,13 +16,13 @@ export async function main(): Promise<void> {
 
   const fastify = await createServer();
   const config = getServerConfig(fastify);
-  const { DATABASE_URL, REDIS_URL, PORT } = config;
+  const { DATABASE_URL, REDIS_URL, PORT, KAFKA_TOPIC } = config;
 
   const pool = new Pool({ connectionString: DATABASE_URL });
   await prepareDatabase(pool);
 
   const redis = new Redis(REDIS_URL);
-  const { pubsub, subscription } = await setupPubSub(config);
+  const { consumer } = await setupKafkaConsumer(config);
 
   let health: HealthStatus = {
     status: "starting",
@@ -31,43 +31,54 @@ export async function main(): Promise<void> {
   };
   let shuttingDown = false;
 
-  subscription.on("error", (err) => {
-    log.error({ err }, "Pub/Sub subscription error");
+  consumer.on("consumer.crash", (ev) => {
+    log.error({ ev }, "Kafka consumer crashed");
   });
 
-  subscription.on("message", (message) => {
-    const processMessage = async (): Promise<void> => {
-      const event = JSON.parse(message.data.toString()) as PriceEvent;
+  await consumer.subscribe({ topic: KAFKA_TOPIC, fromBeginning: false });
 
-      const postgresWrite = pool.query(
-        `
+  void consumer.run({
+    eachMessage: async ({ message }) => {
+      if (!message.value) {
+        return;
+      }
+
+      let event: PriceEvent;
+      try {
+        event = JSON.parse(message.value.toString()) as PriceEvent;
+      } catch (err) {
+        log.error({ err }, "Failed to parse Kafka message");
+        return;
+      }
+
+      try {
+        const postgresWrite = pool.query(
+          `
           INSERT INTO stock_ticks (time, symbol, price, size, side)
           VALUES (to_timestamp($1 / 1000.0), $2, $3, $4, $5)
         `,
-        [
-          event.timestamp,
-          event.symbol,
-          event.price,
-          event.size,
-          sideToSmallInt(event.side),
-        ],
-      );
-      const redisWrite = upsertRedisLatest(redis, event);
+          [
+            event.timestamp,
+            event.symbol,
+            event.price,
+            event.size,
+            sideToSmallInt(event.side),
+          ],
+        );
+        const redisWrite = upsertRedisLatest(redis, event);
 
-      await Promise.all([postgresWrite, redisWrite]);
-      message.ack();
+        await Promise.all([postgresWrite, redisWrite]);
 
-      health = {
-        status: "healthy",
-        messagesProcessed: health.messagesProcessed + 1,
-        lastMessageAt: Date.now(),
-      };
-    };
-
-    void processMessage().catch((err: unknown) => {
-      log.error({ err }, "Failed to process message");
-      message.nack();
-    });
+        health = {
+          status: "healthy",
+          messagesProcessed: health.messagesProcessed + 1,
+          lastMessageAt: Date.now(),
+        };
+      } catch (err) {
+        log.error({ err }, "Failed to process message");
+        throw err;
+      }
+    },
   });
 
   registerHealthRoute(fastify, () => health);
@@ -82,11 +93,10 @@ export async function main(): Promise<void> {
     shuttingDown = true;
     log.info({ signal }, "Shutting down consumer");
 
-    subscription.removeAllListeners();
+    await consumer.disconnect();
     await fastify.close();
     await redis.quit();
     await pool.end();
-    await pubsub.close();
     process.exit(0);
   }
 

@@ -1,7 +1,7 @@
 import type { PriceEvent } from "@stock-platform/types";
 import { SYMBOL_CONFIG, STAGGER_MS, TICK_INTERVAL_MS } from "./constants.js";
 import { buildPriceEvent, calculateNextPrice } from "./price-event-factory.js";
-import { publishPriceEvent, setupPubSub } from "./pubsub.js";
+import { publishPriceEvent, setupKafkaProducer } from "./kafka.js";
 import { createServer, getServerConfig, registerHealthRoute } from "./server.js";
 import { loadLocalEnv, log } from "./utils.js";
 
@@ -10,8 +10,8 @@ export async function main(): Promise<void> {
 
   const fastify = await createServer();
   const config = getServerConfig(fastify);
-  const { PORT } = config;
-  const { pubsub, topic } = await setupPubSub(config);
+  const { PORT, KAFKA_TOPIC } = config;
+  const { producer } = await setupKafkaProducer(config);
 
   const previousPrices = new Map<string, number>();
   for (const row of SYMBOL_CONFIG) {
@@ -41,10 +41,10 @@ export async function main(): Promise<void> {
     previousPrices.set(row.symbol, nextPrice);
 
     const event: PriceEvent = buildPriceEvent(row, previousPrice, nextPrice);
-    const publishPromise = publishPriceEvent(topic, event)
-      .then((messageId) => {
+    const publishPromise = publishPriceEvent(producer, KAFKA_TOPIC, event)
+      .then(() => {
         tickCount += 1;
-        log.debug({ symbol: row.symbol, messageId }, "Published tick");
+        log.debug({ symbol: row.symbol }, "Published tick");
       })
       .catch((err: unknown) => {
         log.error({ err, symbol: row.symbol }, "Failed to publish tick");
@@ -93,8 +93,8 @@ export async function main(): Promise<void> {
     await Promise.all(toFlush);
     log.info({ flushed: toFlush.length }, "Pending publishes settled");
 
-    await pubsub.close();
-    log.info("Pub/Sub client closed");
+    await producer.disconnect();
+    log.info("Kafka producer disconnected");
 
     process.exit(0);
   }

@@ -13,7 +13,7 @@
     "lint": "node -e \"process.exit(0)\""
   },
   "dependencies": {
-    "@google-cloud/pubsub": "^4.9.0",
+    "@stock-platform/kafka": "workspace:*",
     "@stock-platform/logger": "workspace:*",
     "@stock-platform/types": "workspace:*",
     "@fastify/env": "^5.0.2",

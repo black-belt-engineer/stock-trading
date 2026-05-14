@@ -4,19 +4,16 @@ import type { AppEnv, HealthStatus } from "./types.js";
 
 const envSchema = {
   type: "object",
-  required: [
-    "PUBSUB_PROJECT_ID",
-    "PUBSUB_SUBSCRIPTION",
-    "DATABASE_URL",
-    "REDIS_URL",
-  ],
+  required: ["KAFKA_BROKERS", "DATABASE_URL", "REDIS_URL"],
   properties: {
-    PUBSUB_PROJECT_ID: { type: "string", minLength: 1 },
-    PUBSUB_TOPIC: { type: "string", default: "stock-prices" },
-    PUBSUB_SUBSCRIPTION: { type: "string", minLength: 1 },
+    KAFKA_BROKERS: { type: "string", minLength: 1 },
+    KAFKA_TOPIC: { type: "string", default: "stock-prices" },
+    KAFKA_GROUP_ID: { type: "string", default: "stock-prices-consumer" },
+    KAFKA_CLIENT_ID: { type: "string", default: "consumer" },
+    KAFKA_TOPIC_PARTITIONS: { type: "number", default: 6 },
+    KAFKA_REPLICATION_FACTOR: { type: "number", default: 1 },
     DATABASE_URL: { type: "string", minLength: 1 },
     REDIS_URL: { type: "string", minLength: 1 },
-    PUBSUB_EMULATOR_HOST: { type: "string" },
     PORT: { type: "number", default: 3002 },
   },
 } as const;

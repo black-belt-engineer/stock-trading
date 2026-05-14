@@ -1,4 +1,3 @@
-import { PubSub } from "@google-cloud/pubsub";
 import Fastify from "fastify";
 import fastifyEnv from "@fastify/env";
 import fastifyStatic from "@fastify/static";
@@ -7,14 +6,17 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createLogger } from "@stock-platform/logger";
 import type { PriceEvent } from "@stock-platform/types";
+import { startPriceTickKafkaConsumer } from "./kafka-feed.js";
 
 const log = createLogger("dashboard");
 
 type AppEnv = {
-  PUBSUB_PROJECT_ID: string;
-  PUBSUB_TOPIC: string;
-  PUBSUB_SUBSCRIPTION: string;
-  PUBSUB_EMULATOR_HOST?: string;
+  KAFKA_BROKERS: string;
+  KAFKA_TOPIC: string;
+  DASHBOARD_KAFKA_GROUP_ID: string;
+  KAFKA_CLIENT_ID: string;
+  KAFKA_TOPIC_PARTITIONS: number;
+  KAFKA_REPLICATION_FACTOR: number;
   DASHBOARD_PORT: number;
 };
 
@@ -53,53 +55,21 @@ async function main(): Promise<void> {
     confKey: "config",
     schema: {
       type: "object",
-      required: ["PUBSUB_PROJECT_ID", "PUBSUB_TOPIC", "PUBSUB_SUBSCRIPTION"],
+      required: ["KAFKA_BROKERS"],
       properties: {
-        PUBSUB_PROJECT_ID: { type: "string", minLength: 1 },
-        PUBSUB_TOPIC: { type: "string", minLength: 1 },
-        PUBSUB_SUBSCRIPTION: { type: "string", minLength: 1 },
-        PUBSUB_EMULATOR_HOST: { type: "string" },
+        KAFKA_BROKERS: { type: "string", minLength: 1 },
+        KAFKA_TOPIC: { type: "string", default: "stock-prices" },
+        DASHBOARD_KAFKA_GROUP_ID: { type: "string", default: "stock-prices-dashboard" },
+        KAFKA_CLIENT_ID: { type: "string", default: "dashboard" },
+        KAFKA_TOPIC_PARTITIONS: { type: "number", default: 6 },
+        KAFKA_REPLICATION_FACTOR: { type: "number", default: 1 },
         DASHBOARD_PORT: { type: "number", default: 3200 },
       },
     },
     dotenv: false,
   });
 
-  const {
-    PUBSUB_PROJECT_ID,
-    PUBSUB_TOPIC,
-    PUBSUB_SUBSCRIPTION,
-    PUBSUB_EMULATOR_HOST,
-    DASHBOARD_PORT,
-  } = (fastify as typeof fastify & { config: AppEnv }).config;
-
-  if (PUBSUB_EMULATOR_HOST) {
-    log.info(
-      { pubsubEmulatorHost: PUBSUB_EMULATOR_HOST },
-      "Using Pub/Sub emulator",
-    );
-  }
-
-  const pubsub = new PubSub({ projectId: PUBSUB_PROJECT_ID });
-  const topic = pubsub.topic(PUBSUB_TOPIC);
-  const [topicExists] = await topic.exists();
-  if (!topicExists) {
-    await topic.create();
-    log.info({ topic: PUBSUB_TOPIC }, "Created Pub/Sub topic");
-  }
-
-  const subscription = topic.subscription(PUBSUB_SUBSCRIPTION);
-  const [subExists] = await subscription.exists();
-  if (!subExists) {
-    await topic.createSubscription(PUBSUB_SUBSCRIPTION);
-    log.info({ subscription: PUBSUB_SUBSCRIPTION }, "Created subscription");
-  }
-
-  await fastify.register(fastifyStatic, {
-    root: resolve(dirname(fileURLToPath(import.meta.url)), "../public"),
-    prefix: "/",
-    index: "index.html",
-  });
+  const config = (fastify as typeof fastify & { config: AppEnv }).config;
 
   const latestLimit = 120;
   const clients = new Set<import("node:http").ServerResponse>();
@@ -141,16 +111,17 @@ async function main(): Promise<void> {
     }
   }
 
-  subscription.on("error", (err) => {
-    status = "connecting";
-    log.error({ err }, "Subscription stream error");
-  });
-
-  subscription.on("message", (message) => {
-    try {
-      const event = JSON.parse(message.data.toString()) as PriceEvent;
-      message.ack();
-
+  const kafkaFeed = await startPriceTickKafkaConsumer(
+    {
+      brokers: config.KAFKA_BROKERS,
+      topic: config.KAFKA_TOPIC,
+      groupId: config.DASHBOARD_KAFKA_GROUP_ID,
+      clientId: config.KAFKA_CLIENT_ID,
+      numPartitions: config.KAFKA_TOPIC_PARTITIONS,
+      replicationFactor: config.KAFKA_REPLICATION_FACTOR,
+    },
+    log,
+    (event) => {
       status = "healthy";
       totalMessages += 1;
       lastMessageAt = Date.now();
@@ -161,10 +132,13 @@ async function main(): Promise<void> {
         latest.length = latestLimit;
       }
       broadcastUpdate();
-    } catch (err) {
-      log.error({ err }, "Failed to parse incoming message");
-      message.nack();
-    }
+    },
+  );
+
+  await fastify.register(fastifyStatic, {
+    root: resolve(dirname(fileURLToPath(import.meta.url)), "../public"),
+    prefix: "/",
+    index: "index.html",
   });
 
   fastify.get("/api/health", async () => ({
@@ -193,9 +167,28 @@ async function main(): Promise<void> {
     return reply;
   });
 
-  await fastify.listen({ port: DASHBOARD_PORT, host: "0.0.0.0" });
+  let shuttingDown = false;
+  async function shutdown(signal: string): Promise<void> {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    log.info({ signal }, "Shutting down dashboard");
+    await kafkaFeed.disconnect();
+    await fastify.close();
+    process.exit(0);
+  }
+
+  process.on("SIGTERM", () => {
+    void shutdown("SIGTERM");
+  });
+  process.on("SIGINT", () => {
+    void shutdown("SIGINT");
+  });
+
+  await fastify.listen({ port: config.DASHBOARD_PORT, host: "0.0.0.0" });
   log.info(
-    { port: DASHBOARD_PORT },
+    { port: config.DASHBOARD_PORT },
     "Dashboard is live. Open http://localhost:3200",
   );
 }

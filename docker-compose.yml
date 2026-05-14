@@ -47,25 +47,27 @@ services:
       retries: 5
       start_period: 5s
 
-  pubsub:
-    image: gcr.io/google.com/cloudsdktool/cloud-sdk:latest
-    container_name: stock-pubsub-emulator
+  # Kafka-compatible broker (Redpanda) for local market-data streaming.
+  kafka:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.11
+    container_name: stock-redpanda
     restart: unless-stopped
     ports:
-      - "8085:8085"
+      - "9092:9092"
     env_file:
       - path: .env.local
         required: false
-    environment:
-      PUBSUB_PROJECT_ID: ${PUBSUB_PROJECT_ID:-local-project}
     command:
-      - /bin/bash
-      - -c
-      - |
-        set -e
-        gcloud beta emulators pubsub start \
-          --host-port=0.0.0.0:8085 \
-          --project="$${PUBSUB_PROJECT_ID}"
+      - redpanda
+      - start
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - PLAINTEXT://localhost:9092
+      - --mode
+      - dev-container
+      - --smp
+      - "1"
     networks:
       - stock-net
 

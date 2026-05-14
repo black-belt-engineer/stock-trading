@@ -21,32 +21,32 @@ This record captures foundational choices for a **real-time stock price streamin
 
 ---
 
-### 2. Ingestor publishes only to Pub/Sub
+### 2. Ingestor publishes only to Kafka
 
 **Status:** Accepted
 
 **Context:** Market data ingestion must stay responsive even when downstream systems (databases, processors, or consumers) are slow or unavailable. Coupling the ingest path directly to durable storage or synchronous writes risks **blocking ingestion** or **dropping ticks** under pressure.
 
-**Decision:** The **ingestor** writes **only** to a managed **Pub/Sub** (or equivalent durable messaging) topic. It does not synchronously persist full history or depend on consumer availability for ingest success.
+**Decision:** The **ingestor** writes **only** to a **Kafka** topic (Redpanda locally; managed or self-hosted Kafka in production). It does not synchronously persist full history or depend on consumer availability for ingest success.
 
 **Consequences:**
 
-- **Positive:** Clear boundary: ingestion completes when the message is accepted by the bus; storage outages do not stall ingestion if Pub/Sub remains healthy.
-- **Negative:** Operational dependence on Pub/Sub availability and configuration (topics, quotas, ordering semantics if required); need explicit monitoring and dead-letter strategies for poison messages.
+- **Positive:** Clear boundary: ingestion completes when the broker accepts the record; storage outages do not stall ingestion if Kafka remains healthy; horizontal scale via partitions and consumer groups.
+- **Negative:** Operational dependence on Kafka (topics, retention, replication, consumer lag); need explicit monitoring and dead-letter strategies for poison messages.
 
 ---
 
-### 3. Consumer pulls from Pub/Sub
+### 3. Consumer reads from Kafka
 
 **Status:** Accepted
 
 **Context:** Downstream services need to process price events at a sustainable rate. Push-only or fire-and-forget models can overwhelm a slow consumer or complicate recovery after downtime.
 
-**Decision:** A **consumer** (or pool of consumers) **pulls** from Pub/Sub (or a pull-based subscription model), so the platform can use **platform-native backpressure** and **at-least-once** delivery with explicit acks. If a consumer is down, **messages wait** in the subscription (subject to retention and policy) rather than being lost at the edge.
+**Decision:** A **consumer** (or pool of consumers in the same **consumer group**) **polls** Kafka with **at-least-once** delivery and commits offsets after successful processing. If a consumer is down, **messages remain** in the topic (subject to retention) and are replayed according to group offset rules.
 
 **Consequences:**
 
-- **Positive:** Backpressure and recovery are easier to reason about; scaling consumers can be tied to pull concurrency and processing time.
+- **Positive:** Backpressure and recovery map to consumer lag and partition assignment; scaling consumers is tied to partition count and processing time.
 - **Negative:** End-to-end latency includes queueing time when consumers lag; idempotent processing and deduplication may be required depending on exactly-once needs.
 
 ---

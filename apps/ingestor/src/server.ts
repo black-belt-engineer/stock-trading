@@ -4,11 +4,13 @@ import type { AppEnv } from "./types.js";
 
 const envSchema = {
   type: "object",
-  required: ["PUBSUB_PROJECT_ID", "PUBSUB_TOPIC"],
+  required: ["KAFKA_BROKERS"],
   properties: {
-    PUBSUB_PROJECT_ID: { type: "string", minLength: 1 },
-    PUBSUB_TOPIC: { type: "string", minLength: 1 },
-    PUBSUB_EMULATOR_HOST: { type: "string" },
+    KAFKA_BROKERS: { type: "string", minLength: 1 },
+    KAFKA_TOPIC: { type: "string", default: "stock-prices" },
+    KAFKA_CLIENT_ID: { type: "string", default: "ingestor" },
+    KAFKA_TOPIC_PARTITIONS: { type: "number", default: 6 },
+    KAFKA_REPLICATION_FACTOR: { type: "number", default: 1 },
     PORT: { type: "number", default: 3001 },
   },
 } as const;
