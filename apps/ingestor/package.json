@@ -13,11 +13,11 @@
     "lint": "node -e \"process.exit(0)\""
   },
   "dependencies": {
+    "@stock-platform/env": "workspace:*",
     "@stock-platform/kafka": "workspace:*",
     "@stock-platform/logger": "workspace:*",
     "@stock-platform/types": "workspace:*",
     "@fastify/env": "^5.0.2",
-    "dotenv": "^16.4.7",
     "fastify": "^5.2.1"
   },
   "devDependencies": {

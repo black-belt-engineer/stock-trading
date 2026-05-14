@@ -37,7 +37,7 @@ export async function main(): Promise<void> {
 
   await consumer.subscribe({ topic: KAFKA_TOPIC, fromBeginning: false });
 
-  void consumer.run({
+  consumer.run({
     eachMessage: async ({ message }) => {
       if (!message.value) {
         return;

@@ -10,11 +10,12 @@ COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY tsconfig.base.json ./
 COPY packages/types ./packages/types
 COPY packages/logger ./packages/logger
+COPY packages/env ./packages/env
 COPY apps/sse-service ./apps/sse-service
 COPY turbo.json ./
 
 RUN pnpm install --frozen-lockfile
-RUN pnpm exec turbo run build --filter=@stock-platform/types --filter=@stock-platform/logger --filter=@stock-platform/sse-service
+RUN pnpm exec turbo run build --filter=@stock-platform/types --filter=@stock-platform/logger --filter=@stock-platform/env --filter=@stock-platform/sse-service
 RUN pnpm --filter @stock-platform/sse-service deploy --prod /out
 
 FROM node:20-alpine AS runner

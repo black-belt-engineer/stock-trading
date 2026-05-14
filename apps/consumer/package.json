@@ -14,10 +14,10 @@
   },
   "dependencies": {
     "@fastify/env": "^5.0.2",
+    "@stock-platform/env": "workspace:*",
     "@stock-platform/kafka": "workspace:*",
     "@stock-platform/logger": "workspace:*",
     "@stock-platform/types": "workspace:*",
-    "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "ioredis": "^5.8.1",
     "pg": "^8.16.3"

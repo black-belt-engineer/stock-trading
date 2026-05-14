@@ -17,6 +17,9 @@ importers:
       '@fastify/env':
         specifier: ^5.0.2
         version: 5.0.3
+      '@stock-platform/env':
+        specifier: workspace:*
+        version: link:../../packages/env
       '@stock-platform/kafka':
         specifier: workspace:*
         version: link:../../packages/kafka
@@ -26,9 +29,6 @@ importers:
       '@stock-platform/types':
         specifier: workspace:*
         version: link:../../packages/types
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.6.1
       fastify:
         specifier: ^5.2.1
         version: 5.8.5
@@ -60,6 +60,9 @@ importers:
       '@fastify/static':
         specifier: ^8.1.1
         version: 8.3.0
+      '@stock-platform/env':
+        specifier: workspace:*
+        version: link:../../packages/env
       '@stock-platform/kafka':
         specifier: workspace:*
         version: link:../../packages/kafka
@@ -69,9 +72,6 @@ importers:
       '@stock-platform/types':
         specifier: workspace:*
         version: link:../../packages/types
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.6.1
       fastify:
         specifier: ^5.2.1
         version: 5.8.5
@@ -137,6 +137,9 @@ importers:
       '@fastify/env':
         specifier: ^5.0.2
         version: 5.0.3
+      '@stock-platform/env':
+        specifier: workspace:*
+        version: link:../../packages/env
       '@stock-platform/kafka':
         specifier: workspace:*
         version: link:../../packages/kafka
@@ -146,9 +149,6 @@ importers:
       '@stock-platform/types':
         specifier: workspace:*
         version: link:../../packages/types
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.6.1
       fastify:
         specifier: ^5.2.1
         version: 5.8.5
@@ -168,15 +168,15 @@ importers:
       '@fastify/env':
         specifier: ^5.0.2
         version: 5.0.3
+      '@stock-platform/env':
+        specifier: workspace:*
+        version: link:../../packages/env
       '@stock-platform/logger':
         specifier: workspace:*
         version: link:../../packages/logger
       '@stock-platform/types':
         specifier: workspace:*
         version: link:../../packages/types
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.6.1
       fastify:
         specifier: ^5.2.1
         version: 5.8.5
@@ -190,6 +190,22 @@ importers:
       tsx:
         specifier: ^4.19.3
         version: 4.21.0
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
+  packages/env:
+    dependencies:
+      '@stock-platform/logger':
+        specifier: workspace:*
+        version: link:../logger
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.17
       typescript:
         specifier: ^5.8.3
         version: 5.9.3

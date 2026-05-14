@@ -1,9 +1,9 @@
 import Fastify from "fastify";
 import fastifyEnv from "@fastify/env";
 import fastifyStatic from "@fastify/static";
-import dotenv from "dotenv";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadLocalEnv as loadLocalEnvFiles } from "@stock-platform/env";
 import { createLogger } from "@stock-platform/logger";
 import type { PriceEvent } from "@stock-platform/types";
 import { startPriceTickKafkaConsumer } from "./kafka-feed.js";
@@ -29,26 +29,8 @@ type DashboardSnapshot = {
   latest: PriceEvent[];
 };
 
-function loadLocalEnv(): void {
-  const moduleDir = dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    resolve(process.cwd(), ".env.local"),
-    resolve(process.cwd(), "../../.env.local"),
-    resolve(moduleDir, "../../.env.local"),
-    resolve(moduleDir, "../../../.env.local"),
-  ];
-
-  for (const path of candidates) {
-    const result = dotenv.config({ path, override: false });
-    if (!result.error) {
-      log.info({ path }, "Loaded environment file");
-      return;
-    }
-  }
-}
-
 async function main(): Promise<void> {
-  loadLocalEnv();
+  loadLocalEnvFiles({ importMetaUrl: import.meta.url, log });
   const fastify = Fastify({ logger: false });
 
   await fastify.register(fastifyEnv, {
