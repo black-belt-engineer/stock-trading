@@ -1,4 +1,4 @@
-import { Kafka, parseBrokers, ensureTopic, type Consumer } from "@stock-platform/kafka";
+import { createKafkaWithEnsuredTopic, type Consumer } from "@stock-platform/kafka";
 import type { AppEnv } from "./types.js";
 import { log } from "./utils.js";
 
@@ -7,19 +7,13 @@ export type KafkaConsumerContext = {
 };
 
 export async function setupKafkaConsumer(config: AppEnv): Promise<KafkaConsumerContext> {
-  const kafka = new Kafka({
+  const kafka = await createKafkaWithEnsuredTopic({
     clientId: config.KAFKA_CLIENT_ID,
-    brokers: parseBrokers(config.KAFKA_BROKERS),
-  });
-
-  const admin = kafka.admin();
-  await admin.connect();
-  await ensureTopic(admin, {
+    brokers: config.KAFKA_BROKERS,
     topic: config.KAFKA_TOPIC,
     numPartitions: config.KAFKA_TOPIC_PARTITIONS,
     replicationFactor: config.KAFKA_REPLICATION_FACTOR,
   });
-  await admin.disconnect();
 
   const consumer = kafka.consumer({ groupId: config.KAFKA_GROUP_ID });
   await consumer.connect();

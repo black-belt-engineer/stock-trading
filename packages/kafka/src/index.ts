@@ -12,3 +12,9 @@ export type {
   EachMessagePayload,
 } from "kafkajs";
 export { parseBrokers, ensureTopic } from "./topic.js";
+export {
+  createKafkaWithEnsuredTopic,
+  ensureKafkaTopicExists,
+  type KafkaBootstrapConfig,
+  type KafkaTopicParams,
+} from "./bootstrap.js";

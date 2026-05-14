@@ -1,5 +1,5 @@
 import type { Logger } from "@stock-platform/logger";
-import { Kafka, parseBrokers, ensureTopic } from "@stock-platform/kafka";
+import { createKafkaWithEnsuredTopic } from "@stock-platform/kafka";
 import type { PriceEvent } from "@stock-platform/types";
 
 export type KafkaFeedEnv = {
@@ -16,19 +16,13 @@ export async function startPriceTickKafkaConsumer(
   log: Logger,
   onEvent: (event: PriceEvent) => void,
 ): Promise<{ disconnect: () => Promise<void> }> {
-  const kafka = new Kafka({
+  const kafka = await createKafkaWithEnsuredTopic({
     clientId: env.clientId,
-    brokers: parseBrokers(env.brokers),
-  });
-
-  const admin = kafka.admin();
-  await admin.connect();
-  await ensureTopic(admin, {
+    brokers: env.brokers,
     topic: env.topic,
     numPartitions: env.numPartitions,
     replicationFactor: env.replicationFactor,
   });
-  await admin.disconnect();
 
   const consumer = kafka.consumer({ groupId: env.groupId });
   await consumer.connect();
