@@ -1,3 +1,4 @@
+import { registerShutdownHandlers } from "@stock-platform/env";
 import { Redis } from "ioredis";
 import { registerRoutes } from "./routes.js";
 import { createServer, getServerConfig } from "./server.js";
@@ -11,7 +12,6 @@ export async function main(): Promise<void> {
   const redis = new Redis(config.REDIS_URL);
 
   let activeConnections = 0;
-  let shuttingDown = false;
 
   registerRoutes(fastify, {
     redis,
@@ -27,21 +27,12 @@ export async function main(): Promise<void> {
   await fastify.listen({ port: config.PORT, host: "0.0.0.0" });
   log.info({ port: config.PORT }, "SSE service listening");
 
-  async function shutdown(signal: string): Promise<void> {
-    if (shuttingDown) {
-      return;
-    }
-    shuttingDown = true;
+  async function shutdown(signal: NodeJS.Signals): Promise<void> {
     log.info({ signal }, "Shutting down SSE service");
     await fastify.close();
     await redis.quit();
     process.exit(0);
   }
 
-  process.on("SIGTERM", () => {
-    void shutdown("SIGTERM");
-  });
-  process.on("SIGINT", () => {
-    void shutdown("SIGINT");
-  });
+  registerShutdownHandlers({ onShutdown: shutdown });
 }

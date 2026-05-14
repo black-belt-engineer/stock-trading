@@ -4,7 +4,7 @@ import fastifyEnv from "@fastify/env";
 import fastifyStatic from "@fastify/static";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadLocalEnv as loadLocalEnvFiles } from "@stock-platform/env";
+import { loadLocalEnv as loadLocalEnvFiles, registerShutdownHandlers } from "@stock-platform/env";
 import { createLogger } from "@stock-platform/logger";
 import type { PriceEvent } from "@stock-platform/types";
 import { dashboardEnvSchema } from "./env-schema.js";
@@ -130,24 +130,14 @@ async function main(): Promise<void> {
     return reply;
   });
 
-  let shuttingDown = false;
-  async function shutdown(signal: string): Promise<void> {
-    if (shuttingDown) {
-      return;
-    }
-    shuttingDown = true;
+  async function shutdown(signal: NodeJS.Signals): Promise<void> {
     log.info({ signal }, "Shutting down dashboard");
     await kafkaFeed.disconnect();
     await fastify.close();
     process.exit(0);
   }
 
-  process.on("SIGTERM", () => {
-    void shutdown("SIGTERM");
-  });
-  process.on("SIGINT", () => {
-    void shutdown("SIGINT");
-  });
+  registerShutdownHandlers({ onShutdown: shutdown });
 
   await fastify.listen({ port: config.DASHBOARD_PORT, host: "0.0.0.0" });
   log.info(

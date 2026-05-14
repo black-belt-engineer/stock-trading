@@ -1,4 +1,5 @@
 import type { PriceEvent } from "@stock-platform/types";
+import { registerShutdownHandlers } from "@stock-platform/env";
 import { SYMBOL_CONFIG, STAGGER_MS, TICK_INTERVAL_MS } from "./constants.js";
 import { buildPriceEvent, calculateNextPrice } from "./price-event-factory.js";
 import { publishPriceEvent, setupKafkaProducer } from "./kafka.js";
@@ -72,10 +73,7 @@ export async function main(): Promise<void> {
     startupTimeouts.push(timeout);
   }
 
-  async function shutdown(signal: string): Promise<void> {
-    if (shuttingDown) {
-      return;
-    }
+  async function shutdown(signal: NodeJS.Signals): Promise<void> {
     shuttingDown = true;
     log.info({ signal }, "Shutting down");
 
@@ -99,10 +97,5 @@ export async function main(): Promise<void> {
     process.exit(0);
   }
 
-  process.on("SIGTERM", () => {
-    void shutdown("SIGTERM");
-  });
-  process.on("SIGINT", () => {
-    void shutdown("SIGINT");
-  });
+  registerShutdownHandlers({ onShutdown: shutdown });
 }

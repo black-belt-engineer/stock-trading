@@ -1,6 +1,7 @@
 import { Redis } from "ioredis";
 import { Pool } from "pg";
 import type { PriceEvent } from "@stock-platform/types";
+import { registerShutdownHandlers } from "@stock-platform/env";
 import {
   prepareDatabase,
   sideToSmallInt,
@@ -29,7 +30,6 @@ export async function main(): Promise<void> {
     messagesProcessed: 0,
     lastMessageAt: null,
   };
-  let shuttingDown = false;
 
   consumer.on("consumer.crash", (ev) => {
     log.error({ ev }, "Kafka consumer crashed");
@@ -86,11 +86,7 @@ export async function main(): Promise<void> {
   await fastify.listen({ port: PORT, host: "0.0.0.0" });
   log.info({ port: PORT }, "Consumer HTTP server listening");
 
-  async function shutdown(signal: string): Promise<void> {
-    if (shuttingDown) {
-      return;
-    }
-    shuttingDown = true;
+  async function shutdown(signal: NodeJS.Signals): Promise<void> {
     log.info({ signal }, "Shutting down consumer");
 
     await consumer.disconnect();
@@ -100,10 +96,5 @@ export async function main(): Promise<void> {
     process.exit(0);
   }
 
-  process.on("SIGTERM", () => {
-    void shutdown("SIGTERM");
-  });
-  process.on("SIGINT", () => {
-    void shutdown("SIGINT");
-  });
+  registerShutdownHandlers({ onShutdown: shutdown });
 }
