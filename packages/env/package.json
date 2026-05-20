@@ -18,6 +18,7 @@
     "lint": "node -e \"process.exit(0)\""
   },
   "dependencies": {
+    "@sinclair/typebox": "^0.34.33",
     "@stock-platform/logger": "workspace:*",
     "dotenv": "^16.4.7"
   },

@@ -13,12 +13,18 @@
     "lint": "node -e \"process.exit(0)\""
   },
   "dependencies": {
-    "@fastify/env": "^5.0.2",
+    "@fastify/type-provider-typebox": "^5.1.0",
+    "@sinclair/typebox": "^0.34.33",
+    "@stock-platform/db": "workspace:*",
     "@stock-platform/env": "workspace:*",
+    "@stock-platform/errors": "workspace:*",
     "@stock-platform/kafka": "workspace:*",
     "@stock-platform/logger": "workspace:*",
+    "@stock-platform/redis": "workspace:*",
+    "@stock-platform/schemas": "workspace:*",
     "@stock-platform/types": "workspace:*",
     "fastify": "^5.2.1",
+    "fastify-plugin": "^5.0.1",
     "ioredis": "^5.8.1",
     "pg": "^8.16.3"
   },

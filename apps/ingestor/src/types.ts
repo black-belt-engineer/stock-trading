@@ -1,5 +1,0 @@
-import type { KafkaBrokerEnv } from "@stock-platform/kafka";
-
-export type AppEnv = KafkaBrokerEnv & {
-  PORT: number;
-};

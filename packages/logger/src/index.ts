@@ -1,10 +1,16 @@
 import pino from "pino";
 import type { Logger } from "pino";
 
-export function createLogger(name: string): Logger {
+export type CreateLoggerOptions = {
+  level?: string;
+  environment?: string;
+};
+
+export function createLogger(name: string, options: CreateLoggerOptions = {}): Logger {
   return pino({
     name,
-    level: process.env.LOG_LEVEL ?? "info",
+    level: options.level ?? "info",
+    ...(options.environment ? { base: { env: options.environment } } : {}),
   });
 }
 

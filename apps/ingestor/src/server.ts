@@ -1,40 +1,50 @@
-import "./fastify-env.js";
-import type { AppEnv } from "./types.js";
-import { kafkaEnvSchemaProperties } from "@stock-platform/kafka";
-import fastifyEnv from "@fastify/env";
-import Fastify, { type FastifyInstance } from "fastify";
+import { loadLocalEnv } from "@stock-platform/env";
+import { createLogger } from "@stock-platform/logger";
+import { loadConfig } from "./config/index.js";
+import { buildApp } from "./app.js";
 
-const envSchema = {
-  type: "object",
-  required: ["KAFKA_BROKERS"],
-  properties: {
-    ...kafkaEnvSchemaProperties("ingestor"),
-    PORT: { type: "number", default: 3001 },
-  },
-} as const;
+const bootstrapLog = createLogger("ingestor");
 
-export async function createServer(): Promise<FastifyInstance> {
-  const fastify = Fastify({ logger: false });
+loadLocalEnv({ importMetaUrl: import.meta.url, log: bootstrapLog });
 
-  await fastify.register(fastifyEnv, {
-    confKey: "config",
-    schema: envSchema,
-    dotenv: false,
+async function start(): Promise<void> {
+  const config = loadConfig();
+  const log = createLogger("ingestor", {
+    level: config.LOG_LEVEL,
+    environment: config.NODE_ENV,
   });
 
-  return fastify;
+  const { app, ingestionService, kafkaProducer } = await buildApp(config);
+
+  ingestionService.start();
+
+  await app.listen({ port: config.PORT, host: "0.0.0.0" });
+  log.info({ port: config.PORT }, "HTTP server listening");
+
+  const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
+    log.info({ signal }, "Shutting down");
+    await ingestionService.stop();
+    await app.close();
+    await kafkaProducer.disconnect();
+    log.info("HTTP server closed");
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 }
 
-export function registerHealthRoute(
-  fastify: FastifyInstance,
-  getTickCount: () => number,
-): void {
-  fastify.get("/health", async () => ({
-    status: "ok" as const,
-    tickCount: getTickCount(),
-  }));
-}
+start().catch((err: unknown) => {
+  bootstrapLog.error({ err }, "Fatal error");
+  process.exit(1);
+});
 
-export function getServerConfig(fastify: FastifyInstance): AppEnv {
-  return fastify.config;
-}
+process.on("uncaughtException", (err) => {
+  bootstrapLog.error({ err }, "Uncaught exception");
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  bootstrapLog.error({ reason }, "Unhandled rejection");
+  process.exit(1);
+});

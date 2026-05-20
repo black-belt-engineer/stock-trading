@@ -1,40 +1,64 @@
-import "./fastify-env.js";
-import type { AppEnv, HealthStatus } from "./types.js";
-import { kafkaEnvSchemaProperties } from "@stock-platform/kafka";
-import fastifyEnv from "@fastify/env";
-import Fastify, { type FastifyInstance } from "fastify";
+import { loadLocalEnv } from "@stock-platform/env";
+import { createLogger } from "@stock-platform/logger";
+import { loadConfig } from "./config/index.js";
+import { buildApp } from "./app.js";
+import { MarketDataService } from "./services/market-data.service.js";
+import { KafkaConsumerService } from "./services/kafka-consumer.service.js";
 
-const envSchema = {
-  type: "object",
-  required: ["KAFKA_BROKERS", "DATABASE_URL", "REDIS_URL"],
-  properties: {
-    ...kafkaEnvSchemaProperties("consumer"),
-    KAFKA_GROUP_ID: { type: "string", default: "stock-prices-consumer" },
-    DATABASE_URL: { type: "string", minLength: 1 },
-    REDIS_URL: { type: "string", minLength: 1 },
-    PORT: { type: "number", default: 3002 },
-  },
-} as const;
+const bootstrapLog = createLogger("consumer");
 
-export async function createServer(): Promise<FastifyInstance> {
-  const fastify = Fastify({ logger: false });
+loadLocalEnv({ importMetaUrl: import.meta.url, log: bootstrapLog });
 
-  await fastify.register(fastifyEnv, {
-    confKey: "config",
-    schema: envSchema,
-    dotenv: false,
+async function start(): Promise<void> {
+  const config = loadConfig();
+  const log = createLogger("consumer", {
+    level: config.LOG_LEVEL,
+    environment: config.NODE_ENV,
   });
 
-  return fastify;
+  const { app, healthService } = await buildApp(config);
+
+  const marketDataService = new MarketDataService(app.db, app.redis, log);
+  await marketDataService.initialize();
+
+  const kafkaConsumerService = new KafkaConsumerService(config, log);
+  const consumer = await kafkaConsumerService.connect();
+
+  void kafkaConsumerService.subscribeAndRun(consumer, async (event) => {
+    try {
+      await marketDataService.persistPriceEvent(event);
+      healthService.recordMessageProcessed();
+    } catch (err) {
+      log.error({ err }, "Failed to process message");
+      throw err;
+    }
+  });
+
+  await app.listen({ port: config.PORT, host: "0.0.0.0" });
+  log.info({ port: config.PORT }, "Consumer HTTP server listening");
+
+  const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
+    log.info({ signal }, "Shutting down consumer");
+    await kafkaConsumerService.disconnect();
+    await app.close();
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 }
 
-export function getServerConfig(fastify: FastifyInstance): AppEnv {
-  return fastify.config;
-}
+start().catch((err: unknown) => {
+  bootstrapLog.error({ err }, "Fatal error");
+  process.exit(1);
+});
 
-export function registerHealthRoute(
-  fastify: FastifyInstance,
-  getHealth: () => HealthStatus,
-): void {
-  fastify.get("/health", async () => getHealth());
-}
+process.on("uncaughtException", (err) => {
+  bootstrapLog.error({ err }, "Uncaught exception");
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  bootstrapLog.error({ reason }, "Unhandled rejection");
+  process.exit(1);
+});
