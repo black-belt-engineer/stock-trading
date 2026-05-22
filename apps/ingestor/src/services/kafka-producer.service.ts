@@ -1,5 +1,5 @@
 import { createKafkaWithEnsuredTopic, type Producer } from "@stock-platform/kafka";
-import type { PriceEvent } from "@stock-platform/types";
+import { priceEventMessageKey, type PriceEvent } from "@stock-platform/types";
 import type { Logger } from "@stock-platform/logger";
 import type { AppConfig } from "../config/index.js";
 
@@ -39,7 +39,7 @@ export class KafkaProducerService {
     }
     await producer.send({
       topic: this.config.KAFKA_TOPIC,
-      messages: [{ key: event.symbol, value: JSON.stringify(event) }],
+      messages: [{ key: priceEventMessageKey(event), value: JSON.stringify(event) }],
     });
   }
 

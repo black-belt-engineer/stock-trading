@@ -1,10 +1,20 @@
 import type { Redis } from "ioredis";
 import type { LatestPrice, PriceEvent } from "@stock-platform/types";
 
+function processedMarkerKey(idempotencyKey: string): string {
+  return `consumer:processed:${idempotencyKey}`;
+}
+
 export class LatestPriceRepository {
   constructor(private readonly redis: Redis) {}
 
-  async upsertFromEvent(event: PriceEvent): Promise<void> {
+  async upsertFromEvent(event: PriceEvent, idempotencyKey: string): Promise<void> {
+    const markerKey = processedMarkerKey(idempotencyKey);
+    const alreadyApplied = await this.redis.exists(markerKey);
+    if (alreadyApplied) {
+      return;
+    }
+
     const key = `price:latest:${event.symbol}`;
     const existingRaw = await this.redis.get(key);
     const previous: LatestPrice | null = existingRaw
@@ -31,11 +41,21 @@ export class LatestPriceRepository {
 
     const sparklineKey = `price:sparkline:${event.symbol}`;
     const score = event.timestamp;
-    await this.redis
+    const result = await this.redis
       .multi()
       .set(key, JSON.stringify(latest))
       .zadd(sparklineKey, score, String(currentPrice))
       .zremrangebyrank(sparklineKey, 0, -31)
+      .set(markerKey, "1")
       .exec();
+
+    if (result === null) {
+      throw new Error(`Redis transaction failed for ${idempotencyKey}`);
+    }
+
+    const execError = result.find((entry) => entry[0] instanceof Error);
+    if (execError) {
+      throw execError[0];
+    }
   }
 }

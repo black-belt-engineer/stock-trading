@@ -24,12 +24,12 @@ async function start(): Promise<void> {
   const kafkaConsumerService = new KafkaConsumerService(config, log);
   const consumer = await kafkaConsumerService.connect();
 
-  void kafkaConsumerService.subscribeAndRun(consumer, async (event) => {
+  void kafkaConsumerService.subscribeAndRun(consumer, async (event, message) => {
     try {
-      await marketDataService.persistPriceEvent(event);
+      await marketDataService.persistPriceEvent(event, message);
       healthService.recordMessageProcessed();
     } catch (err) {
-      log.error({ err }, "Failed to process message");
+      log.error({ err, idempotencyKey: message.idempotencyKey }, "Failed to process message");
       throw err;
     }
   });

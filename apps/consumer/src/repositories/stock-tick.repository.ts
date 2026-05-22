@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 import type { PriceEvent } from "@stock-platform/types";
 import type { Logger } from "@stock-platform/logger";
 
@@ -19,8 +19,18 @@ export class StockTickRepository {
         symbol TEXT NOT NULL,
         price DOUBLE PRECISION,
         size NUMERIC,
-        side SMALLINT
+        side SMALLINT,
+        idempotency_key TEXT NOT NULL
       );
+    `);
+
+    await this.db.query(`
+      ALTER TABLE stock_ticks ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
+    `);
+
+    await this.db.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS stock_ticks_idempotency_key_uidx
+        ON stock_ticks (idempotency_key, time);
     `);
 
     await this.db.query(`
@@ -45,13 +55,29 @@ export class StockTickRepository {
     }
   }
 
-  async insertTick(event: PriceEvent): Promise<void> {
-    await this.db.query(
+  /**
+   * Inserts one tick keyed by the Kafka message key.
+   * Duplicate deliveries are a no-op via ON CONFLICT.
+   */
+  async insertTick(
+    client: PoolClient,
+    event: PriceEvent,
+    idempotencyKey: string,
+  ): Promise<void> {
+    await client.query(
       `
-      INSERT INTO stock_ticks (time, symbol, price, size, side)
-      VALUES (to_timestamp($1 / 1000.0), $2, $3, $4, $5)
+      INSERT INTO stock_ticks (time, symbol, price, size, side, idempotency_key)
+      VALUES (to_timestamp($1 / 1000.0), $2, $3, $4, $5, $6)
+      ON CONFLICT (idempotency_key, time) DO NOTHING
     `,
-      [event.timestamp, event.symbol, event.price, event.size, sideToSmallInt(event.side)],
+      [
+        event.timestamp,
+        event.symbol,
+        event.price,
+        event.size,
+        sideToSmallInt(event.side),
+        idempotencyKey,
+      ],
     );
   }
 }

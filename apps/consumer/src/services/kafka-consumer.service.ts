@@ -1,7 +1,10 @@
 import { createKafkaWithEnsuredTopic, type Consumer } from "@stock-platform/kafka";
-import type { PriceEvent } from "@stock-platform/types";
+import { priceEventMessageKey, type PriceEvent } from "@stock-platform/types";
 import type { Logger } from "@stock-platform/logger";
 import type { AppConfig } from "../config/index.js";
+import type { ConsumedMessage } from "../models/consumed-message.js";
+
+export type MessageHandler = (event: PriceEvent, message: ConsumedMessage) => Promise<void>;
 
 export class KafkaConsumerService {
   private consumer: Consumer | undefined;
@@ -36,27 +39,45 @@ export class KafkaConsumerService {
     return consumer;
   }
 
-  async subscribeAndRun(
-    consumer: Consumer,
-    onMessage: (event: PriceEvent) => Promise<void>,
-  ): Promise<void> {
+  async subscribeAndRun(consumer: Consumer, onMessage: MessageHandler): Promise<void> {
     await consumer.subscribe({ topic: this.config.KAFKA_TOPIC, fromBeginning: false });
 
     await consumer.run({
-      eachMessage: async ({ message }) => {
+      autoCommit: false,
+      eachMessage: async ({ topic, partition, message }) => {
         if (!message.value) {
-          return;
+          throw new Error(`Empty message at ${topic}:${partition}:${message.offset}`);
+        }
+
+        const idempotencyKey = message.key?.toString();
+        if (!idempotencyKey) {
+          throw new Error(`Missing message key at ${topic}:${partition}:${message.offset}`);
         }
 
         let event: PriceEvent;
         try {
           event = JSON.parse(message.value.toString()) as PriceEvent;
         } catch (err) {
-          this.log.error({ err }, "Failed to parse Kafka message");
-          return;
+          this.log.error({ err, topic, partition, offset: message.offset }, "Failed to parse");
+          throw err;
         }
 
-        await onMessage(event);
+        const expectedKey = priceEventMessageKey(event);
+        if (idempotencyKey !== expectedKey) {
+          throw new Error(
+            `Message key "${idempotencyKey}" does not match payload key "${expectedKey}"`,
+          );
+        }
+
+        await onMessage(event, { idempotencyKey });
+
+        await consumer.commitOffsets([
+          {
+            topic,
+            partition,
+            offset: (BigInt(message.offset) + 1n).toString(),
+          },
+        ]);
       },
     });
   }

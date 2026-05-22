@@ -16,6 +16,11 @@ export type PriceEvent = {
   conditions: string[];
 };
 
+/** Kafka record key for a price tick — used as the idempotency key end-to-end. */
+export function priceEventMessageKey(event: PriceEvent): string {
+  return `${event.symbol}:${event.timestamp}`;
+}
+
 /**
  * Denormalized latest quote stored in Redis per symbol.
  */
