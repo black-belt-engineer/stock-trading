@@ -41,7 +41,6 @@ export class StreamSubscriptionService {
         quotes.push(streamQuoteFromLatest(latest));
       }
     }
-
     return quotes;
   }
 
@@ -49,6 +48,7 @@ export class StreamSubscriptionService {
     redis: Redis,
     symbolsQuery: string | undefined,
     onQuote: (quote: StreamQuote) => void,
+    onError?: (err: Error) => void,
   ): () => void {
     const symbols = new Set(parseSymbols(symbolsQuery));
     const reader = redis.duplicate();
@@ -57,36 +57,55 @@ export class StreamSubscriptionService {
 
     const readLoop = async (): Promise<void> => {
       while (active) {
-        const response = await reader.xread(
-          "BLOCK",
-          BLOCK_MS,
-          "STREAMS",
-          PRICE_UPDATES_STREAM_KEY,
-          lastId,
-        );
+        try {
+          const response = await reader.xread(
+            "BLOCK",
+            BLOCK_MS,
+            "STREAMS",
+            PRICE_UPDATES_STREAM_KEY,
+            lastId,
+          );
 
-        if (!response) {
-          continue;
-        }
+          if (!response || response.length === 0) continue;
 
-        for (const [, messages] of response) {
-          for (const [id, fieldList] of messages) {
-            lastId = id;
-            const quote = quoteFromStreamFields(fieldList);
-            if (quote && symbols.has(quote.symbol)) {
-              onQuote(quote);
+          for (const [, messages] of response) {
+            for (const [id, fieldList] of messages) {
+              lastId = id;                    // Update last seen ID
+
+              const quote = quoteFromStreamFields(fieldList);
+              if (quote && symbols.has(quote.symbol)) {
+                onQuote(quote);
+              }
             }
           }
+        } catch (err: any) {
+          if (!active) break; // Normal shutdown
+
+          this.handleReadError(err, onError);
+
+          // Backoff before retry
+          await new Promise((r) => setTimeout(r, 1000));
         }
       }
     };
 
+    // Start the loop
     void readLoop().finally(() => {
-      void reader.quit();
+      reader.quit().catch(() => {}); // Silent quit
     });
 
+    // Return unsubscribe function
     return () => {
       active = false;
     };
+  }
+
+  private handleReadError(err: any, onError?: (err: Error) => void) {
+    if (err.message?.includes("ECONNRESET") || err.message?.includes("connection")) {
+      console.warn("Redis stream connection lost, will retry...");
+    } else {
+      console.error("Redis XREAD error:", err);
+    }
+    onError?.(err);
   }
 }
