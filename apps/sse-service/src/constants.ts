@@ -7,5 +7,3 @@ export const DEFAULT_SYMBOLS = [
   "AMZN",
   "NVDA",
 ] as const;
-
-export const SSE_POLL_INTERVAL_MS = 500;

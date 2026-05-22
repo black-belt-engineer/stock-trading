@@ -2,7 +2,7 @@ import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
 import type { Logger } from "@stock-platform/logger";
 import { ConnectionTrackerService } from "../services/connection-tracker.service.js";
-import { StreamService } from "../services/stream.service.js";
+import { StreamSubscriptionService } from "../services/stream-subscription.service.js";
 
 function setSseHeaders(reply: FastifyReply): void {
   reply.raw.setTimeout(0);
@@ -20,29 +20,28 @@ export type StreamRouteDeps = {
 
 const streamRoutesImpl: FastifyPluginAsync<StreamRouteDeps> = async (fastify, opts) => {
   const { connectionTracker, log } = opts;
-  const streamService = new StreamService(fastify.redis);
+  const subscriptionService = new StreamSubscriptionService(fastify.redis);
 
   fastify.get<{ Querystring: { symbols?: string } }>("/stream", async (request, reply) => {
     request.raw.setTimeout(0);
     setSseHeaders(reply);
     connectionTracker.increment();
 
-    const writeQuotes = async (): Promise<void> => {
-      const quotes = await streamService.collectQuotes(request.query.symbols);
-      for (const payload of quotes) {
-        reply.raw.write(`event: price\ndata: ${JSON.stringify(payload)}\n\n`);
-      }
-    };
+    const initialQuotes = await subscriptionService.getInitialQuotes(request.query.symbols);
+    for (const payload of initialQuotes) {
+      reply.raw.write(`event: price\ndata: ${JSON.stringify(payload)}\n\n`);
+    }
 
-    await writeQuotes();
-    const timer = setInterval(() => {
-      void writeQuotes().catch((err: unknown) => {
-        log.error({ err }, "Failed to stream SSE update");
-      });
-    }, streamService.getPollIntervalMs());
+    const unsubscribe = subscriptionService.subscribe(fastify.redis, request.query.symbols, (quote) => {
+      try {
+        reply.raw.write(`event: price\ndata: ${JSON.stringify(quote)}\n\n`);
+      } catch (err) {
+        log.error({ err }, "Failed to write SSE event");
+      }
+    });
 
     request.raw.on("close", () => {
-      clearInterval(timer);
+      unsubscribe();
       connectionTracker.decrement();
     });
 

@@ -2,13 +2,13 @@ import type { PriceEvent } from "@stock-platform/types";
 import type { Redis } from "ioredis";
 import type { Pool } from "pg";
 import type { ConsumedMessage } from "../models/consumed-message.js";
-import { LatestPriceRepository } from "../repositories/latest-price.repository.js";
+import { PriceRedisRepository } from "../repositories/price-redis.repository.js";
 import { StockTickRepository } from "../repositories/stock-tick.repository.js";
 import type { Logger } from "@stock-platform/logger";
 
 export class MarketDataService {
   private readonly stockTickRepository: StockTickRepository;
-  private readonly latestPriceRepository: LatestPriceRepository;
+  private readonly priceRedisRepository: PriceRedisRepository;
 
   constructor(
     private readonly db: Pool,
@@ -16,7 +16,7 @@ export class MarketDataService {
     log: Logger,
   ) {
     this.stockTickRepository = new StockTickRepository(db, log);
-    this.latestPriceRepository = new LatestPriceRepository(redis);
+    this.priceRedisRepository = new PriceRedisRepository(redis);
   }
 
   async initialize(): Promise<void> {
@@ -24,17 +24,17 @@ export class MarketDataService {
   }
 
   /**
-   * Postgres tick row (unique on message key) then Redis snapshot.
-   * Throws on failure so the caller can skip offset commit and Kafka will redeliver.
+   * 1. Postgres tick (idempotent on message key)
+   * 2. Redis snapshot + stream entry (idempotent on message key)
+   *
+   * Throws on failure so the caller skips the Kafka offset commit.
    */
   async persistPriceEvent(event: PriceEvent, message: ConsumedMessage): Promise<void> {
-    const { idempotencyKey } = message;
-
-    await this.commitPostgres(event, idempotencyKey);
-    await this.latestPriceRepository.upsertFromEvent(event, idempotencyKey);
+    await this.persistTick(event, message.idempotencyKey);
+    await this.priceRedisRepository.publishFromEvent(event, message.idempotencyKey);
   }
 
-  private async commitPostgres(event: PriceEvent, idempotencyKey: string): Promise<void> {
+  private async persistTick(event: PriceEvent, idempotencyKey: string): Promise<void> {
     const client = await this.db.connect();
     try {
       await client.query("BEGIN");

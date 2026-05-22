@@ -21,6 +21,20 @@ export function priceEventMessageKey(event: PriceEvent): string {
   return `${event.symbol}:${event.timestamp}`;
 }
 
+/** Redis stream consumed by the SSE service for live price push. */
+export const PRICE_UPDATES_STREAM_KEY = "price:updates";
+
+/** Approximate max length for {@link PRICE_UPDATES_STREAM_KEY} (trim old entries). */
+export const PRICE_UPDATES_STREAM_MAXLEN = 10_000;
+
+export function latestPriceKey(symbol: string): string {
+  return `price:latest:${symbol}`;
+}
+
+export function sparklineKey(symbol: string): string {
+  return `price:sparkline:${symbol}`;
+}
+
 /**
  * Denormalized latest quote stored in Redis per symbol.
  */
@@ -63,3 +77,15 @@ export type StreamQuote = {
   side: "buy" | "sell";
   timestamp: number;
 };
+
+export function streamQuoteFromLatest(latest: LatestPrice): StreamQuote {
+  return {
+    symbol: latest.symbol,
+    name: latest.name,
+    price: latest.currentPrice,
+    changePercent: latest.changePercent,
+    quantity: 0,
+    side: latest.changeValue >= 0 ? "buy" : "sell",
+    timestamp: latest.lastUpdated,
+  };
+}
