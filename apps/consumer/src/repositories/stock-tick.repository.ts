@@ -1,4 +1,4 @@
-import type { Pool, PoolClient } from "pg";
+import type { Pool } from "pg";
 import type { PriceEvent } from "@stock-platform/types";
 import type { Logger } from "@stock-platform/logger";
 
@@ -59,25 +59,31 @@ export class StockTickRepository {
    * Inserts one tick keyed by the Kafka message key.
    * Duplicate deliveries are a no-op via ON CONFLICT.
    */
-  async insertTick(
-    client: PoolClient,
-    event: PriceEvent,
-    idempotencyKey: string,
-  ): Promise<void> {
-    await client.query(
-      `
-      INSERT INTO stock_ticks (time, symbol, price, size, side, idempotency_key)
-      VALUES (to_timestamp($1 / 1000.0), $2, $3, $4, $5, $6)
-      ON CONFLICT (idempotency_key, time) DO NOTHING
-    `,
-      [
-        event.timestamp,
-        event.symbol,
-        event.price,
-        event.size,
-        sideToSmallInt(event.side),
-        idempotencyKey,
-      ],
-    );
+  async insertTick(event: PriceEvent, idempotencyKey: string): Promise<void> {
+    const client = await this.db.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        `
+        INSERT INTO stock_ticks (time, symbol, price, size, side, idempotency_key)
+        VALUES (to_timestamp($1 / 1000.0), $2, $3, $4, $5, $6)
+        ON CONFLICT (idempotency_key, time) DO NOTHING
+      `,
+        [
+          event.timestamp,
+          event.symbol,
+          event.price,
+          event.size,
+          sideToSmallInt(event.side),
+          idempotencyKey,
+        ],
+      );
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 }

@@ -1,6 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
-import type { Redis } from "ioredis";
 import { closeRedisClient, createRedisClient } from "./client.js";
 
 export type RedisPluginOptions = {

@@ -5,7 +5,7 @@ import {
   type StreamQuote,
 } from "@stock-platform/types";
 import { parseSymbols } from "../models/stream.js";
-import { LatestPriceRepository } from "../repositories/latest-price.repository.js";
+import type { LatestPriceRepository } from "../repositories/latest-price.repository.js";
 
 const BLOCK_MS = 5000;
 
@@ -25,11 +25,10 @@ function quoteFromStreamFields(fieldList: string[]): StreamQuote | null {
 }
 
 export class StreamSubscriptionService {
-  private readonly latestPriceRepository: LatestPriceRepository;
-
-  constructor(redis: Redis) {
-    this.latestPriceRepository = new LatestPriceRepository(redis);
-  }
+  constructor(
+    private readonly redis: Redis,
+    private readonly latestPriceRepository: LatestPriceRepository,
+  ) {}
 
   async getInitialQuotes(symbolsQuery?: string): Promise<StreamQuote[]> {
     const symbols = parseSymbols(symbolsQuery);
@@ -45,13 +44,12 @@ export class StreamSubscriptionService {
   }
 
   subscribe(
-    redis: Redis,
     symbolsQuery: string | undefined,
     onQuote: (quote: StreamQuote) => void,
     onError?: (err: Error) => void,
   ): () => void {
     const symbols = new Set(parseSymbols(symbolsQuery));
-    const reader = redis.duplicate();
+    const reader = this.redis.duplicate();
     let active = true;
     let lastId = "$";
 
@@ -66,46 +64,40 @@ export class StreamSubscriptionService {
             lastId,
           );
 
-          if (!response || response.length === 0) continue;
+          if (!response || response.length === 0) {
+            continue;
+          }
 
           for (const [, messages] of response) {
             for (const [id, fieldList] of messages) {
-              lastId = id;                    // Update last seen ID
-
+              lastId = id;
               const quote = quoteFromStreamFields(fieldList);
               if (quote && symbols.has(quote.symbol)) {
                 onQuote(quote);
               }
             }
           }
-        } catch (err: any) {
-          if (!active) break; // Normal shutdown
-
+        } catch (err: unknown) {
+          if (!active) {
+            break;
+          }
           this.handleReadError(err, onError);
-
-          // Backoff before retry
-          await new Promise((r) => setTimeout(r, 1000));
+          await new Promise((resolve) => setTimeout(resolve, 1000));
         }
       }
     };
 
-    // Start the loop
     void readLoop().finally(() => {
-      reader.quit().catch(() => {}); // Silent quit
+      void reader.quit();
     });
 
-    // Return unsubscribe function
     return () => {
       active = false;
     };
   }
 
-  private handleReadError(err: any, onError?: (err: Error) => void) {
-    if (err.message?.includes("ECONNRESET") || err.message?.includes("connection")) {
-      console.warn("Redis stream connection lost, will retry...");
-    } else {
-      console.error("Redis XREAD error:", err);
-    }
-    onError?.(err);
+  private handleReadError(err: unknown, onError?: (err: Error) => void): void {
+    const error = err instanceof Error ? err : new Error(String(err));
+    onError?.(error);
   }
 }

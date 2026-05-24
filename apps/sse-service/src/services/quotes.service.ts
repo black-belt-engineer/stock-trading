@@ -1,16 +1,11 @@
 import { NotFoundError } from "@stock-platform/errors";
 import type { LatestPrice } from "@stock-platform/types";
-import type { Redis } from "ioredis";
 import { DEFAULT_SYMBOLS } from "../constants.js";
 import type { ActiveStock } from "../models/active-stock.js";
-import { LatestPriceRepository } from "../repositories/latest-price.repository.js";
+import type { LatestPriceRepository } from "../repositories/latest-price.repository.js";
 
 export class QuotesService {
-  private readonly latestPriceRepository: LatestPriceRepository;
-
-  constructor(redis: Redis) {
-    this.latestPriceRepository = new LatestPriceRepository(redis);
-  }
+  constructor(private readonly latestPriceRepository: LatestPriceRepository) {}
 
   async getSnapshot(symbol: string): Promise<LatestPrice> {
     const latest = await this.latestPriceRepository.findBySymbol(symbol);

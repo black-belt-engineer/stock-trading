@@ -1,9 +1,13 @@
 import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
-import { QuotesService } from "../services/quotes.service.js";
+import type { QuotesService } from "../services/quotes.service.js";
 
-const quotesRoutesImpl: FastifyPluginAsync = async (fastify) => {
-  const quotesService = new QuotesService(fastify.redis);
+export type QuotesRouteDeps = {
+  quotesService: QuotesService;
+};
+
+const quotesRoutesImpl: FastifyPluginAsync<QuotesRouteDeps> = async (fastify, opts) => {
+  const { quotesService } = opts;
 
   fastify.get<{ Params: { symbol: string } }>(
     "/quotes/:symbol/snapshot",
