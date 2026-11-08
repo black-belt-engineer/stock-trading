@@ -5,6 +5,7 @@ import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { AppConfig } from "./config/index.js";
 import { UserRepository } from "./repositories/user.repository.js";
+import { createJwtGuard } from "./plugins/jwt-guard.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { userRoutes } from "./routes/user.routes.js";
 import { HealthService } from "./services/health.service.js";
@@ -34,7 +35,14 @@ export async function buildApp(config: AppConfig): Promise<UserApp> {
   const healthService = new HealthService(app.db);
 
   await app.register(healthRoutes, { healthService });
-  await app.register(userRoutes, { userService });
+  await app.register(userRoutes, {
+    userService,
+    jwtGuard: createJwtGuard({
+      jwksUrl: new URL("/.well-known/jwks.json", config.AUTH_SERVICE_URL),
+      issuer: config.JWT_ISSUER,
+      audience: config.JWT_AUDIENCE,
+    }),
+  });
 
   return { app, userService };
 }

@@ -8,20 +8,21 @@ import {
   userSchema,
   verifyCredentialsBodySchema,
 } from "../models/user.js";
+import type { JwtGuard } from "../plugins/jwt-guard.js";
 import type { UserService } from "../services/user.service.js";
 
-export type UserRouteDeps = { userService: UserService };
+export type UserRouteDeps = { userService: UserService; jwtGuard: JwtGuard };
 
 const userRoutesImpl: FastifyPluginAsyncTypebox<UserRouteDeps> = async (fastify, opts) => {
-  const { userService } = opts;
+  const { userService, jwtGuard } = opts;
 
-  fastify.get("/users", { schema: { response: { 200: Type.Array(userSchema) } } }, () =>
+  fastify.get("/users", { preHandler: jwtGuard, schema: { response: { 200: Type.Array(userSchema) } } }, () =>
     userService.list(),
   );
 
   fastify.get(
     "/users/:id",
-    { schema: { params: userParamsSchema, response: { 200: userSchema } } },
+    { preHandler: jwtGuard, schema: { params: userParamsSchema, response: { 200: userSchema } } },
     (request) => userService.getById(request.params.id),
   );
 
@@ -34,6 +35,7 @@ const userRoutesImpl: FastifyPluginAsyncTypebox<UserRouteDeps> = async (fastify,
   fastify.patch(
     "/users/:id",
     {
+      preHandler: jwtGuard,
       schema: { params: userParamsSchema, body: updateUserBodySchema, response: { 200: userSchema } },
     },
     (request) => userService.update(request.params.id, request.body),
@@ -41,13 +43,14 @@ const userRoutesImpl: FastifyPluginAsyncTypebox<UserRouteDeps> = async (fastify,
 
   fastify.delete(
     "/users/:id",
-    { schema: { params: userParamsSchema } },
+    { preHandler: jwtGuard, schema: { params: userParamsSchema } },
     async (request, reply) => {
       await userService.delete(request.params.id);
       return reply.code(204).send();
     },
   );
 
+  // Public (no guard): auth calls this to log in, before any token exists. Not for external exposure.
   // Internal: called by the auth service to validate login credentials.
   fastify.post(
     "/users/verify-credentials",

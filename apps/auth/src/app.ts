@@ -4,11 +4,12 @@ import { redisPlugin } from "@stock-platform/redis";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { AppConfig } from "./config/index.js";
-import { TokenBlocklistRepository } from "./repositories/token-blocklist.repository.js";
+import { RefreshTokenRepository } from "./repositories/refresh-token.repository.js";
 import { authRoutes } from "./routes/auth.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { AuthService } from "./services/auth.service.js";
 import { HealthService } from "./services/health.service.js";
+import { TokenService } from "./services/token.service.js";
 import { UserClientService } from "./services/user-client.service.js";
 
 export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
@@ -29,14 +30,24 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
 
   await app.register(redisPlugin, { url: config.REDIS_URL });
 
+  const tokenService = await TokenService.create({
+    privateKeyPem: config.JWT_PRIVATE_KEY,
+    issuer: config.JWT_ISSUER,
+    audience: config.JWT_AUDIENCE,
+    accessTtlSeconds: config.ACCESS_TOKEN_TTL_SECONDS,
+  });
   const authService = new AuthService(
     new UserClientService(config.USER_SERVICE_URL),
-    new TokenBlocklistRepository(app.redis),
-    { jwtSecret: config.JWT_SECRET, expiresInSeconds: config.JWT_EXPIRES_IN_SECONDS },
+    tokenService,
+    new RefreshTokenRepository(app.redis),
+    {
+      accessTtlSeconds: config.ACCESS_TOKEN_TTL_SECONDS,
+      refreshTtlSeconds: config.REFRESH_TOKEN_TTL_SECONDS,
+    },
   );
 
   await app.register(healthRoutes, { healthService: new HealthService(app.redis) });
-  await app.register(authRoutes, { authService });
+  await app.register(authRoutes, { authService, tokenService });
 
   return app;
 }

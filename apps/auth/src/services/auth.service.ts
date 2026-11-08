@@ -1,61 +1,51 @@
-import { randomUUID } from "node:crypto";
 import { UnauthorizedError } from "@stock-platform/errors";
-import { SignJWT, jwtVerify } from "jose";
-import type { LoginBody, LoginResponse } from "../models/auth.js";
-import type { TokenBlocklistRepository } from "../repositories/token-blocklist.repository.js";
+import type { LoginBody, TokenResponse, UserSummary } from "../models/auth.js";
+import type { RefreshTokenRepository } from "../repositories/refresh-token.repository.js";
+import type { TokenService } from "./token.service.js";
 import type { UserClientService } from "./user-client.service.js";
 
-export type AuthServiceOptions = {
-  jwtSecret: string;
-  expiresInSeconds: number;
-};
-
 export class AuthService {
-  private readonly secret: Uint8Array;
-
   constructor(
     private readonly userClient: UserClientService,
-    private readonly blocklist: TokenBlocklistRepository,
-    private readonly options: AuthServiceOptions,
-  ) {
-    this.secret = new TextEncoder().encode(options.jwtSecret);
-  }
+    private readonly tokens: TokenService,
+    private readonly refreshTokens: RefreshTokenRepository,
+    private readonly options: { accessTtlSeconds: number; refreshTtlSeconds: number },
+  ) {}
 
-  async login(body: LoginBody): Promise<LoginResponse> {
+  async login(body: LoginBody): Promise<TokenResponse> {
     const user = await this.userClient.verifyCredentials(body.email, body.password);
-    const token = await new SignJWT({ email: user.email })
-      .setProtectedHeader({ alg: "HS256" })
-      .setSubject(user.id)
-      .setJti(randomUUID())
-      .setIssuedAt()
-      .setExpirationTime(`${this.options.expiresInSeconds}s`)
-      .sign(this.secret);
-
-    return { token, tokenType: "Bearer", expiresIn: this.options.expiresInSeconds, user };
+    return this.issueTokens(user);
   }
 
-  /** Revokes the token so it can no longer be used, even before it expires. */
-  async logout(token: string): Promise<void> {
-    const { jti, exp } = await this.verify(token);
-    const ttl = exp - Math.floor(Date.now() / 1000);
-    await this.blocklist.revoke(jti, ttl);
+  /** Exchanges a refresh token for a new pair. The old refresh token is invalidated (rotation). */
+  async refresh(refreshToken: string): Promise<TokenResponse> {
+    const user = await this.refreshTokens.consume(refreshToken);
+    if (!user) {
+      throw new UnauthorizedError("Invalid or expired refresh token");
+    }
+    return this.issueTokens(user);
   }
 
-  /** Verifies signature, expiry and revocation status. */
-  async verify(token: string): Promise<{ jti: string; exp: number; sub: string }> {
-    let payload;
-    try {
-      ({ payload } = await jwtVerify(token, this.secret, { algorithms: ["HS256"] }));
-    } catch {
-      throw new UnauthorizedError("Invalid or expired token");
-    }
-    const { jti, exp, sub } = payload;
-    if (!jti || !exp || !sub) {
-      throw new UnauthorizedError("Invalid token");
-    }
-    if (await this.blocklist.isRevoked(jti)) {
-      throw new UnauthorizedError("Token has been revoked");
-    }
-    return { jti, exp, sub };
+  /**
+   * Ends the session by deleting the refresh token. Already-issued access tokens stay valid
+   * until they expire (verification is stateless), hence the short access token lifetime.
+   */
+  async logout(refreshToken: string): Promise<void> {
+    await this.refreshTokens.delete(refreshToken);
+  }
+
+  private async issueTokens(user: UserSummary): Promise<TokenResponse> {
+    const refreshToken = this.tokens.generateRefreshToken();
+    const [accessToken] = await Promise.all([
+      this.tokens.signAccessToken(user),
+      this.refreshTokens.save(refreshToken, user, this.options.refreshTtlSeconds),
+    ]);
+    return {
+      accessToken,
+      refreshToken,
+      tokenType: "Bearer",
+      expiresIn: this.options.accessTtlSeconds,
+      user,
+    };
   }
 }
