@@ -12,6 +12,52 @@ importers:
         specifier: ^2.9.8
         version: 2.9.8
 
+  apps/auth:
+    dependencies:
+      '@fastify/type-provider-typebox':
+        specifier: ^5.1.0
+        version: 5.2.0(@sinclair/typebox@0.34.49)
+      '@sinclair/typebox':
+        specifier: ^0.34.33
+        version: 0.34.49
+      '@stock-platform/env':
+        specifier: workspace:*
+        version: link:../../packages/env
+      '@stock-platform/errors':
+        specifier: workspace:*
+        version: link:../../packages/errors
+      '@stock-platform/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+      '@stock-platform/redis':
+        specifier: workspace:*
+        version: link:../../packages/redis
+      '@stock-platform/schemas':
+        specifier: workspace:*
+        version: link:../../packages/schemas
+      fastify:
+        specifier: ^5.2.1
+        version: 5.8.5
+      fastify-plugin:
+        specifier: ^5.0.1
+        version: 5.1.0
+      ioredis:
+        specifier: ^5.8.1
+        version: 5.10.1
+      jose:
+        specifier: ^6.0.11
+        version: 6.2.15
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.17
+      tsx:
+        specifier: ^4.19.3
+        version: 4.21.0
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
   apps/consumer:
     dependencies:
       '@fastify/type-provider-typebox':
@@ -198,6 +244,52 @@ importers:
       '@types/node':
         specifier: ^22.10.0
         version: 22.19.17
+      tsx:
+        specifier: ^4.19.3
+        version: 4.21.0
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
+  apps/user:
+    dependencies:
+      '@fastify/type-provider-typebox':
+        specifier: ^5.1.0
+        version: 5.2.0(@sinclair/typebox@0.34.49)
+      '@sinclair/typebox':
+        specifier: ^0.34.33
+        version: 0.34.49
+      '@stock-platform/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@stock-platform/env':
+        specifier: workspace:*
+        version: link:../../packages/env
+      '@stock-platform/errors':
+        specifier: workspace:*
+        version: link:../../packages/errors
+      '@stock-platform/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+      '@stock-platform/schemas':
+        specifier: workspace:*
+        version: link:../../packages/schemas
+      fastify:
+        specifier: ^5.2.1
+        version: 5.8.5
+      fastify-plugin:
+        specifier: ^5.0.1
+        version: 5.1.0
+      pg:
+        specifier: ^8.16.3
+        version: 8.20.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.17
+      '@types/pg':
+        specifier: ^8.15.6
+        version: 8.20.0
       tsx:
         specifier: ^4.19.3
         version: 4.21.0
@@ -1564,6 +1656,9 @@ packages:
   jiti@2.7.0:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
     hasBin: true
+
+  jose@6.2.15:
+    resolution: {integrity: sha512-qdF6ewcZARtef63fJ9AKKZPgxw+t7USH6HLXYcD4CrdmSvDp79rpJSPFEKc90QBeGS63u1KQtN2MZQHC0yDIzA==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -3070,6 +3165,8 @@ snapshots:
   ipaddr.js@2.3.0: {}
 
   jiti@2.7.0: {}
+
+  jose@6.2.15: {}
 
   js-tokens@4.0.0: {}
 

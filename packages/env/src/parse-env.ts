@@ -2,7 +2,7 @@ import { type Static, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
 export function parseEnv<T extends TSchema>(schema: T): Static<T> {
-  const converted = Value.Convert(schema, process.env);
+  const converted = Value.Convert(schema, Value.Default(schema, { ...process.env }));
   if (!Value.Check(schema, converted)) {
     const errors = [...Value.Errors(schema, converted)];
     const message = errors

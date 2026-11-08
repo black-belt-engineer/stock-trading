@@ -12,7 +12,19 @@
     "dev": "tsx watch src/index.ts",
     "lint": "node -e \"process.exit(0)\""
   },
-  "dependencies": {},
+  "dependencies": {
+    "@fastify/type-provider-typebox": "^5.1.0",
+    "@sinclair/typebox": "^0.34.33",
+    "@stock-platform/env": "workspace:*",
+    "@stock-platform/errors": "workspace:*",
+    "@stock-platform/logger": "workspace:*",
+    "@stock-platform/redis": "workspace:*",
+    "@stock-platform/schemas": "workspace:*",
+    "fastify": "^5.2.1",
+    "fastify-plugin": "^5.0.1",
+    "ioredis": "^5.8.1",
+    "jose": "^6.0.11"
+  },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "tsx": "^4.19.3",
