@@ -5,3 +5,5 @@ dist
 .env.*
 !.env.example
 !.env.local.example
+
+.idea/
