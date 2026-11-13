@@ -80,7 +80,7 @@ export function LiveFeed({ feed, open, onClose }: Props): JSX.Element {
                 >
                   {item.side === "buy" ? "B" : "S"}
                 </span>
-                <span className="text-[12px] text-muted">{new Date(item.timestamp).toLocaleTimeString()}</span>
+                <span className="text-[12px] text-secondary">{new Date(item.timestamp).toLocaleTimeString()}</span>
               </div>
             </div>
           </div>

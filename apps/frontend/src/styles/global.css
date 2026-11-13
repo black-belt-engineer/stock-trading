@@ -9,7 +9,8 @@
  *
  * Backgrounds, text and borders use Tailwind's per-property namespaces, so
  * `bg-surface`, `text-secondary` and `border-subtle` exist but nonsense such
- * as `text-surface` does not. Accents are plain colours, usable everywhere
+ * as `text-surface` does not. `--text-muted` fails contrast as text, so there
+ * is deliberately no `text-muted` utility. Accents are plain colours, usable everywhere
  * (`text-positive`, `bg-brand-dim`, `outline-brand`, `bg-positive/15`).
  */
 @theme inline {
@@ -26,7 +27,6 @@
 
   --text-color-primary: var(--text-primary);
   --text-color-secondary: var(--text-secondary);
-  --text-color-muted: var(--text-muted);
   --text-color-inverse: var(--text-inverse);
 
   --color-brand: var(--accent-brand);
