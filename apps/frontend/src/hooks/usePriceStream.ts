@@ -1,9 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FeedEvent, LiveQuote } from "../types";
 
 export type StreamStatus = "connecting" | "live" | "reconnecting" | "disconnected";
 
 const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000, 30000];
+
+/**
+ * Temporary until S1 adds a server heartbeat: a connection that has delivered
+ * nothing for this long is treated as dead (a laptop waking from sleep often
+ * gets no `error` event). When the ingestor alone is down this reconnects
+ * every 15 s; the snapshot on each new connection keeps it from looping faster.
+ */
+const SILENCE_LIMIT_MS = 15_000;
 
 /** Returns null for a malformed message so one bad frame cannot throw inside a listener. */
 function parseQuote(raw: unknown): LiveQuote | null {
@@ -39,29 +47,57 @@ export function usePriceStream(symbols: string[]): {
   feed: FeedEvent[];
   status: StreamStatus;
   reconnectAttempts: number;
+  /** When the next reconnect attempt is scheduled (epoch ms), or null when none is pending. */
+  nextRetryAt: number | null;
+  /** Skips the remaining backoff and reconnects now. */
+  retry: () => void;
 } {
   const [prices, setPrices] = useState<Map<string, LiveQuote>>(new Map());
   const [feed, setFeed] = useState<FeedEvent[]>([]);
   const [status, setStatus] = useState<StreamStatus>("connecting");
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const [nextRetryAt, setNextRetryAt] = useState<number | null>(null);
   const retriesRef = useRef(0);
   const sourceRef = useRef<EventSource | null>(null);
   const timerRef = useRef<number | null>(null);
+  const lastMessageRef = useRef(0);
+  /** Set by the effect below; reconnects immediately. A no-op before mount and after unmount. */
+  const retryRef = useRef<() => void>(() => {});
 
   const query = useMemo(() => symbols.join(","), [symbols]);
 
   useEffect(() => {
     let mounted = true;
 
-    const cleanup = (): void => {
+    const clearTimer = (): void => {
       if (timerRef.current !== null) {
         window.clearTimeout(timerRef.current);
         timerRef.current = null;
       }
+      setNextRetryAt(null);
+    };
+
+    const closeSource = (): void => {
       if (sourceRef.current) {
         sourceRef.current.close();
         sourceRef.current = null;
       }
+    };
+
+    const scheduleReconnect = (): void => {
+      closeSource();
+      if (!mounted) return;
+      setStatus("reconnecting");
+      const index = Math.min(retriesRef.current, BACKOFF.length - 1);
+      const delay = BACKOFF[index]!;
+      retriesRef.current += 1;
+      setReconnectAttempts(retriesRef.current);
+      setNextRetryAt(Date.now() + delay);
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null;
+        setNextRetryAt(null);
+        connect();
+      }, delay);
     };
 
     const connect = (): void => {
@@ -69,9 +105,11 @@ export function usePriceStream(symbols: string[]): {
       setStatus(retriesRef.current > 0 ? "reconnecting" : "connecting");
       const source = new EventSource(`/stream?symbols=${encodeURIComponent(query)}`);
       sourceRef.current = source;
+      lastMessageRef.current = Date.now();
 
       source.addEventListener("open", () => {
         retriesRef.current = 0;
+        lastMessageRef.current = Date.now();
         setReconnectAttempts(0);
         setStatus("live");
       });
@@ -86,11 +124,13 @@ export function usePriceStream(symbols: string[]): {
 
       // Sent once per connection: current state, not trades. Prices only, never the feed.
       source.addEventListener("snapshot", (event) => {
+        lastMessageRef.current = Date.now();
         const quote = parseQuote((event as MessageEvent).data);
         if (quote) applyQuote(quote);
       });
 
       source.addEventListener("price", (event) => {
+        lastMessageRef.current = Date.now();
         const safeData = parseQuote((event as MessageEvent).data);
         if (!safeData) return;
 
@@ -106,28 +146,52 @@ export function usePriceStream(symbols: string[]): {
       });
 
       source.addEventListener("error", () => {
-        source.close();
-        sourceRef.current = null;
-        if (!mounted) return;
-        setStatus("reconnecting");
-        const index = Math.min(retriesRef.current, BACKOFF.length - 1);
-        const delay = BACKOFF[index]!;
-        retriesRef.current += 1;
-        setReconnectAttempts(retriesRef.current);
-        timerRef.current = window.setTimeout(() => {
-          connect();
-        }, delay);
+        // Only the current connection may schedule a reconnect.
+        if (sourceRef.current !== source) return;
+        scheduleReconnect();
       });
     };
 
+    const retryNow = (): void => {
+      if (!mounted) return;
+      clearTimer();
+      closeSource();
+      connect();
+    };
+    retryRef.current = retryNow;
+
+    // Back online: no point waiting out the backoff.
+    const onOnline = (): void => {
+      if (sourceRef.current?.readyState !== EventSource.OPEN) retryNow();
+    };
+
+    const checkSilence = (): void => {
+      const source = sourceRef.current;
+      if (!source || source.readyState !== EventSource.OPEN) return;
+      if (Date.now() - lastMessageRef.current > SILENCE_LIMIT_MS) scheduleReconnect();
+    };
+    const onVisibility = (): void => {
+      if (document.visibilityState === "visible") checkSilence();
+    };
+    const watchdog = window.setInterval(checkSilence, 1000);
+
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisibility);
     connect();
 
     return () => {
       mounted = false;
+      retryRef.current = () => {};
+      window.clearInterval(watchdog);
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisibility);
       setStatus("disconnected");
-      cleanup();
+      clearTimer();
+      closeSource();
     };
   }, [query]);
 
-  return { prices, feed, status, reconnectAttempts };
+  const retry = useCallback(() => retryRef.current(), []);
+
+  return { prices, feed, status, reconnectAttempts, nextRetryAt, retry };
 }
