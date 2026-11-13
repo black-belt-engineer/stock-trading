@@ -7,6 +7,8 @@ import type { ActiveStock } from "../../types";
 type Props = {
   stock: ActiveStock;
   onOpen: (symbol: string) => void;
+  /** No tick for this symbol for a while although the stream is live. */
+  delayed: boolean;
 };
 
 const flashClass = {
@@ -15,7 +17,7 @@ const flashClass = {
   down: "animate-flash-down motion-reduce:animate-none",
 } as const;
 
-function PriceCardBase({ stock, onOpen }: Props): JSX.Element {
+function PriceCardBase({ stock, onOpen, delayed }: Props): JSX.Element {
   const [flash, setFlash] = useState<keyof typeof flashClass>("");
   const trendUp = stock.changePercent >= 0;
 
@@ -50,8 +52,18 @@ function PriceCardBase({ stock, onOpen }: Props): JSX.Element {
           {formatChange(stock.changePercent)}
         </div>
       </div>
-      <div className={`mt-2 font-mono text-[24px] leading-[1.15] font-semibold ${flashClass[flash]}`}>
-        {formatPrice(stock.currentPrice)}
+      <div className="mt-2 flex items-baseline justify-between gap-2">
+        <div className={`font-mono text-[24px] leading-[1.15] font-semibold ${flashClass[flash]}`}>
+          {formatPrice(stock.currentPrice)}
+        </div>
+        {delayed && (
+          <span
+            title="No recent updates for this symbol"
+            className="rounded-full border border-warning/40 px-2 py-0.5 text-[11px] font-medium text-warning"
+          >
+            Delayed
+          </span>
+        )}
       </div>
       <div className="mt-2.5 w-full">
         <Sparkline prices={stock.sparkline} height={40} />

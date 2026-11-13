@@ -3,7 +3,7 @@ import type { JSX } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { Sparkline } from "../Sparkline";
-import type { StreamStatus } from "../../hooks/usePriceStream";
+import { StaleBanner } from "../StaleBanner";
 import type { ActiveStock, ListStatus, SnapshotData } from "../../types";
 import { formatChange, formatPrice, formatTimeAgo, formatVolume } from "../../utils/format";
 
@@ -14,7 +14,8 @@ type Props = {
   stock: ActiveStock | null;
   listStatus: ListStatus;
   onRetryList: () => void;
-  streamStatus: StreamStatus;
+  /** The stream has been down for a while: values may be out of date. */
+  stale: boolean;
   onOpenChange: (open: boolean) => void;
 };
 
@@ -38,7 +39,7 @@ const buttonClass =
   "cursor-pointer rounded-md border border-default bg-elevated px-3.5 py-1.5 text-primary transition-colors duration-150 " +
   `hover:border-strong ${focusRing}`;
 
-export function DetailPanel({ symbol, stock, listStatus, onRetryList, streamStatus, onOpenChange }: Props): JSX.Element {
+export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onOpenChange }: Props): JSX.Element {
   // Only a symbol that is in the list has a snapshot worth fetching.
   const liveSymbol = stock?.symbol ?? null;
   const [snapshot, setSnapshot] = useState<SnapshotState | null>(null);
@@ -80,7 +81,6 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, streamStat
         : { symbol: liveSymbol, status: "loading" };
 
   const trendUp = (stock?.changePercent ?? 0) >= 0;
-  const stale = streamStatus !== "live";
 
   return (
     <Dialog.Root open={symbol !== null} onOpenChange={onOpenChange}>
@@ -137,17 +137,14 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, streamStat
 
           {stock && current && (
             <>
-              <section className="px-5 pt-5 pb-3 text-center">
+              <section className={`px-5 pt-5 pb-3 text-center transition-opacity duration-300 ${stale ? "opacity-50" : ""}`}>
                 <div className="font-mono text-[36px] font-semibold">{formatPrice(stock.currentPrice)}</div>
                 <div className={`font-mono ${trendUp ? "text-positive" : "text-negative"}`}>
                   {formatSignedPrice(stock.changeValue)} / {formatChange(stock.changePercent)}
                 </div>
-                {stale && (
-                  <div role="status" className="mt-2 text-[11px] text-warning">
-                    Stream {streamStatus === "disconnected" ? "disconnected" : "reconnecting"} — values may be out of date
-                  </div>
-                )}
               </section>
+
+              <StaleBanner compact />
 
               <section className="min-h-24 px-5 pb-4">
                 <Sparkline prices={stock.sparkline} height={96} />

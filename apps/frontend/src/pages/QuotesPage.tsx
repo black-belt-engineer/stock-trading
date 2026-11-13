@@ -31,7 +31,7 @@ export function QuotesPage(): JSX.Element {
   const [listAttempt, setListAttempt] = useState(0);
   const [now, setNow] = useState(Date.now());
   const { prices } = useStreamData();
-  const { status } = useStreamStatus();
+  const { status, stale } = useStreamStatus();
 
   const [searchParams] = useSearchParams();
   const location = useLocation();
@@ -67,9 +67,19 @@ export function QuotesPage(): JSX.Element {
 
   const retryList = useCallback(() => setListAttempt((n) => n + 1), []);
 
+  // Drives "x ago" and the delayed markers. Background tabs throttle the
+  // interval, so catch up as soon as the tab is visible again.
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
+    const tick = (): void => setNow(Date.now());
+    const timer = window.setInterval(tick, 1000);
+    const onVisibility = (): void => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 
   useEffect(() => {
@@ -145,21 +155,26 @@ export function QuotesPage(): JSX.Element {
     navigate({ search: search ? `?${search}` : "" }, { replace: true });
   }, [location.state, navigate, searchParams]);
 
-  const lastUpdated = useMemo(
-    () => stocks.reduce((acc, s) => Math.max(acc, s.lastUpdated ?? 0), 0) || now,
-    [stocks, now],
-  );
+  const lastUpdated = useMemo(() => stocks.reduce((acc, s) => Math.max(acc, s.lastUpdated ?? 0), 0), [stocks]);
 
   return (
     <>
       <Topbar stocks={stocks} lastUpdate={lastUpdated} />
-      <PriceGrid stocks={stocks} onOpen={openDetail} />
+      <PriceGrid
+        stocks={stocks}
+        status={listStatus}
+        onRetry={retryList}
+        onOpen={openDetail}
+        stale={stale}
+        live={status === "live"}
+        now={now}
+      />
       <DetailPanel
         symbol={selected}
         stock={selectedStock}
         listStatus={listStatus}
         onRetryList={retryList}
-        streamStatus={status}
+        stale={stale}
         onOpenChange={(open) => !open && closeDetail()}
       />
     </>
