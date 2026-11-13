@@ -1,9 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FeedEvent, LiveQuote } from "../types";
 
-type StreamStatus = "connecting" | "live" | "reconnecting" | "disconnected";
+export type StreamStatus = "connecting" | "live" | "reconnecting" | "disconnected";
 
 const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000, 30000];
+
+/** Returns null for a malformed message so one bad frame cannot throw inside a listener. */
+function parseQuote(raw: unknown): LiveQuote | null {
+  if (typeof raw !== "string") return null;
+  let data: Partial<LiveQuote> | null;
+  try {
+    data = JSON.parse(raw) as Partial<LiveQuote> | null;
+  } catch {
+    return null;
+  }
+  if (!data || typeof data !== "object" || typeof data.symbol !== "string" || data.symbol === "") {
+    return null;
+  }
+  const num = (value: unknown, fallback: number): number =>
+    typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  return {
+    symbol: data.symbol,
+    name: typeof data.name === "string" && data.name !== "" ? data.name : data.symbol,
+    price: num(data.price, 0),
+    changeValue:
+      typeof data.changeValue === "number" && Number.isFinite(data.changeValue)
+        ? data.changeValue
+        : undefined,
+    changePercent: num(data.changePercent, 0),
+    quantity: num(data.quantity, 0),
+    side: data.side === "sell" ? "sell" : "buy",
+    timestamp: num(data.timestamp, Date.now()),
+  };
+}
 
 export function usePriceStream(symbols: string[]): {
   prices: Map<string, LiveQuote>;
@@ -47,23 +76,25 @@ export function usePriceStream(symbols: string[]): {
         setStatus("live");
       });
 
-      source.addEventListener("price", (event) => {
-        const data = JSON.parse(event.data) as LiveQuote;
-        const safeData: LiveQuote = {
-          symbol: data.symbol,
-          name: data.name ?? data.symbol,
-          price: Number.isFinite(data.price) ? data.price : 0,
-          changePercent: Number.isFinite(data.changePercent) ? data.changePercent : 0,
-          quantity: Number.isFinite(data.quantity) ? data.quantity : 0,
-          side: data.side === "sell" ? "sell" : "buy",
-          timestamp: Number.isFinite(data.timestamp) ? data.timestamp : Date.now(),
-        };
-
+      const applyQuote = (quote: LiveQuote): void => {
         setPrices((prev) => {
           const next = new Map(prev);
-          next.set(safeData.symbol, safeData);
+          next.set(quote.symbol, quote);
           return next;
         });
+      };
+
+      // Sent once per connection: current state, not trades. Prices only, never the feed.
+      source.addEventListener("snapshot", (event) => {
+        const quote = parseQuote((event as MessageEvent).data);
+        if (quote) applyQuote(quote);
+      });
+
+      source.addEventListener("price", (event) => {
+        const safeData = parseQuote((event as MessageEvent).data);
+        if (!safeData) return;
+
+        applyQuote(safeData);
 
         setFeed((prev) => {
           const next: FeedEvent = {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { Topbar } from "./components/Topbar";
@@ -10,6 +10,8 @@ import { usePriceStream } from "./hooks/usePriceStream";
 import type { ActiveStock } from "./types";
 
 const SYMBOLS = ["AAPL", "TSLA", "GOOGL", "MSFT", "AMZN", "NVDA"];
+
+const SPARKLINE_POINTS = 30;
 
 const EMPTY_STOCK: ActiveStock = {
   symbol: "",
@@ -60,23 +62,39 @@ export default function App(): JSX.Element {
   useEffect(() => {
     if (prices.size === 0) return;
     setStocks((prev) => {
+      let changed = false;
       const next = prev.map((stock) => {
         const live = prices.get(stock.symbol);
-        if (!live) return stock;
-        const nextSparkline = [...stock.sparkline, live.price].slice(-30);
+        // Only a quote newer than the one already applied adds a point. Both
+        // timestamps come from the server, so the browser clock is irrelevant.
+        // Returning the same object lets memo(PriceCard) skip untouched cards.
+        if (!live || live.timestamp <= stock.lastUpdated) return stock;
+        changed = true;
         return {
           ...stock,
           name: live.name || stock.name,
-          currentPrice: live.price ?? 0,
-          changePercent: live.changePercent ?? 0,
-          changeValue: ((live.changePercent ?? 0) / 100) * (live.price ?? 0),
-          sparkline: nextSparkline,
-          lastUpdated: live.timestamp ?? Date.now(),
+          currentPrice: live.price,
+          changePercent: live.changePercent,
+          changeValue: live.changeValue ?? stock.changeValue,
+          sparkline: [...stock.sparkline, live.price].slice(-SPARKLINE_POINTS),
+          lastUpdated: live.timestamp,
         };
       });
-      return next;
+      return changed ? next : prev;
     });
   }, [prices]);
+
+  const selectedStock = useMemo(
+    () => (selected ? stocks.find((s) => s.symbol === selected) ?? null : null),
+    [selected, stocks],
+  );
+
+  // The symbol left the list while its dialog was open: close it.
+  useEffect(() => {
+    if (selected && !selectedStock) setSelected(null);
+  }, [selected, selectedStock]);
+
+  const openDetail = useCallback((symbol: string) => setSelected(symbol), []);
 
   const filtered = useMemo(() => {
     if (filter === "all") return stocks;
@@ -95,10 +113,14 @@ export default function App(): JSX.Element {
       <main style={{ padding: "18px 20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
         <Topbar stocks={filtered} lastUpdate={lastUpdated} />
         <FilterPills value={filter} onChange={setFilter} />
-        <PriceGrid stocks={filtered} onOpen={(symbol) => setSelected(symbol)} />
+        <PriceGrid stocks={filtered} onOpen={openDetail} />
       </main>
       <LiveFeed feed={feed} />
-      <DetailPanel symbol={selected} open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)} />
+      <DetailPanel
+        stock={selectedStock}
+        streamStatus={status}
+        onOpenChange={(open) => !open && setSelected(null)}
+      />
     </div>
   );
 }

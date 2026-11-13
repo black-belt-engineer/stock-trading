@@ -1,5 +1,10 @@
 import type { Redis } from "ioredis";
-import { latestPriceKey, sparklineKey, type LatestPrice } from "@stock-platform/types";
+import {
+  latestPriceKey,
+  sparklineKey,
+  sparklinePriceFromMember,
+  type LatestPrice,
+} from "@stock-platform/types";
 
 export class LatestPriceRepository {
   constructor(private readonly redis: Redis) {}
@@ -14,6 +19,8 @@ export class LatestPriceRepository {
 
   async findSparkline(symbol: string): Promise<number[]> {
     const values = await this.redis.zrange(sparklineKey(symbol), 0, -1);
-    return values.map((value) => Number(value)).filter((value) => !Number.isNaN(value));
+    return values
+      .map((member) => sparklinePriceFromMember(member))
+      .filter((price): price is number => price !== null);
   }
 }

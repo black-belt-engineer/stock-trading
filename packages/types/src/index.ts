@@ -36,6 +36,30 @@ export function sparklineKey(symbol: string): string {
 }
 
 /**
+ * Sorted-set member for one sparkline point. The timestamp prefix keeps the
+ * member unique per tick, so a repeated price adds a point instead of moving
+ * the existing one.
+ */
+export function sparklineMember(timestamp: number, price: number): string {
+  return `${timestamp}:${price}`;
+}
+
+/**
+ * Reads the price out of a sparkline member. Accepts the current
+ * `"<timestamp>:<price>"` format and the legacy bare `"<price>"` format that
+ * may still be in Redis. Returns `null` for anything unparseable.
+ */
+export function sparklinePriceFromMember(member: string): number | null {
+  const separator = member.indexOf(":");
+  const raw = separator === -1 ? member : member.slice(separator + 1);
+  if (raw.trim() === "") {
+    return null;
+  }
+  const price = Number(raw);
+  return Number.isFinite(price) ? price : null;
+}
+
+/**
  * Denormalized latest quote stored in Redis per symbol.
  */
 export type LatestPrice = {
@@ -72,6 +96,7 @@ export type StreamQuote = {
   symbol: string;
   name: string;
   price: number;
+  changeValue: number;
   changePercent: number;
   quantity: number;
   side: "buy" | "sell";
@@ -83,6 +108,7 @@ export function streamQuoteFromLatest(latest: LatestPrice): StreamQuote {
     symbol: latest.symbol,
     name: latest.name,
     price: latest.currentPrice,
+    changeValue: latest.changeValue,
     changePercent: latest.changePercent,
     quantity: 0,
     side: latest.changeValue >= 0 ? "buy" : "sell",

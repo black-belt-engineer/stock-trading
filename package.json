@@ -8,6 +8,9 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "dev:all": "bash scripts/dev.sh",
+    "dev:setup": "bash scripts/dev.sh --setup-only",
+    "dev:down": "bash scripts/dev.sh --down",
     "lint": "turbo run lint"
   },
   "devDependencies": {

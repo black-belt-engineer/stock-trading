@@ -4,10 +4,17 @@ import {
   PRICE_UPDATES_STREAM_KEY,
   PRICE_UPDATES_STREAM_MAXLEN,
   sparklineKey,
+  sparklineMember,
   streamQuoteFromLatest,
   type LatestPrice,
   type PriceEvent,
 } from "@stock-platform/types";
+
+/**
+ * Lifetime of the idempotency marker. It only has to outlive the longest
+ * plausible Kafka redelivery window; without it every tick leaves a permanent key.
+ */
+const PROCESSED_MARKER_TTL_SECONDS = 86_400;
 
 function processedMarkerKey(idempotencyKey: string): string {
   return `consumer:processed:${idempotencyKey}`;
@@ -29,7 +36,7 @@ export class PriceRedisRepository {
     const result = await this.redis
       .multi()
       .set(latestPriceKey(event.symbol), JSON.stringify(latest))
-      .zadd(sparklineKey(event.symbol), event.timestamp, String(event.price))
+      .zadd(sparklineKey(event.symbol), event.timestamp, sparklineMember(event.timestamp, event.price))
       .zremrangebyrank(sparklineKey(event.symbol), 0, -31)
       .xadd(
         PRICE_UPDATES_STREAM_KEY,
@@ -42,7 +49,7 @@ export class PriceRedisRepository {
         "payload",
         quotePayload,
       )
-      .set(markerKey, "1")
+      .set(markerKey, "1", "EX", PROCESSED_MARKER_TTL_SECONDS)
       .exec();
 
     if (result === null) {

@@ -2,6 +2,8 @@ export type LiveQuote = {
   symbol: string;
   name: string;
   price: number;
+  /** Absent only when the server predates the field; the last known value is kept then. */
+  changeValue?: number;
   changePercent: number;
   quantity: number;
   side: "buy" | "sell";

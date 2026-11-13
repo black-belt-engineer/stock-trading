@@ -28,8 +28,9 @@ const streamRoutesImpl: FastifyPluginAsync<StreamRouteDeps> = async (fastify, op
     connectionTracker.increment();
 
     const initialQuotes = await streamSubscriptionService.getInitialQuotes(request.query.symbols);
+    // Current state, not trades: sent as `snapshot` so clients keep them out of the feed.
     for (const payload of initialQuotes) {
-      reply.raw.write(`event: price\ndata: ${JSON.stringify(payload)}\n\n`);
+      reply.raw.write(`event: snapshot\ndata: ${JSON.stringify(payload)}\n\n`);
     }
 
     const unsubscribe = streamSubscriptionService.subscribe(request.query.symbols, (quote) => {
