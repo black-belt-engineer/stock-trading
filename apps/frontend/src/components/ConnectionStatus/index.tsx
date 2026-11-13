@@ -25,8 +25,9 @@ export function ConnectionStatus({ status, attempts }: Props): JSX.Element {
   const { text, dot } = styles[status];
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-subtle bg-elevated px-3 py-2.5">
-      <span className={`size-2 rounded-full motion-reduce:animate-none ${dot}`} />
+    // A polite live region: screen readers hear the status change without being interrupted.
+    <div role="status" aria-live="polite" className="flex items-center gap-2 rounded-lg border border-subtle bg-elevated px-3 py-2.5">
+      <span aria-hidden="true" className={`size-2 rounded-full motion-reduce:animate-none ${dot}`} />
       <span className={`font-medium ${text}`}>{label}</span>
     </div>
   );
