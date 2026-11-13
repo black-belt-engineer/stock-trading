@@ -37,12 +37,12 @@ export function Sidebar({ status, attempts, feedOpen, onToggleFeed, feedToggleRe
           <span className="md:max-xl:sr-only">STREAMTICK</span>
         </div>
         <nav aria-label="Main" className="hidden gap-1 md:grid">
-          {navItems.map(({ label, to, Icon }) => (
+          {navItems.map(({ label, to, Icon, end }) => (
             // NavLink sets aria-current="page" on the active link by itself.
             <NavLink
               key={to}
               to={to}
-              end
+              end={end}
               title={label}
               className={({ isActive }) =>
                 "flex h-10 w-full items-center gap-2.5 rounded-lg border border-l-[3px] px-3 transition-colors duration-150 " +
