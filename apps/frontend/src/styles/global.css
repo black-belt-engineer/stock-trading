@@ -1,6 +1,26 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
 @import "tailwindcss";
 @import "./tokens.css";
+
+/*
+ * Self-hosted variable fonts (latin subset, from Fontsource; OFL licences next
+ * to the files in public/fonts). `swap` shows the fallback font at once instead
+ * of blank text. index.html preloads both files.
+ */
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/fonts/space-grotesk-latin-wght.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-latin-wght.woff2") format("woff2");
+}
 
 /*
  * Expose the tokens in tokens.css to Tailwind. `inline` makes each utility
