@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
+import { resolveSymbol } from "../models/symbols.js";
 import type { QuotesService } from "../services/quotes.service.js";
 
 export type QuotesRouteDeps = {
@@ -12,7 +13,8 @@ const quotesRoutesImpl: FastifyPluginAsync<QuotesRouteDeps> = async (fastify, op
   fastify.get<{ Params: { symbol: string } }>(
     "/quotes/:symbol/snapshot",
     async (request) => {
-      const symbol = request.params.symbol.toUpperCase();
+      // 400 for a malformed symbol, 404 for one not in the registry.
+      const { symbol } = resolveSymbol(request.params.symbol);
       return quotesService.getSnapshot(symbol);
     },
   );

@@ -4,7 +4,6 @@ import {
   streamQuoteFromLatest,
   type StreamQuote,
 } from "@stock-platform/types";
-import { parseSymbols } from "../models/stream.js";
 import type { LatestPriceRepository } from "../repositories/latest-price.repository.js";
 
 const BLOCK_MS = 5000;
@@ -30,8 +29,8 @@ export class StreamSubscriptionService {
     private readonly latestPriceRepository: LatestPriceRepository,
   ) {}
 
-  async getInitialQuotes(symbolsQuery?: string): Promise<StreamQuote[]> {
-    const symbols = parseSymbols(symbolsQuery);
+  /** `symbols` must already be validated (see `parseSymbolList`). */
+  async getInitialQuotes(symbols: readonly string[]): Promise<StreamQuote[]> {
     const quotes: StreamQuote[] = [];
 
     for (const symbol of symbols) {
@@ -44,11 +43,11 @@ export class StreamSubscriptionService {
   }
 
   subscribe(
-    symbolsQuery: string | undefined,
+    symbolList: readonly string[],
     onQuote: (quote: StreamQuote) => void,
     onError?: (err: Error) => void,
   ): () => void {
-    const symbols = new Set(parseSymbols(symbolsQuery));
+    const symbols = new Set(symbolList);
     const reader = this.redis.duplicate();
     let active = true;
     let lastId = "$";
