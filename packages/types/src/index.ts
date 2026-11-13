@@ -1,20 +1,44 @@
+import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { Value } from "@sinclair/typebox/value";
+
+/**
+ * Parses JSON from outside the process (Kafka, Redis, another service) and
+ * checks it against `schema`. Returns null for invalid JSON or a payload of
+ * the wrong shape, so nothing unchecked is ever typed as `Static<T>`.
+ */
+export function parseJson<T extends TSchema>(schema: T, text: string): Static<T> | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  return Value.Check(schema, value) ? value : null;
+}
+
 /**
  * Core message flowing through the pipeline (ingest → Kafka → consumer → Redis / DB).
  */
-export type PriceEvent = {
-  symbol: string;
-  name: string;
-  price: number;
-  previousPrice: number;
-  changePercent: number;
-  volume: number;
-  timestamp: number;
-  source: "fake" | "polygon" | "yahoo" | "exchange";
-  size: number;
-  side: "buy" | "sell";
-  exchange: string;
-  conditions: string[];
-};
+export const PriceEventSchema = Type.Object({
+  symbol: Type.String(),
+  name: Type.String(),
+  price: Type.Number(),
+  previousPrice: Type.Number(),
+  changePercent: Type.Number(),
+  volume: Type.Number(),
+  timestamp: Type.Number(),
+  source: Type.Union([
+    Type.Literal("fake"),
+    Type.Literal("polygon"),
+    Type.Literal("yahoo"),
+    Type.Literal("exchange"),
+  ]),
+  size: Type.Number(),
+  side: Type.Union([Type.Literal("buy"), Type.Literal("sell")]),
+  exchange: Type.String(),
+  conditions: Type.Array(Type.String()),
+});
+export type PriceEvent = Static<typeof PriceEventSchema>;
 
 /** Kafka record key for a price tick — used as the idempotency key end-to-end. */
 export function priceEventMessageKey(event: PriceEvent): string {
@@ -62,18 +86,19 @@ export function sparklinePriceFromMember(member: string): number | null {
 /**
  * Denormalized latest quote stored in Redis per symbol.
  */
-export type LatestPrice = {
-  symbol: string;
-  name: string;
-  currentPrice: number;
-  previousPrice: number;
-  changeValue: number;
-  changePercent: number;
-  high24h: number;
-  low24h: number;
-  volume24h: number;
-  lastUpdated: number;
-};
+export const LatestPriceSchema = Type.Object({
+  symbol: Type.String(),
+  name: Type.String(),
+  currentPrice: Type.Number(),
+  previousPrice: Type.Number(),
+  changeValue: Type.Number(),
+  changePercent: Type.Number(),
+  high24h: Type.Number(),
+  low24h: Type.Number(),
+  volume24h: Type.Number(),
+  lastUpdated: Type.Number(),
+});
+export type LatestPrice = Static<typeof LatestPriceSchema>;
 
 /**
  * OHLCV candle for charting (Phase 3).
@@ -92,16 +117,17 @@ export type OhlcvBar = {
 /**
  * Payload streamed to browsers via SSE.
  */
-export type StreamQuote = {
-  symbol: string;
-  name: string;
-  price: number;
-  changeValue: number;
-  changePercent: number;
-  quantity: number;
-  side: "buy" | "sell";
-  timestamp: number;
-};
+export const StreamQuoteSchema = Type.Object({
+  symbol: Type.String(),
+  name: Type.String(),
+  price: Type.Number(),
+  changeValue: Type.Number(),
+  changePercent: Type.Number(),
+  quantity: Type.Number(),
+  side: Type.Union([Type.Literal("buy"), Type.Literal("sell")]),
+  timestamp: Type.Number(),
+});
+export type StreamQuote = Static<typeof StreamQuoteSchema>;
 
 export function streamQuoteFromLatest(latest: LatestPrice): StreamQuote {
   return {

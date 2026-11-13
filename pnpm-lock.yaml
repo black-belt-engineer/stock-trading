@@ -405,6 +405,10 @@ importers:
         version: 5.9.3
 
   packages/types:
+    dependencies:
+      '@sinclair/typebox':
+        specifier: ^0.34.33
+        version: 0.34.49
     devDependencies:
       typescript:
         specifier: ^5.8.3

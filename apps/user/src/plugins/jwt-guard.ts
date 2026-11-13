@@ -21,7 +21,7 @@ declare module "fastify" {
 const TOKEN_ERROR_PREFIXES = ["ERR_JWT_", "ERR_JWS_", "ERR_JWKS_NO_MATCHING_KEY", "ERR_JWKS_MULTIPLE"];
 
 function isTokenError(err: unknown): boolean {
-  const code = (err as { code?: unknown } | null)?.code;
+  const code = typeof err === "object" && err !== null && "code" in err ? err.code : undefined;
   return typeof code === "string" && (TOKEN_ERROR_PREFIXES.some((p) => code.startsWith(p)) || code === "ERR_JOSE_ALG_NOT_ALLOWED");
 }
 

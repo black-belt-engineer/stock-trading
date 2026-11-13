@@ -1,5 +1,6 @@
 import { AppError, UnauthorizedError } from "@stock-platform/errors";
-import type { UserSummary } from "../models/auth.js";
+import { Value } from "@sinclair/typebox/value";
+import { userSummarySchema, type UserSummary } from "../models/auth.js";
 
 export class UserClientService {
   constructor(private readonly baseUrl: string) {}
@@ -21,7 +22,15 @@ export class UserClientService {
     if (!res.ok) {
       throw new AppError("User service error", 502, "USER_SERVICE_ERROR");
     }
-    const user = (await res.json()) as UserSummary;
+    let user: unknown;
+    try {
+      user = await res.json();
+    } catch {
+      throw new AppError("User service sent invalid JSON", 502, "USER_SERVICE_ERROR");
+    }
+    if (!Value.Check(userSummarySchema, user)) {
+      throw new AppError("User service sent an unexpected response", 502, "USER_SERVICE_ERROR");
+    }
     return { id: user.id, email: user.email, name: user.name };
   }
 }

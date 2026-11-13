@@ -76,7 +76,11 @@ export class UserRepository {
         `INSERT INTO users (email, name, password_hash) VALUES ($1, $2, $3) RETURNING ${COLUMNS}`,
         [input.email, input.name, input.passwordHash],
       );
-      return toRecord(rows[0]!);
+      const row = rows[0];
+      if (!row) {
+        throw new Error("INSERT INTO users … RETURNING returned no row");
+      }
+      return toRecord(row);
     } catch (err) {
       rethrowUniqueViolation(err);
     }

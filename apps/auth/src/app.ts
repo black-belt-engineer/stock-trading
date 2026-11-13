@@ -21,7 +21,8 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
     if (isAppError(error)) {
       return reply.code(error.statusCode).send({ error: error.message, code: error.code });
     }
-    if ((error as { validation?: unknown } | null)?.validation) {
+    // Fastify's schema validation errors carry a `validation` array.
+    if ("validation" in error && error.validation) {
       return reply.code(400).send({ error: error.message, code: "VALIDATION_ERROR" });
     }
     log.error({ err: error }, "Unhandled error");

@@ -27,4 +27,9 @@ export const tokenResponseSchema = Type.Object({
 });
 export type TokenResponse = Static<typeof tokenResponseSchema>;
 
-export type UserSummary = { id: string; email: string; name: string };
+export const userSummarySchema = Type.Object({
+  id: Type.String(),
+  email: Type.String(),
+  name: Type.String(),
+});
+export type UserSummary = Static<typeof userSummarySchema>;

@@ -1,7 +1,7 @@
-import { type Static, type TSchema } from "@sinclair/typebox";
+import { type StaticDecode, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
-export function parseEnv<T extends TSchema>(schema: T): Static<T> {
+export function parseEnv<T extends TSchema>(schema: T): StaticDecode<T> {
   const converted = Value.Convert(schema, Value.Default(schema, { ...process.env }));
   if (!Value.Check(schema, converted)) {
     const errors = [...Value.Errors(schema, converted)];
@@ -10,5 +10,5 @@ export function parseEnv<T extends TSchema>(schema: T): Static<T> {
       .join("; ");
     throw new Error(`Invalid environment configuration: ${message}`);
   }
-  return Value.Decode(schema, converted) as Static<T>;
+  return Value.Decode(schema, converted);
 }

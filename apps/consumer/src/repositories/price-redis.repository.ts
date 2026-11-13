@@ -1,6 +1,8 @@
 import type { Redis } from "ioredis";
 import {
+  LatestPriceSchema,
   latestPriceKey,
+  parseJson,
   PRICE_UPDATES_STREAM_KEY,
   PRICE_UPDATES_STREAM_MAXLEN,
   sparklineKey,
@@ -64,9 +66,8 @@ export class PriceRedisRepository {
 
   private async buildLatestPrice(event: PriceEvent): Promise<LatestPrice> {
     const existingRaw = await this.redis.get(latestPriceKey(event.symbol));
-    const previous: LatestPrice | null = existingRaw
-      ? (JSON.parse(existingRaw) as LatestPrice)
-      : null;
+    // A stored record of the wrong shape is treated as absent and rebuilt from this tick.
+    const previous = existingRaw ? parseJson(LatestPriceSchema, existingRaw) : null;
 
     const currentPrice = event.price;
     const previousPrice = previous?.currentPrice ?? event.previousPrice;
