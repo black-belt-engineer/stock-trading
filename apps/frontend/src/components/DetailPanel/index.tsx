@@ -37,16 +37,31 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
   const lastSymbolRef = useRef<string | null>(null);
   if (symbol !== null) lastSymbolRef.current = symbol;
 
+  // The control that opened the dialog: a card or a mover. Read while
+  // rendering the first open frame, before Radix moves focus into the dialog.
+  // A dialog opened from a link has none (focus is on <body>).
+  const openerRef = useRef<HTMLElement | null>(null);
+  const wasOpenRef = useRef(false);
+  if (symbol !== null && !wasOpenRef.current) {
+    const active = document.activeElement;
+    openerRef.current = active instanceof HTMLElement && active !== document.body ? active : null;
+  }
+  wasOpenRef.current = symbol !== null;
+
   // Radix returns focus to a Dialog.Trigger, but this dialog is opened through
   // the URL and has none, so focus would fall to <body>. Send it back to the
-  // symbol's card instead, also when the dialog was opened from a link. If the
-  // symbol has no card (not found), Radix's default applies.
-  const returnFocusToCard = (event: Event): void => {
+  // control that opened it if that is still on the page, otherwise to the
+  // symbol's card (also when the dialog was opened from a link). If neither
+  // exists (symbol not found, or filtered out), Radix's default applies.
+  const returnFocus = (event: Event): void => {
+    const opener = openerRef.current;
+    openerRef.current = null;
     const last = lastSymbolRef.current;
     const card = last ? document.querySelector<HTMLElement>(`[data-symbol="${CSS.escape(last)}"]`) : null;
-    if (!card) return;
+    const target = opener?.isConnected ? opener : card;
+    if (!target) return;
     event.preventDefault();
-    card.focus();
+    target.focus();
   };
 
   return (
@@ -55,7 +70,7 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
         <Dialog.Overlay className="fixed inset-0 bg-overlay backdrop-blur-[6px]" />
         <Dialog.Content
           aria-describedby="detail-panel-description"
-          onCloseAutoFocus={returnFocusToCard}
+          onCloseAutoFocus={returnFocus}
           className={
             // Narrow: a full-screen sheet, clear of the home indicator. From md up: a centred card.
             "fixed inset-0 overflow-y-auto bg-surface pb-[env(safe-area-inset-bottom)] " +

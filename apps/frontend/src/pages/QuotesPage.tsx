@@ -132,7 +132,7 @@ export function QuotesPage(): JSX.Element {
     <>
       {/* The page heading, for screen reader navigation; sighted users see the active nav item. */}
       <h1 className="sr-only">Quotes</h1>
-      <Topbar stocks={filtered} lastUpdate={lastUpdated} />
+      <Topbar stocks={filtered} allStocks={stocks} lastUpdate={lastUpdated} onOpen={openDetail} />
       {sectors.length > 1 && <SectorFilter sectors={sectors} value={sector} onChange={changeSector} />}
       <PriceGrid
         stocks={filtered}
