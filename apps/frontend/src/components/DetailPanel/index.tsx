@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
@@ -82,12 +82,30 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
 
   const trendUp = (stock?.changePercent ?? 0) >= 0;
 
+  // The symbol prop is already null by the time the dialog finishes closing,
+  // so remember which one was open.
+  const lastSymbolRef = useRef<string | null>(null);
+  if (symbol !== null) lastSymbolRef.current = symbol;
+
+  // Radix returns focus to a Dialog.Trigger, but this dialog is opened through
+  // the URL and has none, so focus would fall to <body>. Send it back to the
+  // symbol's card instead, also when the dialog was opened from a link. If the
+  // symbol has no card (not found), Radix's default applies.
+  const returnFocusToCard = (event: Event): void => {
+    const last = lastSymbolRef.current;
+    const card = last ? document.querySelector<HTMLElement>(`[data-symbol="${CSS.escape(last)}"]`) : null;
+    if (!card) return;
+    event.preventDefault();
+    card.focus();
+  };
+
   return (
     <Dialog.Root open={symbol !== null} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-overlay backdrop-blur-[6px]" />
         <Dialog.Content
           aria-describedby="detail-panel-description"
+          onCloseAutoFocus={returnFocusToCard}
           className={
             // Narrow: a full-screen sheet, clear of the home indicator. From md up: a centred card.
             "fixed inset-0 overflow-y-auto bg-surface pb-[env(safe-area-inset-bottom)] " +
@@ -139,7 +157,7 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
 
           {stock && current && (
             <>
-              <section className={`px-5 pt-5 pb-3 text-center transition-opacity duration-300 ${stale ? "opacity-50" : ""}`}>
+              <section className={`px-5 pt-5 pb-3 text-center transition-[filter] duration-300 ${stale ? "grayscale" : ""}`}>
                 <div className="font-mono text-[36px] font-semibold wrap-anywhere">{formatPrice(stock.currentPrice)}</div>
                 <div className={`font-mono ${trendUp ? "text-positive" : "text-negative"}`}>
                   {formatSignedPrice(stock.changeValue)} / {formatChange(stock.changePercent)}
