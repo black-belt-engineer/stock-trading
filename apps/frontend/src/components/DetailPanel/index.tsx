@@ -159,9 +159,13 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
             <>
               <section className={`px-5 pt-5 pb-3 text-center transition-[filter] duration-300 ${stale ? "grayscale" : ""}`}>
                 <div className="font-mono text-[36px] font-semibold wrap-anywhere">{formatPrice(stock.currentPrice)}</div>
-                <div className={`font-mono ${trendUp ? "text-positive" : "text-negative"}`}>
-                  {formatSignedPrice(stock.changeValue)} / {formatChange(stock.changePercent)}
-                </div>
+                {stock.changeValue === null || stock.changePercent === null ? (
+                  <div className="text-secondary">No trades yet</div>
+                ) : (
+                  <div className={`font-mono ${trendUp ? "text-positive" : "text-negative"}`}>
+                    {formatSignedPrice(stock.changeValue)} / {formatChange(stock.changePercent)}
+                  </div>
+                )}
               </section>
 
               <StaleBanner compact />
@@ -218,14 +222,17 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
  * contradict the price shown above them. Volume is as of when the dialog opened.
  */
 function tiles(stock: ActiveStock, data: SnapshotData): [string, string][] {
-  const high = Math.max(data.high24h, stock.currentPrice);
-  const low = Math.min(data.low24h, stock.currentPrice);
+  // The list may predate the symbol's first tick while the snapshot does not.
+  const price = stock.currentPrice ?? data.currentPrice;
+  const change = stock.changeValue ?? data.changeValue;
+  const high = Math.max(data.high24h, price);
+  const low = Math.min(data.low24h, price);
   return [
     ["High since start", formatPrice(high)],
     ["Low since start", formatPrice(low)],
     ["Volume since start", formatVolume(data.volume24h)],
-    ["Previous tick", formatPrice(stock.currentPrice - stock.changeValue)],
+    ["Previous tick", formatPrice(price - change)],
     ["Range since start", formatPrice(high - low)],
-    ["Last updated", formatTimeAgo(stock.lastUpdated)],
+    ["Last updated", formatTimeAgo(stock.lastUpdated || data.lastUpdated)],
   ];
 }

@@ -19,9 +19,11 @@ const flashClass = {
 
 function PriceCardBase({ stock, onOpen, delayed }: Props): JSX.Element {
   const [flash, setFlash] = useState<keyof typeof flashClass>("");
-  const trendUp = stock.changePercent >= 0;
+  const hasPrice = stock.currentPrice !== null;
+  const trendUp = (stock.changePercent ?? 0) >= 0;
 
   useEffect(() => {
+    if (stock.currentPrice === null) return;
     setFlash(trendUp ? "up" : "down");
     const timer = window.setTimeout(() => setFlash(""), 600);
     return () => window.clearTimeout(timer);
@@ -32,9 +34,14 @@ function PriceCardBase({ stock, onOpen, delayed }: Props): JSX.Element {
   // The button's whole name, read once when it gets focus. Not a live region:
   // six cards ticking every second would drown out everything else.
   const label =
-    `${stock.symbol}, ${companyName}, ${formatPrice(stock.currentPrice)}, ` +
-    `${trendUp ? "up" : "down"} ${Math.abs(stock.changePercent).toFixed(2)}%` +
-    (delayed ? ", no recent updates" : "");
+    `${stock.symbol}, ${companyName}, ` +
+    (stock.currentPrice === null
+      ? "no price yet"
+      : formatPrice(stock.currentPrice) +
+        (stock.changePercent === null
+          ? ""
+          : `, ${trendUp ? "up" : "down"} ${Math.abs(stock.changePercent).toFixed(2)}%`)) +
+    (delayed && hasPrice ? ", no recent updates" : "");
 
   // A button, so it is focusable and opens with Enter and Space. Buttons only
   // hold phrasing content, hence spans styled as blocks instead of divs.
@@ -62,7 +69,11 @@ function PriceCardBase({ stock, onOpen, delayed }: Props): JSX.Element {
         <span
           className={
             "shrink-0 self-start rounded-full px-2 py-0.5 font-mono text-[12px] font-semibold " +
-            (trendUp ? "bg-positive/15 text-positive" : "bg-negative/15 text-negative")
+            (stock.changePercent === null
+              ? "bg-elevated text-secondary"
+              : trendUp
+                ? "bg-positive/15 text-positive"
+                : "bg-negative/15 text-negative")
           }
         >
           {formatChange(stock.changePercent)}
@@ -73,7 +84,7 @@ function PriceCardBase({ stock, onOpen, delayed }: Props): JSX.Element {
         <span className={`block min-w-0 font-mono text-[24px] leading-[1.15] font-semibold wrap-anywhere ${flashClass[flash]}`}>
           {formatPrice(stock.currentPrice)}
         </span>
-        {delayed && (
+        {delayed && hasPrice && (
           <span
             title="No recent updates for this symbol"
             className="rounded-full border border-warning/40 px-2 py-0.5 text-[12px] font-medium text-warning"

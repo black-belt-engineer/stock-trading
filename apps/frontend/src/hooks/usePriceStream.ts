@@ -42,7 +42,8 @@ function parseQuote(raw: unknown): LiveQuote | null {
   };
 }
 
-export function usePriceStream(symbols: string[]): {
+/** Opens no connection while `symbols` is null or empty. */
+export function usePriceStream(symbols: string[] | null): {
   prices: Map<string, LiveQuote>;
   feed: FeedEvent[];
   status: StreamStatus;
@@ -64,9 +65,10 @@ export function usePriceStream(symbols: string[]): {
   /** Set by the effect below; reconnects immediately. A no-op before mount and after unmount. */
   const retryRef = useRef<() => void>(() => {});
 
-  const query = useMemo(() => symbols.join(","), [symbols]);
+  const query = useMemo(() => symbols?.join(",") ?? "", [symbols]);
 
   useEffect(() => {
+    if (query === "") return;
     let mounted = true;
 
     const clearTimer = (): void => {

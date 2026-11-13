@@ -4,68 +4,21 @@ import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { Topbar } from "../components/Topbar";
 import { PriceGrid } from "../components/PriceGrid";
 import { DetailPanel } from "../components/DetailPanel";
+import { ALL_SECTORS, SectorFilter, sectorId } from "../components/SectorFilter";
+import type { SectorOption } from "../components/SectorFilter";
 import { useStreamData, useStreamStatus } from "../stream/StreamProvider";
-import type { ActiveStock, ListStatus } from "../types";
-
-const SPARKLINE_POINTS = 30;
-
-const EMPTY_STOCK: ActiveStock = {
-  symbol: "",
-  name: "",
-  currentPrice: 0,
-  changePercent: 0,
-  changeValue: 0,
-  high24h: 0,
-  low24h: 0,
-  volume24h: 0,
-  sparkline: [],
-  lastUpdated: 0,
-};
 
 /** Marks a history entry the dashboard pushed itself, so closing the dialog can go back. */
 type DialogState = { openedFromList: true } | null;
 
 export function QuotesPage(): JSX.Element {
-  const [stocks, setStocks] = useState<ActiveStock[]>([]);
-  const [listStatus, setListStatus] = useState<ListStatus>("loading");
-  const [listAttempt, setListAttempt] = useState(0);
   const [now, setNow] = useState(Date.now());
-  const { prices } = useStreamData();
+  const { stocks, listStatus, retryList } = useStreamData();
   const { status, stale } = useStreamStatus();
 
   const [searchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setListStatus("loading");
-    fetch("/quotes/discovery/active-stocks", { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`Active stocks request failed with ${response.status}`);
-        return (await response.json()) as unknown;
-      })
-      .then((json) => {
-        const parsed: Partial<ActiveStock>[] = Array.isArray(json)
-          ? json
-          : (json as { stocks?: ActiveStock[] })?.stocks ?? [];
-        const mapped = parsed.map((item) => ({
-          ...EMPTY_STOCK,
-          ...item,
-          symbol: item.symbol ?? "",
-          sparkline: Array.isArray(item.sparkline) ? item.sparkline : [],
-        }));
-        setStocks(mapped);
-        setListStatus("ready");
-      })
-      .catch(() => {
-        if (controller.signal.aborted) return;
-        setListStatus("error");
-      });
-    return () => controller.abort();
-  }, [listAttempt]);
-
-  const retryList = useCallback(() => setListAttempt((n) => n + 1), []);
 
   // Drives "x ago" and the delayed markers. Background tabs throttle the
   // interval, so catch up as soon as the tab is visible again.
@@ -82,30 +35,41 @@ export function QuotesPage(): JSX.Element {
     };
   }, []);
 
+  // Sector pills come from the sectors in the list, so a new sector needs no frontend change.
+  const sectors = useMemo<SectorOption[]>(() => {
+    const names = [...new Set(stocks.map((s) => s.sector))].sort((x, y) => x.localeCompare(y));
+    return names.map((label) => ({ id: sectorId(label), label }));
+  }, [stocks]);
+
+  // The filter lives in the URL (`/?sector=financials`), so a view survives a reload.
+  const rawSector = searchParams.get("sector");
+  const sector = sectors.some((s) => s.id === rawSector) ? rawSector! : ALL_SECTORS;
+
+  // Drop a sector the list does not have (a stale link), without a history entry.
   useEffect(() => {
-    if (prices.size === 0) return;
-    setStocks((prev) => {
-      let changed = false;
-      const next = prev.map((stock) => {
-        const live = prices.get(stock.symbol);
-        // Only a quote newer than the one already applied adds a point. Both
-        // timestamps come from the server, so the browser clock is irrelevant.
-        // Returning the same object lets memo(PriceCard) skip untouched cards.
-        if (!live || live.timestamp <= stock.lastUpdated) return stock;
-        changed = true;
-        return {
-          ...stock,
-          name: live.name || stock.name,
-          currentPrice: live.price,
-          changePercent: live.changePercent,
-          changeValue: live.changeValue ?? stock.changeValue,
-          sparkline: [...stock.sparkline, live.price].slice(-SPARKLINE_POINTS),
-          lastUpdated: live.timestamp,
-        };
-      });
-      return changed ? next : prev;
-    });
-  }, [prices]);
+    if (rawSector === null || listStatus !== "ready" || sector !== ALL_SECTORS) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("sector");
+    const search = next.toString();
+    navigate({ search: search ? `?${search}` : "" }, { replace: true, state: location.state });
+  }, [rawSector, sector, listStatus, searchParams, location.state, navigate]);
+
+  const changeSector = useCallback(
+    (id: string) => {
+      const next = new URLSearchParams(searchParams);
+      if (id === ALL_SECTORS) next.delete("sector");
+      else next.set("sector", id);
+      const search = next.toString();
+      // Replaced, not pushed: Back leaves the page instead of stepping through filters.
+      navigate({ search: search ? `?${search}` : "" }, { replace: true, state: location.state });
+    },
+    [searchParams, location.state, navigate],
+  );
+
+  const filtered = useMemo(
+    () => (sector === ALL_SECTORS ? stocks : stocks.filter((s) => sectorId(s.sector) === sector)),
+    [sector, stocks],
+  );
 
   // The open symbol lives in the URL (`/?symbol=AAPL`), so the dialog is linkable.
   const rawSymbol = searchParams.get("symbol")?.trim() || null;
@@ -119,6 +83,7 @@ export function QuotesPage(): JSX.Element {
     navigate({ search: `?${next.toString()}` }, { replace: true, state: location.state });
   }, [rawSymbol, selected, searchParams, location.state, navigate]);
 
+  // From the whole list, not the filtered one: the dialog follows the URL.
   const selectedStock = useMemo(
     () => (selected ? stocks.find((s) => s.symbol === selected) ?? null : null),
     [selected, stocks],
@@ -155,15 +120,16 @@ export function QuotesPage(): JSX.Element {
     navigate({ search: search ? `?${search}` : "" }, { replace: true });
   }, [location.state, navigate, searchParams]);
 
-  const lastUpdated = useMemo(() => stocks.reduce((acc, s) => Math.max(acc, s.lastUpdated ?? 0), 0), [stocks]);
+  const lastUpdated = useMemo(() => filtered.reduce((acc, s) => Math.max(acc, s.lastUpdated), 0), [filtered]);
 
   return (
     <>
       {/* The page heading, for screen reader navigation; sighted users see the active nav item. */}
       <h1 className="sr-only">Quotes</h1>
-      <Topbar stocks={stocks} lastUpdate={lastUpdated} />
+      <Topbar stocks={filtered} lastUpdate={lastUpdated} />
+      {sectors.length > 1 && <SectorFilter sectors={sectors} value={sector} onChange={changeSector} />}
       <PriceGrid
-        stocks={stocks}
+        stocks={filtered}
         status={listStatus}
         onRetry={retryList}
         onOpen={openDetail}

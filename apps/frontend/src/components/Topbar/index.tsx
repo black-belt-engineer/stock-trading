@@ -9,13 +9,21 @@ type Props = {
 };
 
 export function Topbar({ stocks, lastUpdate }: Props): JSX.Element {
-  const best = stocks.reduce((prev, item) => (item.changePercent > prev.changePercent ? item : prev), stocks[0] ?? emptyStock);
-  const worst = stocks.reduce((prev, item) => (item.changePercent < prev.changePercent ? item : prev), stocks[0] ?? emptyStock);
+  // Symbols without a price yet take no part in best and worst.
+  const priced = stocks.filter((s): s is ActiveStock & { changePercent: number } => s.changePercent !== null);
+  const best = priced.reduce<(typeof priced)[number] | null>(
+    (prev, item) => (prev === null || item.changePercent > prev.changePercent ? item : prev),
+    null,
+  );
+  const worst = priced.reduce<(typeof priced)[number] | null>(
+    (prev, item) => (prev === null || item.changePercent < prev.changePercent ? item : prev),
+    null,
+  );
 
   const blocks = [
     { label: "Active Symbols", value: String(stocks.length), color: "text-primary" },
-    { label: "Best Performer", value: best.symbol || "—", color: "text-positive" },
-    { label: "Worst Performer", value: worst.symbol || "—", color: "text-negative" },
+    { label: "Best Performer", value: best?.symbol ?? "—", color: "text-positive" },
+    { label: "Worst Performer", value: worst?.symbol ?? "—", color: "text-negative" },
     // No update yet reads "—"; substituting the current time would claim "0s ago".
     { label: "Last Update", value: lastUpdate > 0 ? formatTimeAgo(lastUpdate) : "—", color: "text-primary" },
   ];
@@ -35,16 +43,3 @@ export function Topbar({ stocks, lastUpdate }: Props): JSX.Element {
     </section>
   );
 }
-
-const emptyStock: ActiveStock = {
-  symbol: "",
-  name: "",
-  currentPrice: 0,
-  changePercent: 0,
-  changeValue: 0,
-  high24h: 0,
-  low24h: 0,
-  volume24h: 0,
-  sparkline: [],
-  lastUpdated: 0,
-};

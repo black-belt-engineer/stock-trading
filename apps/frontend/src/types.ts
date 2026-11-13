@@ -27,16 +27,23 @@ export type SnapshotData = {
   lastUpdated: number;
 };
 
+/**
+ * One symbol on the dashboard. The price fields are `null` until the symbol's
+ * first tick; show "—" for them, never $0.00.
+ */
 export type ActiveStock = {
   symbol: string;
   name: string;
-  currentPrice: number;
-  changePercent: number;
-  changeValue: number;
-  high24h: number;
-  low24h: number;
-  volume24h: number;
+  sector: string;
+  exchange: string;
+  currentPrice: number | null;
+  changePercent: number | null;
+  changeValue: number | null;
+  high24h: number | null;
+  low24h: number | null;
+  volume24h: number | null;
   sparkline: number[];
+  /** Time of the latest tick applied (epoch ms), or 0 when there has been none. */
   lastUpdated: number;
 };
 
