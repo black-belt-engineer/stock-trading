@@ -207,6 +207,21 @@ Each session appends here when it finishes: what the next phases need to know th
 - Frontend structure change: `StreamProvider` now owns the symbol list (`useSymbolList`), opens the stream only once the list has symbols (sorted, stable identity across list reloads), and keeps the merged live `stocks`. `useStreamData()` returns `{ prices, feed, stocks, listStatus, retryList }`; `QuotesPage` no longer fetches. When the list fails, no stream is opened, the status is "Disconnected" and the stale banner stays off. A reload with the list loaded resets `stocks` while rendering, not in an effect: an effect left one render with a ready list and no stocks, which stripped `?sector=` on reload.
 - Radix `ToggleGroup` with `type="single"` renders `role="radio"` items with `aria-checked` in a `role="group"` labelled "Filter by sector". It is one tab stop, and the arrows move between pills. Sector changes replace the history entry. On narrow screens the row scrolls sideways and scrolls the selected pill into view.
 - Verified against `pnpm dev:all`: with curl, discovery (18 entries, sector, exchange), snapshot 200/404/400 (`aapl`, `BRK.B`, `ZZZZ`, `1ABC`, `A B`, 14 characters), `/stream` 404 and 400 as JSON, empty `symbols=` streams everything, duplicates collapse. In headless Chrome (Playwright, axe-core 4.14, reduced motion) at 360×740, 768×1024 and 1440×900: the list request completes before the one `/stream` request, which names all 18 symbols; no horizontal page scroll; Financials shows JPM, BAC, V, BRK.B and the top bar counts 4; reload keeps `?sector=`; open and close a dialog under a filter keeps it and returns focus to the card; `?sector=energy&symbol=AAPL` opens AAPL's dialog; an unknown sector is removed from the URL; keyboard selection of pills; axe clean on the filtered and full dashboard. "Done when": with the ingestor paused, one added line (ORCL) appeared in discovery, the stream query, the Technology filter and the grid as "—"; after resuming the ingestor it got prices and appeared in the feed. The test line was removed afterwards. List failure (mocked 500) and Retry checked. Phase 04's keyboard and focus-return script still passes.
+- Decided by the owner during review: **no `any`, no non-null `!`, no `as` casts anywhere in the repo.** All 16 existing ones were removed in this phase.
+  - JSON from outside the process is checked, not cast. `PriceEvent`, `LatestPrice` and `StreamQuote` are TypeBox schemas in `packages/types`, with their types inferred from them; `parseJson(schema, text)` returns the typed value or `null`. Auth has `userSummarySchema`. The frontend uses `isRecord` and `finiteOrNull` from `utils/guards.ts`.
+  - Changed behaviour:
+    - A Kafka message that is valid JSON but the wrong shape now fails in the consumer like invalid JSON already did. The message is not committed and is retried. Not tested by injecting one.
+    - A latest-price record in Redis of the wrong shape counts as absent. The SSE service returns 404 for it, and the consumer rebuilds it from the next tick, which resets high, low and volume.
+    - A malformed stream entry is skipped.
+    - A malformed stored refresh entry is an unknown token (401).
+    - A user service response of the wrong shape is a 502.
+    - A malformed snapshot shows the dialog's error state.
+  - Verified against `pnpm dev:all`:
+    - Snapshot and stream work end to end.
+    - Bad entries injected into `price:updates` are skipped while the stream continues.
+    - A corrupted `price:latest:AAPL` gives a 404 until the next tick.
+    - Auth: register, login, refresh, single use, the JWT guard with a good and a bad token, and both services' 400 validation responses; a corrupted refresh entry gives 401.
+    - The browser checks above were re-run, plus the dialog tiles and a mocked malformed snapshot.
 - Not checked: a real phone, a screen reader, Safari/Firefox, the Dockerfiles (`packages/symbols` was added to the ingestor's and SSE service's, but no image was built).
 - Defects noticed outside the scope, not fixed:
   - The Dockerfiles of the SSE service, ingestor and consumer do not copy all their workspace dependencies (`errors`, `schemas`, `redis` for the SSE service), so the images probably do not build. Not tried.
