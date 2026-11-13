@@ -79,32 +79,6 @@
   box-shadow: var(--card-shadow);
 }
 
-.flash-up {
-  animation: flashGreen 600ms ease-out;
-}
-
-.flash-down {
-  animation: flashRed 600ms ease-out;
-}
-
-@keyframes flashGreen {
-  0% {
-    color: var(--positive);
-  }
-  100% {
-    color: var(--text-primary);
-  }
-}
-
-@keyframes flashRed {
-  0% {
-    color: var(--negative);
-  }
-  100% {
-    color: var(--text-primary);
-  }
-}
-
 @keyframes pulseLive {
   0% {
     transform: scale(1);
