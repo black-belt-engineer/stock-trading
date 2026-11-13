@@ -26,9 +26,16 @@ export function ConnectionStatus({ status, attempts }: Props): JSX.Element {
 
   return (
     // A polite live region: screen readers hear the status change without being interrupted.
-    <div role="status" aria-live="polite" className="flex items-center gap-2 rounded-lg border border-subtle bg-elevated px-3 py-2.5">
-      <span aria-hidden="true" className={`size-2 rounded-full motion-reduce:animate-none ${dot}`} />
-      <span className={`font-medium ${text}`}>{label}</span>
+    // On the medium-width icon rail only the dot shows; the label stays readable
+    // to screen readers and as a tooltip.
+    <div
+      role="status"
+      aria-live="polite"
+      title={label}
+      className="flex items-center gap-2 rounded-lg border border-subtle bg-elevated px-3 py-2 md:py-2.5 md:max-xl:justify-center md:max-xl:px-0"
+    >
+      <span aria-hidden="true" className={`size-2 shrink-0 rounded-full motion-reduce:animate-none ${dot}`} />
+      <span className={`font-medium md:max-xl:sr-only ${text}`}>{label}</span>
     </div>
   );
 }
