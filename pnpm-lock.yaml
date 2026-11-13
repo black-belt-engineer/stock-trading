@@ -188,6 +188,9 @@ importers:
       '@stock-platform/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
+      '@stock-platform/symbols':
+        specifier: workspace:*
+        version: link:../../packages/symbols
       '@stock-platform/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -231,6 +234,9 @@ importers:
       '@stock-platform/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
+      '@stock-platform/symbols':
+        specifier: workspace:*
+        version: link:../../packages/symbols
       '@stock-platform/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -387,6 +393,12 @@ importers:
         version: 5.9.3
 
   packages/schemas:
+    devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
+  packages/symbols:
     devDependencies:
       typescript:
         specifier: ^5.8.3

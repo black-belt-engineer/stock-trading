@@ -1,5 +1,6 @@
 import type { Logger } from "@stock-platform/logger";
-import { STAGGER_MS, SYMBOL_CONFIG, TICK_INTERVAL_MS } from "../constants.js";
+import { SYMBOL_REGISTRY, type SymbolInfo } from "@stock-platform/symbols";
+import { STAGGER_MS, TICK_INTERVAL_MS } from "../constants.js";
 import type { IngestionHealth } from "../models/ingestion-state.js";
 import { KafkaProducerService } from "./kafka-producer.service.js";
 import { PriceEventService } from "./price-event.service.js";
@@ -22,8 +23,8 @@ export class IngestionService {
   }
 
   start(): void {
-    for (let i = 0; i < SYMBOL_CONFIG.length; i += 1) {
-      const row = SYMBOL_CONFIG[i]!;
+    for (let i = 0; i < SYMBOL_REGISTRY.length; i += 1) {
+      const row = SYMBOL_REGISTRY[i]!;
       const delayMs = i * STAGGER_MS;
 
       const timeout = setTimeout(() => {
@@ -54,7 +55,7 @@ export class IngestionService {
     this.log.info({ flushed: toFlush.length }, "Pending publishes settled");
   }
 
-  private async publishForSymbol(row: (typeof SYMBOL_CONFIG)[number]): Promise<void> {
+  private async publishForSymbol(row: SymbolInfo): Promise<void> {
     if (this.shuttingDown) {
       return;
     }
