@@ -12,12 +12,16 @@ export function formatPrice(n: number | null): string {
   });
 }
 
+/** "+1.23%" or "-1.23%", without the arrow. */
+export function formatSignedPercent(n: number): string {
+  const value = Number.isFinite(n) ? n : 0;
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+}
+
 export function formatChange(n: number | null): string {
   if (n === null) return NO_VALUE;
   const value = Number.isFinite(n) ? n : 0;
-  const arrow = value >= 0 ? "▲" : "▼";
-  const sign = value >= 0 ? "+" : "";
-  return `${arrow} ${sign}${value.toFixed(2)}%`;
+  return `${value >= 0 ? "▲" : "▼"} ${formatSignedPercent(value)}`;
 }
 
 export function formatVolume(n: number | null): string {

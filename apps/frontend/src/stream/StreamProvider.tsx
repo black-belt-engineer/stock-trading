@@ -103,12 +103,21 @@ function applyQuote(stock: ActiveStock, live: LiveQuote | undefined): ActiveStoc
   // Only a quote newer than the one already applied adds a point. Both
   // timestamps come from the server, so the browser clock is irrelevant.
   if (!live || live.timestamp <= stock.lastUpdated) return stock;
+  // Day values are taken whole from the quote: across midnight its new session
+  // replaces yesterday's open, high, low and volume.
   return {
     ...stock,
     name: live.name || stock.name,
     currentPrice: live.price,
+    sessionId: live.sessionId,
+    previousClose: live.previousClose,
+    open: live.open,
+    high: live.high,
+    low: live.low,
+    volume: live.volume,
+    change: live.change,
     changePercent: live.changePercent,
-    changeValue: live.changeValue ?? stock.changeValue,
+    tickDirection: live.tickDirection,
     sparkline: [...stock.sparkline, live.price].slice(-SPARKLINE_POINTS),
     lastUpdated: live.timestamp,
   };

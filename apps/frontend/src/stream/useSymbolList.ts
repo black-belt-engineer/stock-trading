@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ActiveStock, ListStatus } from "../types";
-import { finiteOrNull, isRecord } from "../utils/guards";
+import { finiteOrNull, isRecord, parseDayValues, parseTickDirection } from "../utils/guards";
 
 function text(value: unknown, fallback: string): string {
   return typeof value === "string" && value !== "" ? value : fallback;
@@ -16,11 +16,8 @@ function parseStock(item: unknown): ActiveStock | null {
     sector: text(item.sector, "Other"),
     exchange: text(item.exchange, ""),
     currentPrice: finiteOrNull(item.currentPrice),
-    changePercent: finiteOrNull(item.changePercent),
-    changeValue: finiteOrNull(item.changeValue),
-    high24h: finiteOrNull(item.high24h),
-    low24h: finiteOrNull(item.low24h),
-    volume24h: finiteOrNull(item.volume24h),
+    ...parseDayValues(item),
+    tickDirection: parseTickDirection(item.tickDirection),
     sparkline: Array.isArray(item.sparkline)
       ? item.sparkline.filter((p): p is number => typeof p === "number" && Number.isFinite(p))
       : [],

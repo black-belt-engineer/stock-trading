@@ -13,7 +13,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 03 | U5, U4 | 02-ui-foundation.md | 02 | done |
 | 04 | U2, U3 | 02-ui-foundation.md | 03 | done |
 | 05 | M1 | 03-market-data.md | 03 | done |
-| 06 | M2, M5 | 03-market-data.md | 05 | todo |
+| 06 | M2, M5 | 03-market-data.md | 05 | done |
 | 07 | M3, M6 | 03-market-data.md | 05 | todo |
 | 08 | M4 | 03-market-data.md | 07 | todo |
 | 09 | A1 | 04-auth.md | — | todo |
@@ -74,7 +74,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 - Steps 1, 2, 4, 5 and 6. Step 3 (continuous aggregates) is in phase 18.
 - Hand-written SVG (README Q5); no charting library.
 - Check the TimescaleDB docs for `time_bucket`, `first` and `last` before writing the query.
-- Daily bars must align with M2's session boundary if phase 06 is done.
+- Daily bars must align with M2's session boundary (phase 06 is done): take the bucket edges from `sessionStartFor` in `packages/symbols`, not from a hard-coded UTC day, so a real exchange calendar later moves both together.
 
 ### 09 · Ownership checks (A1)
 - Backend only (`apps/user`, `apps/auth`, `packages/errors`). No login UI.
@@ -83,7 +83,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 ### 10 · Guard and login (A2, A3)
 - The two items ship together. Do not leave the branch in a state where endpoints are protected and no login exists.
 - Decided: fetch-based stream reader (Q1), refresh token in an `httpOnly` cookie (Q2).
-- Existing callers to route through the new API client: the symbol list fetch (now in `stream/useSymbolList.ts`, called by `StreamProvider`; a `401` there must also count as logged out), the `DetailPanel` snapshot fetch, and, if phases 07 and 08 are done, history, candles and the CSV download (blob fetch with the header).
+- Existing callers to route through the new API client: the symbol list fetch (now in `stream/useSymbolList.ts`, called by `StreamProvider`; a `401` there must also count as logged out), and, if phases 07 and 08 are done, history, candles and the CSV download (blob fetch with the header).
 - The stream hook must tell `401` (logged out) from `503` (retry) from a dropped connection (U4's banner). The hook is used only through `StreamProvider`; the router is React Router 7 in declarative mode (`BrowserRouter`), so the route guard is a layout route around the shell.
 - This is the largest phase. If it will not fit one session, finish A2's server side and the API client first, record exactly where you stopped under "Notes between phases", and leave the status `in progress`.
 
@@ -93,9 +93,9 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 
 ### 12 · Search, feed controls, table view (D1, D2, D3)
 - In that order; D3's header sort shares D1's sort state.
-- "Sort by change" needs M2 (phase 06). If phase 06 is not done, leave that option out.
+- "Sort by change" sorts by the day change (`changePercent`, against the previous close, phase 06). Symbols with `null` change sort last.
 - The sector filter is already in the URL (`?sector=<id>`, phase 05), built in `QuotesPage` with `SectorFilter`. Add search and sort beside it as further params, and put D1's filter, search and sort into the one `useMemo` that today only filters by sector.
-- D2 shows trade quantity. If the `quantity: 0` defect from the phase 06 brief is still open, stop and tell the owner before building that row format.
+- D2 shows trade quantity: feed rows carry the real trade size (`quantity`) and side since phase 06.
 - S1's event ids do not exist until phase 17; keep the current feed row keys.
 
 ### 13 · Light theme and shortcuts (D4, D5)
@@ -118,7 +118,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 - Introduce the minimal migration runner first; the plan requires it before any money table.
 - Rules are fixed (Q8): $100,000 cash, market orders, whole shares, long only, no fees.
 - All money arithmetic in integer cents or a decimal type inside the portfolio service.
-- Day P&L needs M2 (phase 06).
+- Day P&L uses M2's `previousClose` (phase 06); a position opened today is measured from its fill price instead.
 
 ### 17 · Stream resilience (S1, S2)
 - S2 first is easier: S1's resume is served from S2's ring buffer.
@@ -142,7 +142,7 @@ Each session appends here when it finishes: what the next phases need to know th
 - Sparkline members are `<timestamp>:<price>`; the reader in the SSE service also accepts the old bare-price format. Helpers live in `packages/types`.
 - `StreamQuote` gained `changeValue` (tick-to-tick).
 - The marker cleanup script is `apps/consumer/scripts/cleanup-processed-markers.mjs` (`pnpm --filter @stock-platform/consumer cleanup:markers`, `--dry-run` to count). It removes only markers without an expiry.
-- Open: Kafka retention versus the 24-hour marker (phase 18 brief). Open: feed rows carry `quantity: 0` and a guessed side (phase 06 brief).
+- Open: Kafka retention versus the 24-hour marker (phase 18 brief). Open: feed rows carry `quantity: 0` and a guessed side (phase 06 brief; fixed in phase 06).
 
 ### After phase 02 (2026-11-13)
 - U1 is complete: no component has a `style` prop, and `global.css` has no component classes left (`.mono`, `.card-surface`, `.flash-*`, `.text-muted` are gone).
@@ -228,3 +228,59 @@ Each session appends here when it finishes: what the next phases need to know th
   - The narrow feed tab's scrolling list fails axe `scrollable-region-focusable` (serious): it can be scrolled but holds nothing focusable. D2 rebuilds the feed.
   - With 18 symbols the feed scrolls by ~18 rows a second, and without reduced motion axe catches several rows mid fade-in (contrast). Same cause as the phase 04 note; more visible now. D2's pause control would help.
   - Still open from earlier notes: `Sparkline` clipping, the sparkline/change colour disagreement, SSE shutdown wedging `tsx watch`, "Connection lost" on a first load, no main landmark on the narrow feed tab.
+
+### After phase 06 (2026-11-13)
+- Decided by the owner:
+  - Out-of-order ticks: the Kafka key stays `symbol:timestamp` (idempotency contract unchanged). A tick not newer than the stored `lastUpdated` does not move price or change. If it is from the same session it still counts toward day volume, high and low. It is always stored in Postgres and gets no stream entry.
+  - The `quantity: 0` defect is fixed. `StreamQuote.quantity` and `side` are the trade's own, also in the SSE `snapshot` event (from `lastSize`/`lastSide` in the record).
+  - The atomic update is a Lua script (`apps/consumer/src/repositories/apply-tick.lua.ts`, run through ioredis `defineCommand`).
+  - The ingestor reads `price:latest:<symbol>` at startup and continues from it. Only `currentPrice` is checked, so older record formats work too.
+  - The detail dialog no longer fetches `/quotes/:symbol/snapshot`. Its tiles (Open, Previous close, Day high, Day low, Day volume, Last updated) come from the live stock, so they move every tick and reset when a new session arrives. The loading, error and Retry states for that fetch are gone. The endpoint still exists with the new fields.
+- Data shapes now:
+  - `LatestPrice` (Redis) has `sessionId`, `currentPrice`, `previousClose`, `open`, `high`, `low`, `volume`, `change`, `changePercent`, `tickDirection` (`up`/`down`/`flat`, for the flash only), `lastSize`, `lastSide` and `lastUpdated`. The old `previousPrice`, `changeValue`, `high24h`, `low24h` and `volume24h` are gone everywhere.
+  - `StreamQuote` carries the same day values plus `quantity`, `side` and `timestamp`.
+  - Discovery entries carry the day values as `null` before the first tick, and `tickDirection` `null`.
+  - The frontend `ActiveStock` and `LiveQuote` share a `DayValues` type. A quote replaces all day values at once; the client never computes any.
+- Contract change: entries in the `price:updates` Redis stream now hold the `LatestPrice` record in `payload`, not a `StreamQuote`. The SSE service maps them with `streamQuoteFromLatest`, so the record-to-quote mapping lives in one place. Entries in the old format are skipped. S1 (phase 17) resumes from these entries.
+- The market calendar is `sessionIdFor` / `sessionStartFor` in `packages/symbols` (one UTC day, README Q3). The session comes from the event timestamp, never the processing time.
+- Cold start: a missing or unreadable record makes the script return `needs_baseline`. The consumer then reads two things from `stock_ticks` and runs the script once more: the last price before the session (the previous close) and the session's open, high, low and volume so far. **Departure from the plan:** step 5 only asks for the previous close. Taking the session so far as well means a Redis flush, or this deploy (every record was in the old format), does not restart the day's high, low and volume at the moment of the deploy. With no earlier tick at all, the first price is the previous close (0%).
+- `stock_ticks` has a `source` column (`fake` now); older rows have `NULL`.
+- M5: the Topbar's Best/Worst tiles are replaced by "Top movers · all sectors" (the strip ignores the sector filter):
+  - Content: up to three gainers (change > 0 after rounding to two decimals) and three losers (< 0), ties broken by symbol, "—" when a list is empty. A symbol is never in both lists.
+  - Refresh: at most every 3 s, the first change after a quiet period at once.
+  - A mover's accessible name is its visible text plus a hidden "today"; the arrow is hidden.
+  - Clicking opens the dialog.
+  - `DetailPanel` now returns focus to whatever control opened it (card or mover), falling back to the card, so a new control that opens the dialog gets its own focus back. This replaces the phase 04 note's "give it a trigger or extend that lookup".
+- The card's change badge and accessible name are the day change ("…, up 0.12% today"). The flash follows `tickDirection`, so a red flash under a green badge is correct.
+- Verified against `pnpm dev:all`:
+  - Every branch of the script, against a scratch Redis database:
+    - cold start with and without a baseline, same session, duplicate
+    - an older tick in the same session (counts toward low and volume, price unchanged)
+    - 23:59:59.999 then 00:00:00.001 (new session, previous close = last price)
+    - a late tick from the previous session (ignored)
+    - a gap of a whole session, a malformed record, the zero previous-close guard
+    - the 24 h marker TTL
+  - 200 ticks, each delivered twice from four Redis clients in random order: every tick counted once (volume 200), the record ends on the newest tick.
+  - Live data:
+    - the stream carries real quantity and side
+    - consecutive same-direction ticks move the badge steadily
+    - `source` is stored
+    - two consumer restarts left open, previous close, high and low unchanged and volume continuous
+    - an ingestor restart resumed all 18 prices, with no step above 0.6% across it
+  - Browser (headless Chromium, Playwright 1.57, axe-core 4.14, reduced motion) at 360×740, 768×1024 and 1440×900:
+    - no horizontal scroll; the strip changes at most every ~3 s while cards tick
+    - a mover opens its dialog with live tiles, and Escape returns focus to the mover
+    - movers ignore the Energy filter; card Enter/Escape, click/Close and opened-by-link focus return still work
+    - with the stream blocked the movers equal the top three by card badge
+    - mocked lists cover ties, zero and +0.001% changes ("—") and a symbol with no ticks ("No trades yet", "No data yet", "no price yet")
+    - a mocked quote with a new `sessionId` resets the dialog tiles from its payload
+    - axe is clean on the dashboard and the dialog, apart from the cards' known `label-content-name-mismatch` (phase 04)
+- Not checked: a real midnight (the boundary was tested in the script and with a mocked quote), the Dockerfiles (`packages/symbols` was added to the consumer image and `packages/redis` to the ingestor image, but none was built), a real phone, a screen reader.
+- Left open, small:
+  - An out-of-order tick of the same session that is older than the tick the open came from does not move `open`; the record does not keep the open's time.
+  - A cold start can count a tick twice in one rare case: a tick already in Postgres whose Redis update has not happened yet is in the baseline, and is counted again when it reaches Redis as an "older" tick.
+  - If Redis is down when the ingestor starts, ioredis retries for a while before the ingestor falls back to the seeds.
+  - The random walk drifts ±10% within a day (plan "Future issues": mean reversion).
+- Defects noticed outside the scope, not fixed:
+  - The `Sparkline` colour (first versus last of 30 points) still disagrees with the day change in the dialog and on cards. M2 did not resolve it, contrary to the phase 02 note's guess, because they cover different time spans. The clipping defect is also still open.
+  - Still open from earlier notes: SSE shutdown wedging `tsx watch`, "Connection lost" on a first load that never connected, no main landmark on the narrow feed tab, the feed tab's `scrollable-region-focusable`, Dockerfiles missing workspace dependencies.

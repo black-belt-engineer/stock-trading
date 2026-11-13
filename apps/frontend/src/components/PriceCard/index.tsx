@@ -20,14 +20,17 @@ const flashClass = {
 function PriceCardBase({ stock, onOpen, delayed }: Props): JSX.Element {
   const [flash, setFlash] = useState<keyof typeof flashClass>("");
   const hasPrice = stock.currentPrice !== null;
+  // The badge is the day change (against the previous close); the flash is
+  // the last tick's move, so the two can differ.
   const trendUp = (stock.changePercent ?? 0) >= 0;
+  const { lastUpdated, tickDirection } = stock;
 
   useEffect(() => {
-    if (stock.currentPrice === null) return;
-    setFlash(trendUp ? "up" : "down");
+    if (lastUpdated === 0 || tickDirection === "flat") return;
+    setFlash(tickDirection);
     const timer = window.setTimeout(() => setFlash(""), 600);
     return () => window.clearTimeout(timer);
-  }, [stock.currentPrice, trendUp]);
+  }, [lastUpdated, tickDirection]);
 
   const companyName = useMemo(() => stock.name || stock.symbol, [stock.name, stock.symbol]);
 
@@ -40,7 +43,7 @@ function PriceCardBase({ stock, onOpen, delayed }: Props): JSX.Element {
       : formatPrice(stock.currentPrice) +
         (stock.changePercent === null
           ? ""
-          : `, ${trendUp ? "up" : "down"} ${Math.abs(stock.changePercent).toFixed(2)}%`)) +
+          : `, ${trendUp ? "up" : "down"} ${Math.abs(stock.changePercent).toFixed(2)}% today`)) +
     (delayed && hasPrice ? ", no recent updates" : "");
 
   // A button, so it is focusable and opens with Enter and Space. Buttons only

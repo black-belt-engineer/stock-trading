@@ -1,5 +1,6 @@
 import { isAppError } from "@stock-platform/errors";
 import { createLogger } from "@stock-platform/logger";
+import { closeRedisClient, createRedisClient } from "@stock-platform/redis";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { AppConfig } from "./config/index.js";
@@ -37,6 +38,17 @@ export async function buildApp(
   await kafkaProducer.connect();
 
   const priceEventService = new PriceEventService();
+  // Read once at startup; the ingestor does not otherwise use Redis. A Redis
+  // that is down only costs the resume: prices then start from their seeds.
+  const redis = createRedisClient(config.REDIS_URL);
+  try {
+    const resumed = await priceEventService.resumeFrom(redis);
+    log.info({ resumed }, "Resumed prices from Redis");
+  } catch (err) {
+    log.warn({ err }, "Could not read last prices from Redis, starting from seeds");
+  } finally {
+    await closeRedisClient(redis).catch(() => undefined);
+  }
   const ingestionService = new IngestionService(kafkaProducer, priceEventService, log);
 
   await app.register(healthRoutes, { ingestionService });
