@@ -43,7 +43,7 @@ export function QuotesPage(): JSX.Element {
 
   // The filter lives in the URL (`/?sector=financials`), so a view survives a reload.
   const rawSector = searchParams.get("sector");
-  const sector = sectors.some((s) => s.id === rawSector) ? rawSector! : ALL_SECTORS;
+  const sector = sectors.find((s) => s.id === rawSector)?.id ?? ALL_SECTORS;
 
   // Drop a sector the list does not have (a stale link), without a history entry.
   useEffect(() => {

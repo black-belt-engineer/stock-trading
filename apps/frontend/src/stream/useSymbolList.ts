@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ActiveStock, ListStatus } from "../types";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /** A number from the server, or null for anything else (missing, null, NaN). */
 function priceOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -11,9 +15,8 @@ function text(value: unknown, fallback: string): string {
 }
 
 /** Turns one entry of the discovery response into an `ActiveStock`, or null when it has no symbol. */
-function parseStock(raw: unknown): ActiveStock | null {
-  if (!raw || typeof raw !== "object") return null;
-  const item = raw as Record<string, unknown>;
+function parseStock(item: unknown): ActiveStock | null {
+  if (!isRecord(item)) return null;
   if (typeof item.symbol !== "string" || item.symbol === "") return null;
   return {
     symbol: item.symbol,
@@ -47,15 +50,16 @@ export function useSymbolList(): { stocks: ActiveStock[]; status: ListStatus; re
     const controller = new AbortController();
     setStatus("loading");
     fetch("/quotes/discovery/active-stocks", { signal: controller.signal })
-      .then(async (response) => {
+      .then(async (response): Promise<unknown> => {
         if (!response.ok) throw new Error(`Active stocks request failed with ${response.status}`);
-        return (await response.json()) as unknown;
+        return response.json();
       })
       .then((json) => {
+        // `{ stocks: [...] }` today; a bare array is accepted too.
         const list: unknown[] = Array.isArray(json)
           ? json
-          : Array.isArray((json as { stocks?: unknown })?.stocks)
-            ? (json as { stocks: unknown[] }).stocks
+          : isRecord(json) && Array.isArray(json.stocks)
+            ? json.stocks
             : [];
         setStocks(list.map(parseStock).filter((s): s is ActiveStock => s !== null));
         setStatus("ready");

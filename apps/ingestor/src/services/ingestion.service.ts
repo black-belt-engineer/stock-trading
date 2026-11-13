@@ -23,8 +23,7 @@ export class IngestionService {
   }
 
   start(): void {
-    for (let i = 0; i < SYMBOL_REGISTRY.length; i += 1) {
-      const row = SYMBOL_REGISTRY[i]!;
+    SYMBOL_REGISTRY.forEach((row, i) => {
       const delayMs = i * STAGGER_MS;
 
       const timeout = setTimeout(() => {
@@ -37,7 +36,7 @@ export class IngestionService {
       }, delayMs);
 
       this.startupTimeouts.push(timeout);
-    }
+    });
   }
 
   async stop(): Promise<void> {
