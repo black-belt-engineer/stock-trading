@@ -45,7 +45,11 @@ export function priceEventMessageKey(event: PriceEvent): string {
   return `${event.symbol}:${event.timestamp}`;
 }
 
-/** Redis stream consumed by the SSE service for live price push. */
+/**
+ * Redis stream consumed by the SSE service for live price push. Each entry has
+ * a `symbol` field and a `payload` field holding the {@link LatestPrice} record
+ * as it was after the tick; readers map it with {@link streamQuoteFromLatest}.
+ */
 export const PRICE_UPDATES_STREAM_KEY = "price:updates";
 
 /** Approximate max length for {@link PRICE_UPDATES_STREAM_KEY} (trim old entries). */
@@ -83,19 +87,36 @@ export function sparklinePriceFromMember(member: string): number | null {
   return Number.isFinite(price) ? price : null;
 }
 
+/** How the last tick moved the price against the tick before it. Drives the card's flash only. */
+export const TickDirectionSchema = Type.Union([Type.Literal("up"), Type.Literal("down"), Type.Literal("flat")]);
+export type TickDirection = Static<typeof TickDirectionSchema>;
+
+const TradeSideSchema = Type.Union([Type.Literal("buy"), Type.Literal("sell")]);
+
 /**
- * Denormalized latest quote stored in Redis per symbol.
+ * Denormalized latest quote stored in Redis per symbol, with the values of the
+ * current session (see `sessionIdFor` in `@stock-platform/symbols`).
+ *
+ * `change` and `changePercent` are against `previousClose`, the last price of
+ * the session before. Written only by the consumer's apply-tick Lua script,
+ * which must produce exactly these fields.
  */
 export const LatestPriceSchema = Type.Object({
   symbol: Type.String(),
   name: Type.String(),
+  sessionId: Type.String(),
   currentPrice: Type.Number(),
-  previousPrice: Type.Number(),
-  changeValue: Type.Number(),
+  previousClose: Type.Number(),
+  open: Type.Number(),
+  high: Type.Number(),
+  low: Type.Number(),
+  volume: Type.Number(),
+  change: Type.Number(),
   changePercent: Type.Number(),
-  high24h: Type.Number(),
-  low24h: Type.Number(),
-  volume24h: Type.Number(),
+  tickDirection: TickDirectionSchema,
+  /** Size and side of the last trade applied, for the live feed. */
+  lastSize: Type.Number(),
+  lastSide: TradeSideSchema,
   lastUpdated: Type.Number(),
 });
 export type LatestPrice = Static<typeof LatestPriceSchema>;
@@ -115,16 +136,26 @@ export type OhlcvBar = {
 };
 
 /**
- * Payload streamed to browsers via SSE.
+ * Payload streamed to browsers via SSE: the day values of the symbol's
+ * current session plus the trade that produced them. A payload with a new
+ * `sessionId` replaces the client's day values; the client never computes its own.
  */
 export const StreamQuoteSchema = Type.Object({
   symbol: Type.String(),
   name: Type.String(),
+  sessionId: Type.String(),
   price: Type.Number(),
-  changeValue: Type.Number(),
+  previousClose: Type.Number(),
+  open: Type.Number(),
+  high: Type.Number(),
+  low: Type.Number(),
+  volume: Type.Number(),
+  change: Type.Number(),
   changePercent: Type.Number(),
+  tickDirection: TickDirectionSchema,
+  /** Size of the trade, in shares. */
   quantity: Type.Number(),
-  side: Type.Union([Type.Literal("buy"), Type.Literal("sell")]),
+  side: TradeSideSchema,
   timestamp: Type.Number(),
 });
 export type StreamQuote = Static<typeof StreamQuoteSchema>;
@@ -133,11 +164,18 @@ export function streamQuoteFromLatest(latest: LatestPrice): StreamQuote {
   return {
     symbol: latest.symbol,
     name: latest.name,
+    sessionId: latest.sessionId,
     price: latest.currentPrice,
-    changeValue: latest.changeValue,
+    previousClose: latest.previousClose,
+    open: latest.open,
+    high: latest.high,
+    low: latest.low,
+    volume: latest.volume,
+    change: latest.change,
     changePercent: latest.changePercent,
-    quantity: 0,
-    side: latest.changeValue >= 0 ? "buy" : "sell",
+    tickDirection: latest.tickDirection,
+    quantity: latest.lastSize,
+    side: latest.lastSide,
     timestamp: latest.lastUpdated,
   };
 }
