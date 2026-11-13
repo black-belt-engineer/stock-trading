@@ -2,24 +2,71 @@
 @import "tailwindcss";
 @import "./tokens.css";
 
-* {
-  box-sizing: border-box;
+/*
+ * Expose the tokens in tokens.css to Tailwind. `inline` makes each utility
+ * emit `var(--token)` itself, so a theme that redefines the tokens (D4) is
+ * picked up at runtime.
+ *
+ * Backgrounds, text and borders use Tailwind's per-property namespaces, so
+ * `bg-surface`, `text-secondary` and `border-subtle` exist but nonsense such
+ * as `text-surface` does not. Accents are plain colours, usable everywhere
+ * (`text-positive`, `bg-brand-dim`, `outline-brand`, `bg-positive/15`).
+ */
+@theme inline {
+  --background-color-base: var(--bg-base);
+  --background-color-surface: var(--bg-surface);
+  --background-color-elevated: var(--bg-elevated);
+  --background-color-sidebar: var(--bg-sidebar);
+  --background-color-input: var(--bg-input);
+  --background-color-overlay: var(--bg-overlay);
+
+  --border-color-subtle: var(--border-subtle);
+  --border-color-default: var(--border-default);
+  --border-color-strong: var(--border-strong);
+
+  --text-color-primary: var(--text-primary);
+  --text-color-secondary: var(--text-secondary);
+  --text-color-muted: var(--text-muted);
+  --text-color-inverse: var(--text-inverse);
+
+  --color-brand: var(--accent-brand);
+  --color-brand-dim: var(--accent-brand-dim);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-warning: var(--warning);
+
+  --shadow-card: var(--card-shadow);
+  --shadow-dialog: var(--dialog-shadow);
 }
 
-html,
-body,
-#root {
-  width: 100%;
-  min-height: 100%;
+@theme {
+  --font-sans: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  --animate-flash-up: flash-up 600ms ease-out;
+  --animate-flash-down: flash-down 600ms ease-out;
+  --animate-pulse-live: pulse-live 2s infinite;
+  --animate-pulse-reconnecting: pulse-reconnecting 0.6s infinite;
+  --animate-skeleton: pulse-reconnecting 1.1s infinite;
+  --animate-feed-in: feed-in 200ms ease-out;
 }
 
-body {
-  margin: 0;
-  background: var(--bg-base);
-  color: var(--text-primary);
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 13px;
-  line-height: 1.4;
+@layer base {
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.4;
+  }
 }
 
 .mono {
@@ -32,10 +79,6 @@ body {
   box-shadow: var(--card-shadow);
 }
 
-.text-muted {
-  color: var(--text-secondary);
-}
-
 .flash-up {
   animation: flashGreen 600ms ease-out;
 }
@@ -46,7 +89,7 @@ body {
 
 @keyframes flashGreen {
   0% {
-    color: var(--accent-green);
+    color: var(--positive);
   }
   100% {
     color: var(--text-primary);
@@ -55,7 +98,7 @@ body {
 
 @keyframes flashRed {
   0% {
-    color: var(--accent-red);
+    color: var(--negative);
   }
   100% {
     color: var(--text-primary);
@@ -97,5 +140,38 @@ body {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Keyframes for the --animate-* theme values above. */
+@keyframes flash-up {
+  from {
+    color: var(--positive);
+  }
+}
+
+@keyframes flash-down {
+  from {
+    color: var(--negative);
+  }
+}
+
+@keyframes pulse-live {
+  50% {
+    transform: scale(1.4);
+    opacity: 0.7;
+  }
+}
+
+@keyframes pulse-reconnecting {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes feed-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
   }
 }

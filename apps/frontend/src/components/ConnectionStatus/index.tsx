@@ -8,16 +8,16 @@ type Props = {
 export function ConnectionStatus({ status, attempts }: Props): JSX.Element {
   const cfg =
     status === "live"
-      ? { color: "var(--accent-teal)", text: "Live", anim: "pulseLive 2s infinite" }
+      ? { color: "var(--accent-brand)", text: "Live", anim: "pulseLive 2s infinite" }
       : status === "reconnecting"
         ? {
-            color: "var(--accent-amber)",
+            color: "var(--warning)",
             text: `Reconnecting${attempts > 0 ? ` x${attempts}` : ""}`,
             anim: "pulseReconnecting 0.6s infinite",
           }
         : status === "disconnected"
-          ? { color: "var(--accent-red)", text: "Disconnected", anim: "none" }
-          : { color: "var(--accent-amber)", text: "Connecting...", anim: "pulseReconnecting 0.6s infinite" };
+          ? { color: "var(--negative)", text: "Disconnected", anim: "none" }
+          : { color: "var(--warning)", text: "Connecting...", anim: "pulseReconnecting 0.6s infinite" };
 
   return (
     <div

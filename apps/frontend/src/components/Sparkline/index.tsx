@@ -20,7 +20,7 @@ export function Sparkline({ prices, height }: Props): JSX.Element | null {
     const polyline = points.join(" ");
     const polygon = [`0,${height}`, ...points, `${width},${height}`].join(" ");
     const isUp = prices[prices.length - 1]! >= prices[0]!;
-    const color = isUp ? "var(--accent-green)" : "var(--accent-red)";
+    const color = isUp ? "var(--positive)" : "var(--negative)";
     return { polyline, polygon, color };
   }, [prices, height]);
 

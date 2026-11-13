@@ -13,8 +13,8 @@ export function Topbar({ stocks, lastUpdate }: Props): JSX.Element {
 
   const blocks = [
     { label: "Active Symbols", value: String(stocks.length), color: "var(--text-primary)" },
-    { label: "Best Performer", value: best.symbol || "-", color: "var(--accent-green)" },
-    { label: "Worst Performer", value: worst.symbol || "-", color: "var(--accent-red)" },
+    { label: "Best Performer", value: best.symbol || "-", color: "var(--positive)" },
+    { label: "Worst Performer", value: worst.symbol || "-", color: "var(--negative)" },
     { label: "Last Update", value: formatTimeAgo(lastUpdate || Date.now()), color: "var(--text-primary)" },
   ];
 

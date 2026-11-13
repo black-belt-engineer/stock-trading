@@ -27,7 +27,7 @@ export function Sidebar({ status, attempts }: Props): JSX.Element {
       }}
     >
       <div>
-        <div style={{ color: "var(--accent-teal)", fontWeight: 700, letterSpacing: "0.08em", marginBottom: 18, paddingInline: 6 }}>
+        <div style={{ color: "var(--accent-brand)", fontWeight: 700, letterSpacing: "0.08em", marginBottom: 18, paddingInline: 6 }}>
           STREAMTICK
         </div>
         <nav style={{ display: "grid", gap: 4 }}>
@@ -41,10 +41,10 @@ export function Sidebar({ status, attempts }: Props): JSX.Element {
                 textAlign: "left",
                 height: 36,
                 borderRadius: 8,
-                border: item.active ? "1px solid var(--accent-teal)" : "1px solid transparent",
-                borderLeft: item.active ? "3px solid var(--accent-teal)" : "3px solid transparent",
-                background: item.active ? "var(--accent-teal-dim)" : "transparent",
-                color: item.active ? "var(--accent-teal)" : "var(--text-secondary)",
+                border: item.active ? "1px solid var(--accent-brand)" : "1px solid transparent",
+                borderLeft: item.active ? "3px solid var(--accent-brand)" : "3px solid transparent",
+                background: item.active ? "var(--accent-brand-dim)" : "transparent",
+                color: item.active ? "var(--accent-brand)" : "var(--text-secondary)",
                 opacity: item.active ? 1 : 0.55,
                 cursor: item.active ? "default" : "not-allowed",
               }}

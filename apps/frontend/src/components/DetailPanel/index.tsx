@@ -105,11 +105,11 @@ export function DetailPanel({ stock, streamStatus, onOpenChange }: Props): JSX.E
             <>
               <section style={{ padding: "20px 20px 12px", textAlign: "center" }}>
                 <div className="mono" style={{ fontSize: 36, fontWeight: 600 }}>{formatPrice(stock.currentPrice)}</div>
-                <div className="mono" style={{ color: trendUp ? "var(--accent-green)" : "var(--accent-red)" }}>
+                <div className="mono" style={{ color: trendUp ? "var(--positive)" : "var(--negative)" }}>
                   {formatSignedPrice(stock.changeValue)} / {formatChange(stock.changePercent)}
                 </div>
                 {stale && (
-                  <div role="status" style={{ marginTop: 8, fontSize: 11, color: "var(--accent-amber)" }}>
+                  <div role="status" style={{ marginTop: 8, fontSize: 11, color: "var(--warning)" }}>
                     Stream {streamStatus === "disconnected" ? "disconnected" : "reconnecting"} — values may be out of date
                   </div>
                 )}

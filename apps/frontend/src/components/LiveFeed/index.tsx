@@ -39,7 +39,7 @@ export function LiveFeed({ feed }: Props): JSX.Element {
                     display: "inline-flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    background: item.side === "buy" ? "var(--accent-teal)" : "var(--accent-red)",
+                    background: item.side === "buy" ? "var(--accent-brand)" : "var(--negative)",
                     color: "var(--text-inverse)",
                     fontWeight: 700,
                   }}

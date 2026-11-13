@@ -46,7 +46,7 @@ function PriceCardBase({ stock, onOpen }: Props): JSX.Element {
             fontSize: 11,
             fontWeight: 600,
             background: trendUp ? "rgba(34,197,94,0.15)" : "rgba(240,72,90,0.15)",
-            color: trendUp ? "var(--accent-green)" : "var(--accent-red)",
+            color: trendUp ? "var(--positive)" : "var(--negative)",
           }}
         >
           {formatChange(stock.changePercent)}
