@@ -9,7 +9,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | Phase | Items | Plan file | Needs | Status |
 |---|---|---|---|---|
 | 01 | B1, B2, B3, S3 step 1 | 01-bug-fixes.md, 07-streaming.md | — | done |
-| 02 | U1 | 02-ui-foundation.md | 01 | todo |
+| 02 | U1 | 02-ui-foundation.md | 01 | in progress |
 | 03 | U5, U4 | 02-ui-foundation.md | 02 | todo |
 | 04 | U2, U3 | 02-ui-foundation.md | 03 | todo |
 | 05 | M1 | 03-market-data.md | 03 | todo |
