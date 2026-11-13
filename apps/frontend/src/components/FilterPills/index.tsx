@@ -15,30 +15,24 @@ export function FilterPills({ value, onChange }: Props): JSX.Element {
   ];
 
   return (
-    <ToggleGroup.Root type="single" value={value} onValueChange={(v) => v && onChange(v)} style={{ display: "flex", gap: 8 }}>
-      {pills.map((pill) => {
-        const active = value === pill.id;
-        return (
-          <ToggleGroup.Item
-            key={pill.id}
-            value={pill.id}
-            disabled={pill.disabled}
-            style={{
-              height: 28,
-              padding: "0 14px",
-              borderRadius: 20,
-              border: active ? "1px solid var(--accent-brand)" : "1px solid var(--border-subtle)",
-              background: active ? "var(--accent-brand-dim)" : "transparent",
-              color: active ? "var(--accent-brand)" : "var(--text-secondary)",
-              opacity: pill.disabled ? 0.4 : 1,
-              fontSize: 12,
-              fontWeight: 500,
-            }}
-          >
-            {pill.label}
-          </ToggleGroup.Item>
-        );
-      })}
+    <ToggleGroup.Root type="single" value={value} onValueChange={(v) => v && onChange(v)} className="flex gap-2">
+      {pills.map((pill) => (
+        // Radix marks the selected item with data-state="on"; no JS flag needed.
+        <ToggleGroup.Item
+          key={pill.id}
+          value={pill.id}
+          disabled={pill.disabled}
+          className={
+            "h-7 rounded-[20px] border border-subtle px-3.5 text-[12px] font-medium text-secondary transition-colors duration-150 " +
+            "data-[state=on]:border-brand data-[state=on]:bg-brand-dim data-[state=on]:text-brand " +
+            "data-[state=off]:enabled:hover:border-strong data-[state=off]:enabled:hover:text-primary " +
+            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand " +
+            "disabled:cursor-not-allowed disabled:opacity-40"
+          }
+        >
+          {pill.label}
+        </ToggleGroup.Item>
+      ))}
     </ToggleGroup.Root>
   );
 }
