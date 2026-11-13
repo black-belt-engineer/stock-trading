@@ -108,9 +108,9 @@ export default function App(): JSX.Element {
   );
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "220px 1fr 300px", minHeight: "100vh", background: "var(--bg-base)" }}>
+    <div className="grid min-h-screen grid-cols-[220px_1fr_300px] bg-base">
       <Sidebar status={status} attempts={reconnectAttempts} />
-      <main style={{ padding: "18px 20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
+      <main className="flex flex-col gap-3.5 overflow-y-auto px-5 py-[18px]">
         <Topbar stocks={filtered} lastUpdate={lastUpdated} />
         <FilterPills value={filter} onChange={setFilter} />
         <PriceGrid stocks={filtered} onOpen={openDetail} />

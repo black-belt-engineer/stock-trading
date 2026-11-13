@@ -28,7 +28,8 @@ function formatSignedPrice(n: number): string {
   return `${n > 0 ? "+" : ""}${formatPrice(n)}`;
 }
 
-const tileGrid = { display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 8 } as const;
+const tileGrid = "grid grid-cols-2 gap-2 px-5 pb-5";
+const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
 
 export function DetailPanel({ stock, streamStatus, onOpenChange }: Props): JSX.Element {
   const symbol = stock?.symbol ?? null;
@@ -71,21 +72,13 @@ export function DetailPanel({ stock, streamStatus, onOpenChange }: Props): JSX.E
   return (
     <Dialog.Root open={stock !== null} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)" }} />
+        <Dialog.Overlay className="fixed inset-0 bg-overlay backdrop-blur-[6px]" />
         <Dialog.Content
-          className="card-surface"
           aria-describedby="detail-panel-description"
-          style={{
-            position: "fixed",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            width: "min(420px, calc(100vw - 32px))",
-            maxHeight: "calc(100vh - 32px)",
-            overflowY: "auto",
-            borderRadius: 14,
-            boxShadow: "0 24px 60px rgba(0,0,0,0.6)",
-          }}
+          className={
+            "fixed top-1/2 left-1/2 max-h-[calc(100vh-32px)] w-[min(420px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 " +
+            "overflow-y-auto rounded-[14px] border border-default bg-surface shadow-dialog"
+          }
         >
           <VisuallyHidden.Root>
             <Dialog.Title>{`Stock details for ${symbol ?? "symbol"}`}</Dialog.Title>
@@ -93,56 +86,52 @@ export function DetailPanel({ stock, streamStatus, onOpenChange }: Props): JSX.E
               Live price, change and recent trend, with high, low and volume since the data started.
             </Dialog.Description>
           </VisuallyHidden.Root>
-          <header style={{ padding: 20, borderBottom: "1px solid var(--border-subtle)", display: "flex", justifyContent: "space-between" }}>
+          <header className="flex justify-between border-b border-subtle p-5">
             <div>
-              <div className="mono" style={{ fontSize: 20, fontWeight: 600 }}>{symbol ?? "-"}</div>
-              <div style={{ color: "var(--text-secondary)" }}>{stock?.name || symbol || ""}</div>
+              <div className="font-mono text-[20px] font-semibold">{symbol ?? "-"}</div>
+              <div className="text-secondary">{stock?.name || symbol || ""}</div>
             </div>
-            <Dialog.Close aria-label="Close" style={{ background: "transparent", border: "none", color: "var(--text-secondary)", fontSize: 24, cursor: "pointer" }}>×</Dialog.Close>
+            <Dialog.Close
+              aria-label="Close"
+              className={`cursor-pointer rounded-sm text-[24px] text-secondary transition-colors duration-150 hover:text-primary ${focusRing}`}
+            >
+              ×
+            </Dialog.Close>
           </header>
 
           {stock && current && (
             <>
-              <section style={{ padding: "20px 20px 12px", textAlign: "center" }}>
-                <div className="mono" style={{ fontSize: 36, fontWeight: 600 }}>{formatPrice(stock.currentPrice)}</div>
-                <div className="mono" style={{ color: trendUp ? "var(--accent-green)" : "var(--accent-red)" }}>
+              <section className="px-5 pt-5 pb-3 text-center">
+                <div className="font-mono text-[36px] font-semibold">{formatPrice(stock.currentPrice)}</div>
+                <div className={`font-mono ${trendUp ? "text-positive" : "text-negative"}`}>
                   {formatSignedPrice(stock.changeValue)} / {formatChange(stock.changePercent)}
                 </div>
                 {stale && (
-                  <div role="status" style={{ marginTop: 8, fontSize: 11, color: "var(--accent-amber)" }}>
+                  <div role="status" className="mt-2 text-[11px] text-warning">
                     Stream {streamStatus === "disconnected" ? "disconnected" : "reconnecting"} — values may be out of date
                   </div>
                 )}
               </section>
 
-              <section style={{ padding: "0 20px 16px", minHeight: 96 }}>
+              <section className="min-h-24 px-5 pb-4">
                 <Sparkline prices={stock.sparkline} height={96} />
               </section>
 
               {current.status === "loading" && (
-                <section aria-busy="true" style={{ padding: "0 20px 20px", ...tileGrid }}>
+                <section aria-busy="true" className={tileGrid}>
                   {Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} style={{ height: 52, borderRadius: 6, background: "var(--bg-elevated)", animation: "pulseReconnecting 1.1s infinite" }} />
+                    <div key={i} className="h-[52px] animate-skeleton rounded-md bg-elevated motion-reduce:animate-none" />
                   ))}
                 </section>
               )}
 
               {current.status === "error" && (
-                <section role="alert" style={{ padding: "0 20px 20px", textAlign: "center" }}>
-                  <div style={{ color: "var(--text-secondary)", marginBottom: 10 }}>
-                    Could not load high, low and volume for {stock.symbol}.
-                  </div>
+                <section role="alert" className="px-5 pb-5 text-center">
+                  <div className="mb-2.5 text-secondary">Could not load high, low and volume for {stock.symbol}.</div>
                   <button
                     type="button"
                     onClick={() => setAttempt((n) => n + 1)}
-                    style={{
-                      background: "var(--bg-elevated)",
-                      border: "1px solid var(--border-default)",
-                      borderRadius: 6,
-                      color: "var(--text-primary)",
-                      padding: "6px 14px",
-                      cursor: "pointer",
-                    }}
+                    className={`cursor-pointer rounded-md border border-default bg-elevated px-3.5 py-1.5 text-primary transition-colors duration-150 hover:border-strong ${focusRing}`}
                   >
                     Retry
                   </button>
@@ -150,17 +139,15 @@ export function DetailPanel({ stock, streamStatus, onOpenChange }: Props): JSX.E
               )}
 
               {current.status === "ready" && current.data === null && (
-                <section style={{ padding: "0 20px 20px", textAlign: "center", color: "var(--text-secondary)" }}>
-                  No data yet
-                </section>
+                <section className="px-5 pb-5 text-center text-secondary">No data yet</section>
               )}
 
               {current.status === "ready" && current.data !== null && (
-                <section style={{ padding: "0 20px 20px", ...tileGrid }}>
+                <section className={tileGrid}>
                   {tiles(stock, current.data).map(([label, value]) => (
-                    <div key={label} style={{ background: "var(--bg-elevated)", borderRadius: 6, padding: 12 }}>
-                      <div style={{ fontSize: 11, color: "var(--text-secondary)", textTransform: "uppercase" }}>{label}</div>
-                      <div className="mono" style={{ fontSize: 15, fontWeight: 500 }}>{value}</div>
+                    <div key={label} className="rounded-md bg-elevated p-3">
+                      <div className="text-[11px] text-secondary uppercase">{label}</div>
+                      <div className="font-mono text-[15px] font-medium">{value}</div>
                     </div>
                   ))}
                 </section>

@@ -9,12 +9,18 @@ type Props = {
   onOpen: (symbol: string) => void;
 };
 
+const flashClass = {
+  "": "",
+  up: "animate-flash-up motion-reduce:animate-none",
+  down: "animate-flash-down motion-reduce:animate-none",
+} as const;
+
 function PriceCardBase({ stock, onOpen }: Props): JSX.Element {
-  const [flash, setFlash] = useState<"" | "flash-up" | "flash-down">("");
+  const [flash, setFlash] = useState<keyof typeof flashClass>("");
   const trendUp = stock.changePercent >= 0;
 
   useEffect(() => {
-    setFlash(trendUp ? "flash-up" : "flash-down");
+    setFlash(trendUp ? "up" : "down");
     const timer = window.setTimeout(() => setFlash(""), 600);
     return () => window.clearTimeout(timer);
   }, [stock.currentPrice, trendUp]);
@@ -23,39 +29,31 @@ function PriceCardBase({ stock, onOpen }: Props): JSX.Element {
 
   return (
     <article
-      className="card-surface"
       onClick={() => onOpen(stock.symbol)}
-      style={{
-        borderRadius: 10,
-        padding: "14px 16px",
-        minHeight: 154,
-        cursor: "pointer",
-        transition: "150ms ease",
-      }}
+      className={
+        "min-h-[154px] cursor-pointer rounded-[10px] border border-default bg-surface px-4 py-3.5 shadow-card " +
+        "transition-colors duration-150 hover:border-strong hover:bg-elevated " +
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+      }
     >
-      <div style={{ display: "flex", justifyContent: "space-between" }}>
+      <div className="flex justify-between">
         <div>
-          <div className="mono" style={{ fontWeight: 600 }}>{stock.symbol}</div>
-          <div style={{ color: "var(--text-secondary)", fontSize: 11, marginTop: 2 }}>{companyName}</div>
+          <div className="font-mono font-semibold">{stock.symbol}</div>
+          <div className="mt-0.5 text-[11px] text-secondary">{companyName}</div>
         </div>
         <div
-          className="mono"
-          style={{
-            borderRadius: 999,
-            padding: "2px 8px",
-            fontSize: 11,
-            fontWeight: 600,
-            background: trendUp ? "rgba(34,197,94,0.15)" : "rgba(240,72,90,0.15)",
-            color: trendUp ? "var(--accent-green)" : "var(--accent-red)",
-          }}
+          className={
+            "rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold " +
+            (trendUp ? "bg-positive/15 text-positive" : "bg-negative/15 text-negative")
+          }
         >
           {formatChange(stock.changePercent)}
         </div>
       </div>
-      <div className={`mono ${flash}`} style={{ marginTop: 8, fontSize: 24, fontWeight: 600, lineHeight: 1.15 }}>
+      <div className={`mt-2 font-mono text-[24px] leading-[1.15] font-semibold ${flashClass[flash]}`}>
         {formatPrice(stock.currentPrice)}
       </div>
-      <div style={{ marginTop: 10, width: "100%" }}>
+      <div className="mt-2.5 w-full">
         <Sparkline prices={stock.sparkline} height={40} />
       </div>
     </article>

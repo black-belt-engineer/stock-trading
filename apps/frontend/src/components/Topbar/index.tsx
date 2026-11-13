@@ -12,23 +12,18 @@ export function Topbar({ stocks, lastUpdate }: Props): JSX.Element {
   const worst = stocks.reduce((prev, item) => (item.changePercent < prev.changePercent ? item : prev), stocks[0] ?? emptyStock);
 
   const blocks = [
-    { label: "Active Symbols", value: String(stocks.length), color: "var(--text-primary)" },
-    { label: "Best Performer", value: best.symbol || "-", color: "var(--accent-green)" },
-    { label: "Worst Performer", value: worst.symbol || "-", color: "var(--accent-red)" },
-    { label: "Last Update", value: formatTimeAgo(lastUpdate || Date.now()), color: "var(--text-primary)" },
+    { label: "Active Symbols", value: String(stocks.length), color: "text-primary" },
+    { label: "Best Performer", value: best.symbol || "-", color: "text-positive" },
+    { label: "Worst Performer", value: worst.symbol || "-", color: "text-negative" },
+    { label: "Last Update", value: formatTimeAgo(lastUpdate || Date.now()), color: "text-primary" },
   ];
 
   return (
-    <section
-      className="card-surface"
-      style={{ borderRadius: 10, padding: "14px 16px", display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))" }}
-    >
-      {blocks.map((block, i) => (
-        <div key={block.label} style={{ padding: i === 0 ? "0 10px 0 0" : "0 10px", borderLeft: i === 0 ? "none" : "1px solid var(--border-subtle)" }}>
-          <div style={{ color: "var(--text-secondary)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em" }}>{block.label}</div>
-          <div className="mono" style={{ marginTop: 6, fontSize: 18, color: block.color }}>
-            {block.value}
-          </div>
+    <section className="grid grid-cols-4 rounded-[10px] border border-default bg-surface px-4 py-3.5 shadow-card">
+      {blocks.map((block) => (
+        <div key={block.label} className="border-l border-subtle px-2.5 first:border-l-0 first:pl-0">
+          <div className="text-[11px] tracking-widest text-secondary uppercase">{block.label}</div>
+          <div className={`mt-1.5 font-mono text-[18px] ${block.color}`}>{block.value}</div>
         </div>
       ))}
     </section>
