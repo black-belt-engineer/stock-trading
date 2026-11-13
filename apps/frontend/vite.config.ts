@@ -13,6 +13,16 @@ export default defineConfig(({ mode }) => {
         "/stream": {
           target,
           changeOrigin: true,
+          // The dev proxy keeps the browser's side of a stream open when the
+          // SSE service goes away, so the client would only notice through its
+          // silence watchdog. Close it as soon as the upstream response closes.
+          configure: (proxy) => {
+            proxy.on("proxyRes", (proxyRes, _req, res) => {
+              proxyRes.on("close", () => {
+                if (!res.writableEnded) res.destroy();
+              });
+            });
+          },
         },
         "/quotes": {
           target,
