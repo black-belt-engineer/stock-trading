@@ -1,12 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import type { JSX } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { Sparkline } from "../Sparkline";
 import { StaleBanner } from "../StaleBanner";
-import type { ActiveStock, ListStatus, SnapshotData } from "../../types";
-import { formatChange, formatPrice, formatTimeAgo, formatVolume } from "../../utils/format";
-import { finiteOrNull, isRecord } from "../../utils/guards";
+import type { ActiveStock, ListStatus } from "../../types";
+import { formatChange, formatPrice, formatTimeAgo, formatVolume, NO_VALUE } from "../../utils/format";
 
 type Props = {
   /** Symbol from the URL; `null` closes the dialog. */
@@ -20,45 +19,6 @@ type Props = {
   onOpenChange: (open: boolean) => void;
 };
 
-/**
- * Result of the snapshot request, tagged with the symbol it belongs to so a
- * result for one symbol can never render under another symbol's header.
- * `ready` with `data: null` means the server has no ticks for the symbol yet (404).
- */
-type SnapshotState =
-  | { symbol: string; status: "loading" }
-  | { symbol: string; status: "ready"; data: SnapshotData | null }
-  | { symbol: string; status: "error" };
-
-/** Checks the snapshot response field by field; null when it is not a snapshot. */
-function parseSnapshot(json: unknown): SnapshotData | null {
-  if (!isRecord(json)) return null;
-  const { symbol, name } = json;
-  const currentPrice = finiteOrNull(json.currentPrice);
-  const previousPrice = finiteOrNull(json.previousPrice);
-  const changeValue = finiteOrNull(json.changeValue);
-  const changePercent = finiteOrNull(json.changePercent);
-  const high24h = finiteOrNull(json.high24h);
-  const low24h = finiteOrNull(json.low24h);
-  const volume24h = finiteOrNull(json.volume24h);
-  const lastUpdated = finiteOrNull(json.lastUpdated);
-  if (
-    typeof symbol !== "string" ||
-    typeof name !== "string" ||
-    currentPrice === null ||
-    previousPrice === null ||
-    changeValue === null ||
-    changePercent === null ||
-    high24h === null ||
-    low24h === null ||
-    volume24h === null ||
-    lastUpdated === null
-  ) {
-    return null;
-  }
-  return { symbol, name, currentPrice, previousPrice, changeValue, changePercent, high24h, low24h, volume24h, lastUpdated };
-}
-
 function formatSignedPrice(n: number): string {
   return `${n > 0 ? "+" : ""}${formatPrice(n)}`;
 }
@@ -70,49 +30,6 @@ const buttonClass =
   `hover:border-strong ${focusRing}`;
 
 export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onOpenChange }: Props): JSX.Element {
-  // Only a symbol that is in the list has a snapshot worth fetching.
-  const liveSymbol = stock?.symbol ?? null;
-  const [snapshot, setSnapshot] = useState<SnapshotState | null>(null);
-  const [attempt, setAttempt] = useState(0);
-
-  // Price, change and sparkline come from the live `stock`. This request only
-  // supplies the fields the live object lacks, once per open (and per retry).
-  useEffect(() => {
-    if (!liveSymbol) return;
-    const symbol = liveSymbol;
-    const controller = new AbortController();
-    setSnapshot({ symbol, status: "loading" });
-
-    fetch(`/quotes/${encodeURIComponent(symbol)}/snapshot`, { signal: controller.signal })
-      .then(async (response): Promise<SnapshotData | null> => {
-        if (response.status === 404) return null;
-        if (!response.ok) throw new Error(`Snapshot request failed with ${response.status}`);
-        const data = parseSnapshot(await response.json());
-        // A response of the wrong shape is shown as an error, with Retry.
-        if (!data) throw new Error("Snapshot response has an unexpected shape");
-        return data;
-      })
-      .then((data) => {
-        if (controller.signal.aborted) return;
-        setSnapshot({ symbol, status: "ready", data });
-      })
-      .catch(() => {
-        // Aborted means the dialog closed or moved on; that is not an error to show.
-        if (controller.signal.aborted) return;
-        setSnapshot({ symbol, status: "error" });
-      });
-
-    return () => controller.abort();
-  }, [liveSymbol, attempt]);
-
-  // Ignore state left over from a previous symbol until the effect replaces it.
-  const current: SnapshotState | null =
-    liveSymbol === null
-      ? null
-      : snapshot?.symbol === liveSymbol
-        ? snapshot
-        : { symbol: liveSymbol, status: "loading" };
-
   const trendUp = (stock?.changePercent ?? 0) >= 0;
 
   // The symbol prop is already null by the time the dialog finishes closing,
@@ -149,7 +66,7 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
           <VisuallyHidden.Root>
             <Dialog.Title>{`Stock details for ${symbol ?? "symbol"}`}</Dialog.Title>
             <Dialog.Description id="detail-panel-description">
-              Live price, change and recent trend, with high, low and volume since the data started.
+              Live price, change since the previous close and recent trend, with today's open, high, low and volume.
             </Dialog.Description>
           </VisuallyHidden.Root>
           <header className="flex justify-between gap-3 border-b border-subtle p-5">
@@ -188,15 +105,15 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
             </section>
           )}
 
-          {stock && current && (
+          {stock && (
             <>
               <section className={`px-5 pt-5 pb-3 text-center transition-[filter] duration-300 ${stale ? "grayscale" : ""}`}>
                 <div className="font-mono text-[36px] font-semibold wrap-anywhere">{formatPrice(stock.currentPrice)}</div>
-                {stock.changeValue === null || stock.changePercent === null ? (
+                {stock.change === null || stock.changePercent === null ? (
                   <div className="text-secondary">No trades yet</div>
                 ) : (
                   <div className={`font-mono ${trendUp ? "text-positive" : "text-negative"}`}>
-                    {formatSignedPrice(stock.changeValue)} / {formatChange(stock.changePercent)}
+                    {formatSignedPrice(stock.change)} / {formatChange(stock.changePercent)}
                   </div>
                 )}
               </section>
@@ -207,30 +124,11 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
                 <Sparkline prices={stock.sparkline} height={96} />
               </section>
 
-              {current.status === "loading" && (
-                <section aria-busy="true" className={tileGrid}>
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} className="h-[52px] animate-skeleton rounded-md bg-elevated motion-reduce:animate-none" />
-                  ))}
-                </section>
-              )}
-
-              {current.status === "error" && (
-                <section role="alert" className="px-5 pb-5 text-center">
-                  <div className="mb-2.5 text-secondary">Could not load high, low and volume for {stock.symbol}.</div>
-                  <button type="button" onClick={() => setAttempt((n) => n + 1)} className={buttonClass}>
-                    Retry
-                  </button>
-                </section>
-              )}
-
-              {current.status === "ready" && current.data === null && (
+              {stock.sessionId === null ? (
                 <section className="px-5 pb-5 text-center text-secondary">No data yet</section>
-              )}
-
-              {current.status === "ready" && current.data !== null && (
+              ) : (
                 <section className={tileGrid}>
-                  {tiles(stock, current.data).map(([label, value]) => (
+                  {tiles(stock).map(([label, value]) => (
                     <div key={label} className="rounded-md bg-elevated p-3">
                       <div className="text-[12px] text-secondary uppercase">{label}</div>
                       <div className="font-mono text-[15px] font-medium">{value}</div>
@@ -247,25 +145,17 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
 }
 
 /**
- * Labels say what the values are today: running figures since the consumer
- * first saw the symbol, not session values (those arrive with M2).
- *
- * The snapshot is fetched once, so high and low are widened by the live price
- * and "previous tick" is derived from the live change; otherwise they would
- * contradict the price shown above them. Volume is as of when the dialog opened.
+ * The day values of the symbol's current session, live from the stream like
+ * the price above them, so they move with every tick and reset when a new
+ * session starts.
  */
-function tiles(stock: ActiveStock, data: SnapshotData): [string, string][] {
-  // The list may predate the symbol's first tick while the snapshot does not.
-  const price = stock.currentPrice ?? data.currentPrice;
-  const change = stock.changeValue ?? data.changeValue;
-  const high = Math.max(data.high24h, price);
-  const low = Math.min(data.low24h, price);
+function tiles(stock: ActiveStock): [string, string][] {
   return [
-    ["High since start", formatPrice(high)],
-    ["Low since start", formatPrice(low)],
-    ["Volume since start", formatVolume(data.volume24h)],
-    ["Previous tick", formatPrice(price - change)],
-    ["Range since start", formatPrice(high - low)],
-    ["Last updated", formatTimeAgo(stock.lastUpdated || data.lastUpdated)],
+    ["Open", formatPrice(stock.open)],
+    ["Previous close", formatPrice(stock.previousClose)],
+    ["Day high", formatPrice(stock.high)],
+    ["Day low", formatPrice(stock.low)],
+    ["Day volume", formatVolume(stock.volume)],
+    ["Last updated", stock.lastUpdated > 0 ? formatTimeAgo(stock.lastUpdated) : NO_VALUE],
   ];
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FeedEvent, LiveQuote } from "../types";
-import { finiteOrNull, isRecord } from "../utils/guards";
+import { finiteOrNull, isRecord, parseDayValues, parseTickDirection } from "../utils/guards";
 
 export type StreamStatus = "connecting" | "live" | "reconnecting" | "disconnected";
 
@@ -28,15 +28,19 @@ function parseQuote(raw: unknown): LiveQuote | null {
   if (!isRecord(data) || typeof data.symbol !== "string" || data.symbol === "") {
     return null;
   }
+  // Without a price or a server time a quote cannot be shown or ordered.
+  const price = finiteOrNull(data.price);
+  const timestamp = finiteOrNull(data.timestamp);
+  if (price === null || timestamp === null) return null;
   return {
     symbol: data.symbol,
     name: typeof data.name === "string" && data.name !== "" ? data.name : data.symbol,
-    price: finiteOrNull(data.price) ?? 0,
-    changeValue: finiteOrNull(data.changeValue) ?? undefined,
-    changePercent: finiteOrNull(data.changePercent) ?? 0,
+    price,
+    ...parseDayValues(data),
+    tickDirection: parseTickDirection(data.tickDirection),
     quantity: finiteOrNull(data.quantity) ?? 0,
     side: data.side === "sell" ? "sell" : "buy",
-    timestamp: finiteOrNull(data.timestamp) ?? Date.now(),
+    timestamp,
   };
 }
 
