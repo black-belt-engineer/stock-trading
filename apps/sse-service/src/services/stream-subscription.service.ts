@@ -1,9 +1,9 @@
 import type { Redis } from "ioredis";
 import {
+  LatestPriceSchema,
   parseJson,
   PRICE_UPDATES_STREAM_KEY,
   streamQuoteFromLatest,
-  StreamQuoteSchema,
   type StreamQuote,
 } from "@stock-platform/types";
 import type { LatestPriceRepository } from "../repositories/latest-price.repository.js";
@@ -22,8 +22,10 @@ function quoteFromStreamFields(fieldList: string[]): StreamQuote | null {
   if (!fields.payload) {
     return null;
   }
-  // Malformed entries are skipped instead of breaking the read loop.
-  return parseJson(StreamQuoteSchema, fields.payload);
+  // Malformed entries, and entries in the format before session values, are
+  // skipped instead of breaking the read loop.
+  const latest = parseJson(LatestPriceSchema, fields.payload);
+  return latest ? streamQuoteFromLatest(latest) : null;
 }
 
 export class StreamSubscriptionService {
