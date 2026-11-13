@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
-import { formatChange, formatTimeAgo, NO_VALUE } from "../../utils/format";
+import { formatSignedPercent, formatTimeAgo, NO_VALUE } from "../../utils/format";
 import { moversKey, topMovers, type Mover, type Movers } from "../../utils/movers";
 import type { ActiveStock } from "../../types";
 
@@ -77,11 +77,15 @@ function MoverList({
             <button
               type="button"
               onClick={() => onOpen(mover.symbol)}
-              aria-label={`${mover.symbol}, ${up ? "up" : "down"} ${Math.abs(mover.changePercent).toFixed(2)}% today`}
               className={`cursor-pointer rounded-md px-1.5 py-0.5 font-mono text-[13px] whitespace-nowrap transition-colors duration-150 hover:bg-elevated ${focusRing}`}
             >
+              {/* The visible text is the name ("GOOGL +5.98% today"); the arrow repeats the sign and is not read. */}
               <span className="font-semibold">{mover.symbol}</span>{" "}
-              <span className={up ? "text-positive" : "text-negative"}>{formatChange(mover.changePercent)}</span>
+              <span className={up ? "text-positive" : "text-negative"}>
+                <span aria-hidden="true">{up ? "▲ " : "▼ "}</span>
+                {formatSignedPercent(mover.changePercent)}
+              </span>
+              <span className="sr-only"> today</span>
             </button>
           </li>
         );
