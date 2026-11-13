@@ -21,10 +21,14 @@ export function Topbar({ stocks, lastUpdate }: Props): JSX.Element {
   ];
 
   return (
-    <section className="grid grid-cols-4 rounded-[10px] border border-default bg-surface px-4 py-3.5 shadow-card">
+    // Four across from md up, 2×2 below; the divider is dropped at the start of each row.
+    <section className="grid grid-cols-2 gap-y-3.5 rounded-[10px] border border-default bg-surface px-4 py-3.5 shadow-card md:grid-cols-4">
       {blocks.map((block) => (
-        <div key={block.label} className="border-l border-subtle px-2.5 first:border-l-0 first:pl-0">
-          <div className="text-[11px] tracking-widest text-secondary uppercase">{block.label}</div>
+        <div
+          key={block.label}
+          className="min-w-0 border-l border-subtle px-2.5 max-md:odd:border-l-0 max-md:odd:pl-0 md:first:border-l-0 md:first:pl-0"
+        >
+          <div className="truncate text-[12px] tracking-widest text-secondary uppercase">{block.label}</div>
           <div className={`mt-1.5 font-mono text-[18px] ${block.color}`}>{block.value}</div>
         </div>
       ))}

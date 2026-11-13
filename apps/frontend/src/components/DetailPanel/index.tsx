@@ -89,8 +89,10 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
         <Dialog.Content
           aria-describedby="detail-panel-description"
           className={
-            "fixed top-1/2 left-1/2 max-h-[calc(100vh-32px)] w-[min(420px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 " +
-            "overflow-y-auto rounded-[14px] border border-default bg-surface shadow-dialog"
+            // Narrow: a full-screen sheet, clear of the home indicator. From md up: a centred card.
+            "fixed inset-0 overflow-y-auto bg-surface pb-[env(safe-area-inset-bottom)] " +
+            "md:inset-auto md:top-1/2 md:left-1/2 md:max-h-[calc(100dvh-32px)] md:w-[min(420px,calc(100vw-32px))] md:-translate-x-1/2 md:-translate-y-1/2 " +
+            "md:rounded-[14px] md:border md:border-default md:pb-0 md:shadow-dialog"
           }
         >
           <VisuallyHidden.Root>
@@ -99,14 +101,14 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
               Live price, change and recent trend, with high, low and volume since the data started.
             </Dialog.Description>
           </VisuallyHidden.Root>
-          <header className="flex justify-between border-b border-subtle p-5">
-            <div>
+          <header className="flex justify-between gap-3 border-b border-subtle p-5">
+            <div className="min-w-0">
               <div className="font-mono text-[20px] font-semibold">{symbol ?? "-"}</div>
               <div className="text-secondary">{stock?.name || symbol || ""}</div>
             </div>
             <Dialog.Close
               aria-label="Close"
-              className={`cursor-pointer rounded-sm text-[24px] text-secondary transition-colors duration-150 hover:text-primary ${focusRing}`}
+              className={`-mt-1.5 -mr-1.5 inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md text-[24px] text-secondary transition-colors duration-150 hover:text-primary ${focusRing}`}
             >
               ×
             </Dialog.Close>
@@ -138,7 +140,7 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
           {stock && current && (
             <>
               <section className={`px-5 pt-5 pb-3 text-center transition-opacity duration-300 ${stale ? "opacity-50" : ""}`}>
-                <div className="font-mono text-[36px] font-semibold">{formatPrice(stock.currentPrice)}</div>
+                <div className="font-mono text-[36px] font-semibold wrap-anywhere">{formatPrice(stock.currentPrice)}</div>
                 <div className={`font-mono ${trendUp ? "text-positive" : "text-negative"}`}>
                   {formatSignedPrice(stock.changeValue)} / {formatChange(stock.changePercent)}
                 </div>
@@ -175,7 +177,7 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
                 <section className={tileGrid}>
                   {tiles(stock, current.data).map(([label, value]) => (
                     <div key={label} className="rounded-md bg-elevated p-3">
-                      <div className="text-[11px] text-secondary uppercase">{label}</div>
+                      <div className="text-[12px] text-secondary uppercase">{label}</div>
                       <div className="font-mono text-[15px] font-medium">{value}</div>
                     </div>
                   ))}

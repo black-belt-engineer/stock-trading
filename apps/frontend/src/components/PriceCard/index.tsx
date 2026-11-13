@@ -38,28 +38,32 @@ function PriceCardBase({ stock, onOpen, delayed }: Props): JSX.Element {
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
       }
     >
-      <div className="flex justify-between">
-        <div>
+      <div className="flex justify-between gap-2">
+        <div className="min-w-0">
           <div className="font-mono font-semibold">{stock.symbol}</div>
-          <div className="mt-0.5 text-[11px] text-secondary">{companyName}</div>
+          {/* Long names ("Microsoft Corporation") are cut with an ellipsis; the title shows them whole. */}
+          <div title={companyName} className="mt-0.5 truncate text-[12px] text-secondary">
+            {companyName}
+          </div>
         </div>
         <div
           className={
-            "rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold " +
+            "shrink-0 self-start rounded-full px-2 py-0.5 font-mono text-[12px] font-semibold " +
             (trendUp ? "bg-positive/15 text-positive" : "bg-negative/15 text-negative")
           }
         >
           {formatChange(stock.changePercent)}
         </div>
       </div>
-      <div className="mt-2 flex items-baseline justify-between gap-2">
-        <div className={`font-mono text-[24px] leading-[1.15] font-semibold ${flashClass[flash]}`}>
+      {/* Wraps rather than overflows: a long price breaks onto two lines and "Delayed" drops below it. */}
+      <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+        <div className={`min-w-0 font-mono text-[24px] leading-[1.15] font-semibold wrap-anywhere ${flashClass[flash]}`}>
           {formatPrice(stock.currentPrice)}
         </div>
         {delayed && (
           <span
             title="No recent updates for this symbol"
-            className="rounded-full border border-warning/40 px-2 py-0.5 text-[11px] font-medium text-warning"
+            className="rounded-full border border-warning/40 px-2 py-0.5 text-[12px] font-medium text-warning"
           >
             Delayed
           </span>
