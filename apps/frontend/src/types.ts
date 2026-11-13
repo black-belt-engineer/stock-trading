@@ -39,3 +39,6 @@ export type ActiveStock = {
   sparkline: number[];
   lastUpdated: number;
 };
+
+/** State of the request for the list of symbols the dashboard shows. */
+export type ListStatus = "loading" | "ready" | "error";

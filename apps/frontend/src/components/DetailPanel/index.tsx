@@ -3,14 +3,19 @@ import type { JSX } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { Sparkline } from "../Sparkline";
-import type { StreamStatus } from "../../hooks/usePriceStream";
-import type { ActiveStock, SnapshotData } from "../../types";
+import { StaleBanner } from "../StaleBanner";
+import type { ActiveStock, ListStatus, SnapshotData } from "../../types";
 import { formatChange, formatPrice, formatTimeAgo, formatVolume } from "../../utils/format";
 
 type Props = {
-  /** Live object for the selected symbol; `null` closes the dialog. */
+  /** Symbol from the URL; `null` closes the dialog. */
+  symbol: string | null;
+  /** Live object for `symbol`, or `null` while the list loads or when the symbol is unknown. */
   stock: ActiveStock | null;
-  streamStatus: StreamStatus;
+  listStatus: ListStatus;
+  onRetryList: () => void;
+  /** The stream has been down for a while: values may be out of date. */
+  stale: boolean;
   onOpenChange: (open: boolean) => void;
 };
 
@@ -30,16 +35,21 @@ function formatSignedPrice(n: number): string {
 
 const tileGrid = "grid grid-cols-2 gap-2 px-5 pb-5";
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
+const buttonClass =
+  "cursor-pointer rounded-md border border-default bg-elevated px-3.5 py-1.5 text-primary transition-colors duration-150 " +
+  `hover:border-strong ${focusRing}`;
 
-export function DetailPanel({ stock, streamStatus, onOpenChange }: Props): JSX.Element {
-  const symbol = stock?.symbol ?? null;
+export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onOpenChange }: Props): JSX.Element {
+  // Only a symbol that is in the list has a snapshot worth fetching.
+  const liveSymbol = stock?.symbol ?? null;
   const [snapshot, setSnapshot] = useState<SnapshotState | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   // Price, change and sparkline come from the live `stock`. This request only
   // supplies the fields the live object lacks, once per open (and per retry).
   useEffect(() => {
-    if (!symbol) return;
+    if (!liveSymbol) return;
+    const symbol = liveSymbol;
     const controller = new AbortController();
     setSnapshot({ symbol, status: "loading" });
 
@@ -60,17 +70,20 @@ export function DetailPanel({ stock, streamStatus, onOpenChange }: Props): JSX.E
       });
 
     return () => controller.abort();
-  }, [symbol, attempt]);
+  }, [liveSymbol, attempt]);
 
   // Ignore state left over from a previous symbol until the effect replaces it.
   const current: SnapshotState | null =
-    symbol === null ? null : snapshot?.symbol === symbol ? snapshot : { symbol, status: "loading" };
+    liveSymbol === null
+      ? null
+      : snapshot?.symbol === liveSymbol
+        ? snapshot
+        : { symbol: liveSymbol, status: "loading" };
 
   const trendUp = (stock?.changePercent ?? 0) >= 0;
-  const stale = streamStatus !== "live";
 
   return (
-    <Dialog.Root open={stock !== null} onOpenChange={onOpenChange}>
+    <Dialog.Root open={symbol !== null} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-overlay backdrop-blur-[6px]" />
         <Dialog.Content
@@ -99,19 +112,39 @@ export function DetailPanel({ stock, streamStatus, onOpenChange }: Props): JSX.E
             </Dialog.Close>
           </header>
 
+          {!stock && listStatus === "loading" && (
+            <section aria-busy="true" className="px-5 py-8 text-center text-secondary">
+              Loading…
+            </section>
+          )}
+
+          {!stock && listStatus === "error" && (
+            <section role="alert" className="px-5 py-8 text-center">
+              <div className="mb-2.5 text-secondary">Could not load the symbol list.</div>
+              <button type="button" onClick={onRetryList} className={buttonClass}>
+                Retry
+              </button>
+            </section>
+          )}
+
+          {!stock && listStatus === "ready" && (
+            <section role="alert" className="px-5 py-8 text-center">
+              <div className="mb-1 font-medium">Symbol not found</div>
+              <div className="mb-3 text-secondary">{symbol} is not one of the symbols on this dashboard.</div>
+              <Dialog.Close className={buttonClass}>Back to quotes</Dialog.Close>
+            </section>
+          )}
+
           {stock && current && (
             <>
-              <section className="px-5 pt-5 pb-3 text-center">
+              <section className={`px-5 pt-5 pb-3 text-center transition-opacity duration-300 ${stale ? "opacity-50" : ""}`}>
                 <div className="font-mono text-[36px] font-semibold">{formatPrice(stock.currentPrice)}</div>
                 <div className={`font-mono ${trendUp ? "text-positive" : "text-negative"}`}>
                   {formatSignedPrice(stock.changeValue)} / {formatChange(stock.changePercent)}
                 </div>
-                {stale && (
-                  <div role="status" className="mt-2 text-[11px] text-warning">
-                    Stream {streamStatus === "disconnected" ? "disconnected" : "reconnecting"} — values may be out of date
-                  </div>
-                )}
               </section>
+
+              <StaleBanner compact />
 
               <section className="min-h-24 px-5 pb-4">
                 <Sparkline prices={stock.sparkline} height={96} />
@@ -128,11 +161,7 @@ export function DetailPanel({ stock, streamStatus, onOpenChange }: Props): JSX.E
               {current.status === "error" && (
                 <section role="alert" className="px-5 pb-5 text-center">
                   <div className="mb-2.5 text-secondary">Could not load high, low and volume for {stock.symbol}.</div>
-                  <button
-                    type="button"
-                    onClick={() => setAttempt((n) => n + 1)}
-                    className={`cursor-pointer rounded-md border border-default bg-elevated px-3.5 py-1.5 text-primary transition-colors duration-150 hover:border-strong ${focusRing}`}
-                  >
+                  <button type="button" onClick={() => setAttempt((n) => n + 1)} className={buttonClass}>
                     Retry
                   </button>
                 </section>

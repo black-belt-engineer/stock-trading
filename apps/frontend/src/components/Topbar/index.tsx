@@ -4,6 +4,7 @@ import type { ActiveStock } from "../../types";
 
 type Props = {
   stocks: ActiveStock[];
+  /** Newest tick time (epoch ms), or 0 when there has been none. */
   lastUpdate: number;
 };
 
@@ -13,9 +14,10 @@ export function Topbar({ stocks, lastUpdate }: Props): JSX.Element {
 
   const blocks = [
     { label: "Active Symbols", value: String(stocks.length), color: "text-primary" },
-    { label: "Best Performer", value: best.symbol || "-", color: "text-positive" },
-    { label: "Worst Performer", value: worst.symbol || "-", color: "text-negative" },
-    { label: "Last Update", value: formatTimeAgo(lastUpdate || Date.now()), color: "text-primary" },
+    { label: "Best Performer", value: best.symbol || "—", color: "text-positive" },
+    { label: "Worst Performer", value: worst.symbol || "—", color: "text-negative" },
+    // No update yet reads "—"; substituting the current time would claim "0s ago".
+    { label: "Last Update", value: lastUpdate > 0 ? formatTimeAgo(lastUpdate) : "—", color: "text-primary" },
   ];
 
   return (
