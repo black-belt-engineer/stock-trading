@@ -5,42 +5,29 @@ type Props = {
   attempts: number;
 };
 
+// Class names are written out in full so Tailwind's scanner can find them.
+const styles: Record<Props["status"], { text: string; dot: string }> = {
+  live: { text: "text-brand", dot: "bg-brand animate-pulse-live" },
+  reconnecting: { text: "text-warning", dot: "bg-warning animate-pulse-reconnecting" },
+  connecting: { text: "text-warning", dot: "bg-warning animate-pulse-reconnecting" },
+  disconnected: { text: "text-negative", dot: "bg-negative" },
+};
+
 export function ConnectionStatus({ status, attempts }: Props): JSX.Element {
-  const cfg =
+  const label =
     status === "live"
-      ? { color: "var(--accent-brand)", text: "Live", anim: "pulseLive 2s infinite" }
+      ? "Live"
       : status === "reconnecting"
-        ? {
-            color: "var(--warning)",
-            text: `Reconnecting${attempts > 0 ? ` x${attempts}` : ""}`,
-            anim: "pulseReconnecting 0.6s infinite",
-          }
+        ? `Reconnecting${attempts > 0 ? ` x${attempts}` : ""}`
         : status === "disconnected"
-          ? { color: "var(--negative)", text: "Disconnected", anim: "none" }
-          : { color: "var(--warning)", text: "Connecting...", anim: "pulseReconnecting 0.6s infinite" };
+          ? "Disconnected"
+          : "Connecting...";
+  const { text, dot } = styles[status];
 
   return (
-    <div
-      style={{
-        background: "var(--bg-elevated)",
-        borderRadius: 8,
-        padding: "10px 12px",
-        border: "1px solid var(--border-subtle)",
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-      }}
-    >
-      <span
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: "50%",
-          background: cfg.color,
-          animation: cfg.anim,
-        }}
-      />
-      <span style={{ color: cfg.color, fontWeight: 500 }}>{cfg.text}</span>
+    <div className="flex items-center gap-2 rounded-lg border border-subtle bg-elevated px-3 py-2.5">
+      <span className={`size-2 rounded-full motion-reduce:animate-none ${dot}`} />
+      <span className={`font-medium ${text}`}>{label}</span>
     </div>
   );
 }
