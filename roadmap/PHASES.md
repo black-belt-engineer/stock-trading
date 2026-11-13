@@ -13,7 +13,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 03 | U5, U4 | 02-ui-foundation.md | 02 | done |
 | 04 | U2, U3 | 02-ui-foundation.md | 03 | done |
 | 05 | M1 | 03-market-data.md | 03 | done |
-| 06 | M2, M5 | 03-market-data.md | 05 | todo |
+| 06 | M2, M5 | 03-market-data.md | 05 | in progress |
 | 07 | M3, M6 | 03-market-data.md | 05 | todo |
 | 08 | M4 | 03-market-data.md | 07 | todo |
 | 09 | A1 | 04-auth.md | — | todo |
