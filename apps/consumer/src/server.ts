@@ -22,7 +22,11 @@ async function start(): Promise<void> {
 
   void kafkaConsumerService.subscribeAndRun(consumer, async (event, message) => {
     try {
-      await marketDataService.persistPriceEvent(event, message);
+      const result = await marketDataService.persistPriceEvent(event, message);
+      if (result === "older") {
+        // Stored, and counted toward the day, but not shown: a newer tick already is.
+        log.info({ idempotencyKey: message.idempotencyKey }, "Tick arrived after a newer one");
+      }
       healthService.recordMessageProcessed();
     } catch (err) {
       log.error({ err, idempotencyKey: message.idempotencyKey }, "Failed to process message");
