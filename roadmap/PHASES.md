@@ -10,7 +10,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 |---|---|---|---|---|
 | 01 | B1, B2, B3, S3 step 1 | 01-bug-fixes.md, 07-streaming.md | — | done |
 | 02 | U1 | 02-ui-foundation.md | 01 | done |
-| 03 | U5, U4 | 02-ui-foundation.md | 02 | in progress |
+| 03 | U5, U4 | 02-ui-foundation.md | 02 | done |
 | 04 | U2, U3 | 02-ui-foundation.md | 03 | todo |
 | 05 | M1 | 03-market-data.md | 03 | todo |
 | 06 | M2, M5 | 03-market-data.md | 05 | todo |
@@ -48,12 +48,13 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 ### 04 · Responsive and accessible (U2, U3)
 - U2 first, then U3.
 - Already done in phase 02: the flash, pulse, feed-row and skeleton animations stop under `prefers-reduced-motion` (`motion-reduce:animate-none`), and the card already carries `focus-visible` ring classes that take effect once U3 makes it focusable. U3 step 4 still has to decide whether "a static colour" needs more than the animation simply not running.
+- Already done in phase 03: the sidebar nav is `NavLink`s with `aria-current` and padding, no `role="menuitem"`; the connection status is a `role="status"` polite live region; the dialog's close and Escape return to the list through the URL. Still open for U3: the card is still an `<article onClick>`, and focus return to the card after closing was not checked.
 - Already done in phase 01: dialog width `min(420px, calc(100vw - 32px))` (U2 turns it into a full-screen sheet on narrow screens) and `aria-label="Close"` on the dialog close button (U3 step 7).
 - Neither item can be verified by the type-checker. Check 360px, 768px and 1440px, and tab through the whole dashboard.
 
 ### 05 · Symbol registry (M1)
 - The symbol list is in three places; after this phase it is in one.
-- Phase 03 removed the dead sector pills; this phase brings back real ones.
+- Phase 03 removed the dead sector pills and deleted the `FilterPills` component; this phase brings back real ones. `@radix-ui/react-toggle-group` is still a dependency for that. The symbol list to replace includes `SYMBOLS` in `apps/frontend/src/stream/StreamProvider.tsx`.
 - A symbol with no ticks returns `null` prices and renders "—", not `$0.00`.
 
 ### 06 · Session stats and movers (M2, M5)
@@ -81,8 +82,8 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 ### 10 · Guard and login (A2, A3)
 - The two items ship together. Do not leave the branch in a state where endpoints are protected and no login exists.
 - Decided: fetch-based stream reader (Q1), refresh token in an `httpOnly` cookie (Q2).
-- Existing callers to route through the new API client: the bootstrap fetch, the `DetailPanel` snapshot fetch, and, if phases 07 and 08 are done, history, candles and the CSV download (blob fetch with the header).
-- The stream hook must tell `401` (logged out) from `503` (retry) from a dropped connection (U4's banner).
+- Existing callers to route through the new API client: the bootstrap fetch (now in `pages/QuotesPage.tsx`), the `DetailPanel` snapshot fetch, and, if phases 07 and 08 are done, history, candles and the CSV download (blob fetch with the header).
+- The stream hook must tell `401` (logged out) from `503` (retry) from a dropped connection (U4's banner). The hook is used only through `StreamProvider`; the router is React Router 7 in declarative mode (`BrowserRouter`), so the route guard is a layout route around the shell.
 - This is the largest phase. If it will not fit one session, finish A2's server side and the API client first, record exactly where you stopped under "Notes between phases", and leave the status `in progress`.
 
 ### 11 · Settings page (A4)
@@ -118,7 +119,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 
 ### 17 · Stream resilience (S1, S2)
 - S2 first is easier: S1's resume is served from S2's ring buffer.
-- S1's client watchdog replaces U4's temporary "no message for 15 s" rule.
+- S1's client watchdog replaces U4's temporary "no message for 15 s" rule (`SILENCE_LIMIT_MS` in `usePriceStream.ts`). With the ingestor down that rule reconnects every 15 s; a heartbeat ends that.
 - Feed row keys switch to event ids (D2 edge case).
 - The token-expiry close from A2 takes precedence over the heartbeat.
 
@@ -154,3 +155,18 @@ Each session appends here when it finishes: what the next phases need to know th
   - The sidebar nav buttons have no horizontal padding, so "Quotes" touches its border. Kept as it was to avoid a layout change; U5 rebuilds the navigation.
   - The sidebar buttons have `role="menuitem"` without a parent `menu` role (U3/U5).
   - In the dialog the sparkline colour (first point versus last) can disagree with the change line above it (tick-to-tick), for example a red chart under a green "+0.26%". M2 makes the change a session value, which should resolve it.
+
+### After phase 03 (2026-11-13)
+- Decided by the owner: the router is **React Router** (v7, declarative mode: `BrowserRouter`, `Routes`, `NavLink`). README Q6 is closed.
+- Routes today: the index route (quotes) and a catch-all 404, both inside the `AppShell` layout route (`components/AppShell`), which holds the sidebar, the stale banner and the live feed. `/chart`, `/history` and `/settings` give the 404 until M4, M3 and A4 add them, and their nav items come back with them.
+- The stream lives in `StreamProvider` (`src/stream/`), above the routes. It exposes two contexts: `useStreamStatus()` (status, attempts, `nextRetryAt`, the debounced `stale` flag, `retry`) and `useStreamData()` (prices, feed). A component that only shows status does not re-render on ticks. Verified: one `/stream` request across client-side navigation.
+- Dialog URL: `/?symbol=AAPL`. Opening from a card pushes an entry marked `{ openedFromList: true }` in history state; closing then calls `navigate(-1)`, so close and Back agree. A dialog reached from a link closes by replacing the URL. Other search params are kept, ready for D1. `useNavigate` is not stable in declarative mode, so `QuotesPage` reads it through a ref to keep `onOpen` stable for `memo(PriceCard)`.
+- U4 choices the plan left as "a threshold": stale banner after 3 s not live (debounced), card "Delayed" after 5 s without a tick on a live stream (5 missed simulator ticks; `DELAYED_AFTER_MS` in `PriceGrid`). Delayed markers are hidden while the banner shows; the banner and dimmed cards cover that case.
+- The dialog's temporary "values may be out of date" line is replaced by the same `StaleBanner` in compact form, and the price dims.
+- Outside the plan: `vite.config.ts` now closes the browser's `/stream` response when the upstream response closes. Without it the dev proxy kept the stream open after the SSE service died, and U4's "Done when" could not be met in development. A production reverse proxy (Q9) has to do the same; check it when that is built.
+- Verified in headless Chrome at 1440px against `pnpm dev:all`, scripted: nav and `aria-current`, open/close/Back/Escape, lowercase normalisation, refresh with the dialog open, unknown symbol, 404, stream count across navigation; loading skeleton, error and Retry, empty list, "—" and "Waiting for trades…" (mocked responses); SSE service killed → banner after 3.4 s, cards dimmed, dialog banner, restart clears it; ingestor stopped → all six cards "Delayed" after 5 s, no banner through a watchdog reconnect, cleared after restart. Not checked: other widths (U2), screen reader output, the `online` event, laptop sleep.
+- Fixed in passing: the sidebar nav padding and `role="menuitem"` (both from the phase 02 notes).
+- Defects noticed outside the scope, not fixed:
+  - The SSE service's SIGTERM shutdown stops listening but keeps open streams alive and does not exit while a client is connected; `tsx watch` then force-kills it and wedges, so the service does not restart on file changes until `pnpm dev:all` is restarted. The shutdown should end open streams (S1 or S2).
+  - The banner says "Connection lost" on first load when the stream has never connected; "Cannot reach the price stream" would be more accurate.
+  - The phase 02 notes' `Sparkline` clipping and colour-disagreement defects are still open.
