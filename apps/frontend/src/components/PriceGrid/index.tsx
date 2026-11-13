@@ -14,7 +14,7 @@ type Props = {
   status: ListStatus;
   onRetry: () => void;
   onOpen: (symbol: string) => void;
-  /** The stream has been down for a while: dim every card. */
+  /** The stream has been down for a while: show every card in greyscale. */
   stale: boolean;
   /** Whether per-card delay markers apply: only while the stream is live. */
   live: boolean;
@@ -65,7 +65,9 @@ export function PriceGrid({ stocks, status, onRetry, onOpen, stale, live, now }:
   }
 
   return (
-    <section className={`${gridClass} transition-opacity duration-300 ${stale ? "opacity-50" : ""}`}>
+    // Stale cards lose their colour rather than fade: fading would take the text
+    // below AA contrast while the cards are still usable.
+    <section className={`${gridClass} transition-[filter] duration-300 ${stale ? "grayscale" : ""}`}>
       {stocks.map((stock) => (
         <PriceCard
           key={stock.symbol}

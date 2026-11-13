@@ -11,7 +11,9 @@
   --border-strong: rgba(255, 255, 255, 0.18);
 
   --text-primary: #e6e8f0;
-  --text-secondary: #6b7894;
+  /* 4.75:1 on --bg-elevated, the lowest-contrast surface it sits on (WCAG AA needs 4.5:1). */
+  --text-secondary: #7d89a4;
+  /* Too dark for text (1.75:1); only for decoration such as borders. */
   --text-muted: #363d52;
   --text-inverse: #0c0e12;
 
@@ -19,7 +21,8 @@
   --accent-brand: #e2f73f;
   --accent-brand-dim: rgba(226, 247, 63, 0.16);
   --positive: #22c55e;
-  --negative: #f0485a;
+  /* Light enough for AA as text on its own 15% tint, also over --bg-elevated (4.54:1). */
+  --negative: #f56674;
   --warning: #f59e0b;
 
   --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04);

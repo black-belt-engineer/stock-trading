@@ -159,6 +159,8 @@ export function QuotesPage(): JSX.Element {
 
   return (
     <>
+      {/* The page heading, for screen reader navigation; sighted users see the active nav item. */}
+      <h1 className="sr-only">Quotes</h1>
       <Topbar stocks={stocks} lastUpdate={lastUpdated} />
       <PriceGrid
         stocks={stocks}

@@ -1,6 +1,26 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
 @import "tailwindcss";
 @import "./tokens.css";
+
+/*
+ * Self-hosted variable fonts (latin subset, from Fontsource; OFL licences next
+ * to the files in public/fonts). `swap` shows the fallback font at once instead
+ * of blank text. index.html preloads both files.
+ */
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/fonts/space-grotesk-latin-wght.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-latin-wght.woff2") format("woff2");
+}
 
 /*
  * Expose the tokens in tokens.css to Tailwind. `inline` makes each utility
@@ -9,7 +29,8 @@
  *
  * Backgrounds, text and borders use Tailwind's per-property namespaces, so
  * `bg-surface`, `text-secondary` and `border-subtle` exist but nonsense such
- * as `text-surface` does not. Accents are plain colours, usable everywhere
+ * as `text-surface` does not. `--text-muted` fails contrast as text, so there
+ * is deliberately no `text-muted` utility. Accents are plain colours, usable everywhere
  * (`text-positive`, `bg-brand-dim`, `outline-brand`, `bg-positive/15`).
  */
 @theme inline {
@@ -26,7 +47,6 @@
 
   --text-color-primary: var(--text-primary);
   --text-color-secondary: var(--text-secondary);
-  --text-color-muted: var(--text-muted);
   --text-color-inverse: var(--text-inverse);
 
   --color-brand: var(--accent-brand);
@@ -56,7 +76,7 @@
   body,
   #root {
     width: 100%;
-    min-height: 100%;
+    height: 100%;
   }
 
   body {
@@ -64,7 +84,7 @@
     background: var(--bg-base);
     color: var(--text-primary);
     font-family: var(--font-sans);
-    font-size: 13px;
+    font-size: 14px;
     line-height: 1.4;
   }
 }

@@ -27,7 +27,10 @@ export function Sparkline({ prices, height }: Props): JSX.Element | null {
   if (!shape) return null;
 
   return (
+    // Decorative: the card and dialog state the price and change in text.
     <svg
+      aria-hidden="true"
+      focusable="false"
       width="100%"
       height={height}
       viewBox={`0 0 ${width} ${height}`}

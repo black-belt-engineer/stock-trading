@@ -27,7 +27,8 @@ export function StaleBanner({ compact = false }: Props): JSX.Element | null {
     >
       <span>
         Connection lost — prices may be out of date.{" "}
-        <span className="text-secondary">
+        {/* Primary, not secondary: secondary drops below AA on the amber tint over the dialog surface. */}
+        <span className="text-primary">
           {secondsLeft === null ? "Reconnecting…" : `Retrying in ${secondsLeft}s`}
         </span>
       </span>

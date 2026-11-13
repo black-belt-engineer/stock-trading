@@ -29,46 +29,63 @@ function PriceCardBase({ stock, onOpen, delayed }: Props): JSX.Element {
 
   const companyName = useMemo(() => stock.name || stock.symbol, [stock.name, stock.symbol]);
 
+  // The button's whole name, read once when it gets focus. Not a live region:
+  // six cards ticking every second would drown out everything else.
+  const label =
+    `${stock.symbol}, ${companyName}, ${formatPrice(stock.currentPrice)}, ` +
+    `${trendUp ? "up" : "down"} ${Math.abs(stock.changePercent).toFixed(2)}%` +
+    (delayed ? ", no recent updates" : "");
+
+  // A button, so it is focusable and opens with Enter and Space. Buttons only
+  // hold phrasing content, hence spans styled as blocks instead of divs.
   return (
-    <article
+    <button
+      type="button"
       onClick={() => onOpen(stock.symbol)}
+      aria-label={label}
+      // Found again by the detail dialog to return focus here when it closes.
+      data-symbol={stock.symbol}
       className={
-        "min-h-[154px] cursor-pointer rounded-[10px] border border-default bg-surface px-4 py-3.5 shadow-card " +
+        "block min-h-[154px] w-full cursor-pointer rounded-[10px] border border-default bg-surface px-4 py-3.5 text-left shadow-card " +
         "transition-colors duration-150 hover:border-strong hover:bg-elevated " +
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
       }
     >
-      <div className="flex justify-between">
-        <div>
-          <div className="font-mono font-semibold">{stock.symbol}</div>
-          <div className="mt-0.5 text-[11px] text-secondary">{companyName}</div>
-        </div>
-        <div
+      <span className="flex justify-between gap-2">
+        <span className="block min-w-0">
+          <span className="block font-mono font-semibold">{stock.symbol}</span>
+          {/* Long names ("Microsoft Corporation") are cut with an ellipsis; the title shows them whole. */}
+          <span title={companyName} className="mt-0.5 block truncate text-[12px] text-secondary">
+            {companyName}
+          </span>
+        </span>
+        <span
           className={
-            "rounded-full px-2 py-0.5 font-mono text-[11px] font-semibold " +
+            "shrink-0 self-start rounded-full px-2 py-0.5 font-mono text-[12px] font-semibold " +
             (trendUp ? "bg-positive/15 text-positive" : "bg-negative/15 text-negative")
           }
         >
           {formatChange(stock.changePercent)}
-        </div>
-      </div>
-      <div className="mt-2 flex items-baseline justify-between gap-2">
-        <div className={`font-mono text-[24px] leading-[1.15] font-semibold ${flashClass[flash]}`}>
+        </span>
+      </span>
+      {/* Wraps rather than overflows: a long price breaks onto two lines and "Delayed" drops below it. */}
+      <span className="mt-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+        <span className={`block min-w-0 font-mono text-[24px] leading-[1.15] font-semibold wrap-anywhere ${flashClass[flash]}`}>
           {formatPrice(stock.currentPrice)}
-        </div>
+        </span>
         {delayed && (
           <span
             title="No recent updates for this symbol"
-            className="rounded-full border border-warning/40 px-2 py-0.5 text-[11px] font-medium text-warning"
+            className="rounded-full border border-warning/40 px-2 py-0.5 text-[12px] font-medium text-warning"
           >
             Delayed
           </span>
         )}
-      </div>
-      <div className="mt-2.5 w-full">
+      </span>
+      <span className="mt-2.5 block w-full">
         <Sparkline prices={stock.sparkline} height={40} />
-      </div>
-    </article>
+      </span>
+    </button>
   );
 }
 
