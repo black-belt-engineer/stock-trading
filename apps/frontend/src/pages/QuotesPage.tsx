@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 import { Topbar } from "../components/Topbar";
-import { FilterPills } from "../components/FilterPills";
 import { PriceGrid } from "../components/PriceGrid";
 import { DetailPanel } from "../components/DetailPanel";
-import { SYMBOLS, useStreamData, useStreamStatus } from "../stream/StreamProvider";
+import { useStreamData, useStreamStatus } from "../stream/StreamProvider";
 import type { ActiveStock } from "../types";
 
 const SPARKLINE_POINTS = 30;
@@ -23,7 +22,6 @@ const EMPTY_STOCK: ActiveStock = {
 };
 
 export function QuotesPage(): JSX.Element {
-  const [filter, setFilter] = useState("all");
   const [selected, setSelected] = useState<string | null>(null);
   const [stocks, setStocks] = useState<ActiveStock[]>([]);
   const [now, setNow] = useState(Date.now());
@@ -93,22 +91,15 @@ export function QuotesPage(): JSX.Element {
 
   const openDetail = useCallback((symbol: string) => setSelected(symbol), []);
 
-  const filtered = useMemo(() => {
-    if (filter === "all") return stocks;
-    if (filter === "tech") return stocks.filter((s) => SYMBOLS.includes(s.symbol));
-    return stocks;
-  }, [filter, stocks]);
-
   const lastUpdated = useMemo(
-    () => filtered.reduce((acc, s) => Math.max(acc, s.lastUpdated ?? 0), 0) || now,
-    [filtered, now],
+    () => stocks.reduce((acc, s) => Math.max(acc, s.lastUpdated ?? 0), 0) || now,
+    [stocks, now],
   );
 
   return (
     <>
-      <Topbar stocks={filtered} lastUpdate={lastUpdated} />
-      <FilterPills value={filter} onChange={setFilter} />
-      <PriceGrid stocks={filtered} onOpen={openDetail} />
+      <Topbar stocks={stocks} lastUpdate={lastUpdated} />
+      <PriceGrid stocks={stocks} onOpen={openDetail} />
       <DetailPanel
         stock={selectedStock}
         streamStatus={status}
