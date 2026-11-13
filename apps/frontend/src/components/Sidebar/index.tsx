@@ -15,39 +15,23 @@ const nav = [
 
 export function Sidebar({ status, attempts }: Props): JSX.Element {
   return (
-    <aside
-      style={{
-        width: 220,
-        background: "var(--bg-sidebar)",
-        borderRight: "1px solid var(--border-subtle)",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        padding: "18px 14px 14px",
-      }}
-    >
+    <aside className="flex w-[220px] flex-col justify-between border-r border-subtle bg-sidebar px-3.5 pt-[18px] pb-3.5">
       <div>
-        <div style={{ color: "var(--accent-brand)", fontWeight: 700, letterSpacing: "0.08em", marginBottom: 18, paddingInline: 6 }}>
-          STREAMTICK
-        </div>
-        <nav style={{ display: "grid", gap: 4 }}>
+        <div className="mb-[18px] px-1.5 font-bold tracking-[0.08em] text-brand">STREAMTICK</div>
+        <nav className="grid gap-1">
           {nav.map((item) => (
             <button
               key={item.label}
               role="menuitem"
               disabled={!item.active}
-              style={{
-                width: "100%",
-                textAlign: "left",
-                height: 36,
-                borderRadius: 8,
-                border: item.active ? "1px solid var(--accent-brand)" : "1px solid transparent",
-                borderLeft: item.active ? "3px solid var(--accent-brand)" : "3px solid transparent",
-                background: item.active ? "var(--accent-brand-dim)" : "transparent",
-                color: item.active ? "var(--accent-brand)" : "var(--text-secondary)",
-                opacity: item.active ? 1 : 0.55,
-                cursor: item.active ? "default" : "not-allowed",
-              }}
+              className={
+                "h-9 w-full rounded-lg border border-l-[3px] text-left transition-colors duration-150 " +
+                "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand " +
+                "disabled:cursor-not-allowed disabled:opacity-55 " +
+                (item.active
+                  ? "border-brand bg-brand-dim text-brand"
+                  : "border-transparent text-secondary enabled:hover:bg-elevated enabled:hover:text-primary")
+              }
             >
               {item.label}
             </button>
