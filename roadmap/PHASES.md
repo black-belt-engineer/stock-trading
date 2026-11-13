@@ -11,7 +11,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 01 | B1, B2, B3, S3 step 1 | 01-bug-fixes.md, 07-streaming.md | — | done |
 | 02 | U1 | 02-ui-foundation.md | 01 | done |
 | 03 | U5, U4 | 02-ui-foundation.md | 02 | done |
-| 04 | U2, U3 | 02-ui-foundation.md | 03 | in progress |
+| 04 | U2, U3 | 02-ui-foundation.md | 03 | done |
 | 05 | M1 | 03-market-data.md | 03 | todo |
 | 06 | M2, M5 | 03-market-data.md | 05 | todo |
 | 07 | M3, M6 | 03-market-data.md | 05 | todo |
@@ -56,6 +56,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 - The symbol list is in three places; after this phase it is in one.
 - Phase 03 removed the dead sector pills and deleted the `FilterPills` component; this phase brings back real ones. `@radix-ui/react-toggle-group` is still a dependency for that. The symbol list to replace includes `SYMBOLS` in `apps/frontend/src/stream/StreamProvider.tsx`.
 - A symbol with no ticks returns `null` prices and renders "—", not `$0.00`.
+- The card's accessible name (U3, `PriceCard` `label`) is built from `formatPrice` and `changePercent`. With `null` prices it must say so (for example "AAPL, Apple Inc., no price yet"), not "$0.00, up 0.00%".
 
 ### 06 · Session stats and movers (M2, M5)
 - M2 first; M5 is small and depends on it.
@@ -99,6 +100,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 ### 13 · Light theme and shortcuts (D4, D5)
 - D4 first.
 - D4 needs every colour to come from a token; grep for leftover `rgba(` and hex values before starting.
+- Phase 04 set dark-theme values for AA: `--text-secondary` `#7d89a4` and `--negative` `#f56674`. The light theme needs its own values checked the same way; the axe script approach in the phase 04 notes covers it.
 - D5's `p` and `v` shortcuts need D2 and D3 from phase 12; the `g s` shortcut and the theme control need the Settings page from phase 11.
 
 ### 14 · Portfolio service and watchlist (P1)
@@ -170,3 +172,26 @@ Each session appends here when it finishes: what the next phases need to know th
   - The SSE service's SIGTERM shutdown stops listening but keeps open streams alive and does not exit while a client is connected; `tsx watch` then force-kills it and wedges, so the service does not restart on file changes until `pnpm dev:all` is restarted. The shutdown should end open streams (S1 or S2).
   - The banner says "Connection lost" on first load when the stream has never connected; "Cannot reach the price stream" would be more accurate.
   - The phase 02 notes' `Sparkline` clipping and colour-disagreement defects are still open.
+
+### After phase 04 (2026-11-13)
+- Decided by the owner: breakpoints are Tailwind's `md` (768px) and `xl` (1280px). Narrow is below 768, medium is 768–1279 (icon rail, feed drawer) and wide is 1280 and up (three columns). The narrow "feed tab" is shell state in `AppShell` (`feedOpen`), not a route. The same state is the medium drawer. A pathname change closes it. Under reduced motion the price flash is simply not shown (no colour substitute); the change badge already carries direction.
+- Decided by the owner, changes U4: the stale state turns cards and the dialog price **greyscale** instead of 50% opacity. Opacity took their text to 2.2–4.4:1 while the cards stay clickable.
+- Layout facts for later pages: the shell is `h-dvh` with independently scrolling regions; a page renders inside `main`, which scrolls. Nav items live in `components/navItems.ts`, shared by the sidebar and the bottom tab bar. A new page (M3, M4, A4) adds its entry there, with an icon in `components/icons.tsx` (hand-written 20×20 SVG). On the rail labels are `sr-only` and shown as `title`. Responsive classes use `md:max-xl:` for medium-only styles.
+- Contrast changes beyond plan step 1, both needed for "all text passes AA": `--negative` `#f0485a` → `#f56674` (the red change badge on its own 15% tint was 4.25:1, 3.92:1 on a hovered card), and the stale banner's countdown is `text-primary` (secondary was 4.38:1 on the amber tint inside the dialog). The `text-muted` utility no longer exists; `--text-muted` stays as a token for decoration.
+- The card's accessible name is the plan's ("AAPL, Apple Inc., $228.50, up 0.12%", plus ", no recent updates" when delayed). axe's `label-content-name-mismatch` flags it because the visible "▲ +0.12%" is not literally in the name; the name starts with the visible symbol, which is what WCAG 2.5.3 needs. Kept as the plan says.
+- Focus return: the dialog has no Radix `Trigger`, so Radix focused nothing on close. `DetailPanel` now focuses `[data-symbol=…]` in `onCloseAutoFocus`. Any new control that opens the dialog without being a card gets the card's focus, not its own; give it a trigger or extend that lookup.
+- Fonts: variable WOFF2, latin subset, from Fontsource 5.3.0, in `public/fonts` with their OFL licences, preloaded in `index.html`. The ▲/▼ arrows are not in the subset and fall back to a system font, as they did with Google Fonts.
+- Verified in headless Chrome against `pnpm dev:all` (scripted Playwright, axe-core 4.14):
+  - No horizontal scroll at 360×740, 768×1024, 1440×900, 720×450 (1440 at 200% zoom) and 740×360 (phone landscape).
+  - The feed toggle is visible at every one of those sizes. The drawer opens, takes focus and closes with Escape or the backdrop, with focus back on the toggle. The feed tab replaces the page and back.
+  - A route change closes both. Long company names truncate with a `title`; a six-figure price fits at 360px.
+  - The dialog is a full-screen sheet below 768px.
+  - Keyboard alone: the tab order reaches every control at each width; Enter and Space open a card. Escape and the Close button return focus to the card, also for a dialog opened by URL.
+  - axe `color-contrast` passes with motion reduced on the dashboard, a hovered card, the feed (tab and drawer), the dialog, the 404 page and the stale state (dashboard and dialog). Without reduced motion, the newest feed row fails only during its 200 ms fade-in.
+  - Fonts load from the app's own origin, with no external requests.
+- Not checked: a real phone (safe-area inset, `dvh` with browser chrome), a real screen reader, Safari/Firefox, light theme (does not exist yet).
+- Defects noticed outside the scope, not fixed:
+  - While the narrow feed tab is showing, `main` is hidden, so the page has no main landmark (axe `landmark-one-main`, moderate). Making the feed tab a route was declined; a fix would be to render the feed inside `main` on narrow screens.
+  - Feed B/S badges are read as the letters "B" and "S"; a visually hidden "buy"/"sell" would help (D2 rebuilds the row).
+  - Phone landscape (360px tall) leaves about 250px for content between the header row and the tab bar; usable, but a compact header there would help.
+  - Still open from earlier notes: `Sparkline` clipping, the sparkline/change colour disagreement, SSE shutdown wedging `tsx watch`, and "Connection lost" on a first load that never connected.
