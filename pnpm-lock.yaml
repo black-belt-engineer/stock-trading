@@ -87,6 +87,9 @@ importers:
       '@stock-platform/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
+      '@stock-platform/symbols':
+        specifier: workspace:*
+        version: link:../../packages/symbols
       '@stock-platform/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -185,6 +188,9 @@ importers:
       '@stock-platform/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@stock-platform/redis':
+        specifier: workspace:*
+        version: link:../../packages/redis
       '@stock-platform/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
@@ -200,6 +206,9 @@ importers:
       fastify-plugin:
         specifier: ^5.0.1
         version: 5.1.0
+      ioredis:
+        specifier: ^5.8.1
+        version: 5.10.1
     devDependencies:
       '@types/node':
         specifier: ^22.10.0
