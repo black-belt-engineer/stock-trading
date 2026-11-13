@@ -11,6 +11,7 @@ export function LiveFeed({ feed }: Props): JSX.Element {
     <aside className="w-[300px] border-l border-subtle bg-sidebar px-3.5 pt-3.5 pb-2.5">
       <div className="mb-3 text-[12px] tracking-widest text-secondary uppercase">Live Feed</div>
       <div className="max-h-[calc(100vh-80px)] overflow-y-auto">
+        {feed.length === 0 && <div className="py-2 text-secondary">Waiting for trades…</div>}
         {feed.map((item) => (
           <div key={item.id} className="animate-feed-in border-b border-subtle py-2 motion-reduce:animate-none">
             <div className="flex items-center justify-between gap-2">
