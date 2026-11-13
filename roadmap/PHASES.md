@@ -11,7 +11,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 01 | B1, B2, B3, S3 step 1 | 01-bug-fixes.md, 07-streaming.md | — | done |
 | 02 | U1 | 02-ui-foundation.md | 01 | done |
 | 03 | U5, U4 | 02-ui-foundation.md | 02 | done |
-| 04 | U2, U3 | 02-ui-foundation.md | 03 | todo |
+| 04 | U2, U3 | 02-ui-foundation.md | 03 | in progress |
 | 05 | M1 | 03-market-data.md | 03 | todo |
 | 06 | M2, M5 | 03-market-data.md | 05 | todo |
 | 07 | M3, M6 | 03-market-data.md | 05 | todo |
