@@ -1,5 +1,10 @@
 import { createKafkaWithEnsuredTopic, type Consumer } from "@stock-platform/kafka";
-import { priceEventMessageKey, type PriceEvent } from "@stock-platform/types";
+import {
+  parseJson,
+  priceEventMessageKey,
+  PriceEventSchema,
+  type PriceEvent,
+} from "@stock-platform/types";
 import type { Logger } from "@stock-platform/logger";
 import type { AppConfig } from "../config/index.js";
 import type { ConsumedMessage } from "../models/consumed-message.js";
@@ -54,12 +59,10 @@ export class KafkaConsumerService {
           throw new Error(`Missing message key at ${topic}:${partition}:${message.offset}`);
         }
 
-        let event: PriceEvent;
-        try {
-          event = JSON.parse(message.value.toString()) as PriceEvent;
-        } catch (err) {
-          this.log.error({ err, topic, partition, offset: message.offset }, "Failed to parse");
-          throw err;
+        const event = parseJson(PriceEventSchema, message.value.toString());
+        if (!event) {
+          this.log.error({ topic, partition, offset: message.offset }, "Failed to parse");
+          throw new Error(`Malformed price event at ${topic}:${partition}:${message.offset}`);
         }
 
         const expectedKey = priceEventMessageKey(event);

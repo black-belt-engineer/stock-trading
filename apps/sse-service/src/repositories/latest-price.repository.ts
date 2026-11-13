@@ -1,6 +1,8 @@
 import type { Redis } from "ioredis";
 import {
+  LatestPriceSchema,
   latestPriceKey,
+  parseJson,
   sparklineKey,
   sparklinePriceFromMember,
   type LatestPrice,
@@ -14,7 +16,8 @@ export class LatestPriceRepository {
     if (!raw) {
       return null;
     }
-    return JSON.parse(raw) as LatestPrice;
+    // A record of the wrong shape counts as no quote rather than a broken one.
+    return parseJson(LatestPriceSchema, raw);
   }
 
   async findSparkline(symbol: string): Promise<number[]> {

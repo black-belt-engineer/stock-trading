@@ -12,7 +12,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 02 | U1 | 02-ui-foundation.md | 01 | done |
 | 03 | U5, U4 | 02-ui-foundation.md | 02 | done |
 | 04 | U2, U3 | 02-ui-foundation.md | 03 | done |
-| 05 | M1 | 03-market-data.md | 03 | todo |
+| 05 | M1 | 03-market-data.md | 03 | done |
 | 06 | M2, M5 | 03-market-data.md | 05 | todo |
 | 07 | M3, M6 | 03-market-data.md | 05 | todo |
 | 08 | M4 | 03-market-data.md | 07 | todo |
@@ -83,7 +83,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 ### 10 · Guard and login (A2, A3)
 - The two items ship together. Do not leave the branch in a state where endpoints are protected and no login exists.
 - Decided: fetch-based stream reader (Q1), refresh token in an `httpOnly` cookie (Q2).
-- Existing callers to route through the new API client: the bootstrap fetch (now in `pages/QuotesPage.tsx`), the `DetailPanel` snapshot fetch, and, if phases 07 and 08 are done, history, candles and the CSV download (blob fetch with the header).
+- Existing callers to route through the new API client: the symbol list fetch (now in `stream/useSymbolList.ts`, called by `StreamProvider`; a `401` there must also count as logged out), the `DetailPanel` snapshot fetch, and, if phases 07 and 08 are done, history, candles and the CSV download (blob fetch with the header).
 - The stream hook must tell `401` (logged out) from `503` (retry) from a dropped connection (U4's banner). The hook is used only through `StreamProvider`; the router is React Router 7 in declarative mode (`BrowserRouter`), so the route guard is a layout route around the shell.
 - This is the largest phase. If it will not fit one session, finish A2's server side and the API client first, record exactly where you stopped under "Notes between phases", and leave the status `in progress`.
 
@@ -94,6 +94,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 ### 12 · Search, feed controls, table view (D1, D2, D3)
 - In that order; D3's header sort shares D1's sort state.
 - "Sort by change" needs M2 (phase 06). If phase 06 is not done, leave that option out.
+- The sector filter is already in the URL (`?sector=<id>`, phase 05), built in `QuotesPage` with `SectorFilter`. Add search and sort beside it as further params, and put D1's filter, search and sort into the one `useMemo` that today only filters by sector.
 - D2 shows trade quantity. If the `quantity: 0` defect from the phase 06 brief is still open, stop and tell the owner before building that row format.
 - S1's event ids do not exist until phase 17; keep the current feed row keys.
 
@@ -195,3 +196,35 @@ Each session appends here when it finishes: what the next phases need to know th
   - Feed B/S badges are read as the letters "B" and "S"; a visually hidden "buy"/"sell" would help (D2 rebuilds the row).
   - Phone landscape (360px tall) leaves about 250px for content between the header row and the tab bar; usable, but a compact header there would help.
   - Still open from earlier notes: `Sparkline` clipping, the sparkline/change colour disagreement, SSE shutdown wedging `tsx watch`, and "Connection lost" on a first load that never connected.
+
+### After phase 05 (2026-11-13)
+- Decided by the owner: the registry is a new package, `packages/symbols` (`SYMBOL_REGISTRY`, `findSymbol`, `SYMBOL_PATTERN`, `isValidSymbolFormat`); the sector filter lives in the URL as `?sector=<id>` (`health-care`, from `sectorId()` in `components/SectorFilter`); a malformed symbol gets `400 VALIDATION_ERROR`, a well-formed unknown one `404 NOT_FOUND`, and one bad entry in `/stream?symbols=` rejects the whole request before any SSE header is sent.
+- 18 symbols in 7 sectors, including `BRK.B`. The ingestor now stamps each tick with the registry's exchange (was always `NASDAQ`). Discovery takes `name` from the registry, not from the stored tick.
+- Adding a symbol in an existing sector is one line in `packages/symbols/src/index.ts`. A new sector also needs its name in the `Sector` union in the same file (kept for typo safety; a typo would otherwise add a second pill). Packages are not watched in `pnpm dev:all`: run `pnpm --filter @stock-platform/symbols build` (or `pnpm build`) and the `tsx watch` services pick it up.
+- Discovery returns `null` for `currentPrice`, `changePercent`, `changeValue`, `high24h`, `low24h`, `volume24h` and `lastUpdated` when a symbol has no ticks. In the frontend `ActiveStock` the price fields are `number | null`, but `lastUpdated` stays a number with `0` meaning never. `formatPrice`, `formatChange` and `formatVolume` take `null` and return "—" (`NO_VALUE`). Anything new that reads these fields (M2 tiles, D1 sort, D3 table, M5 movers, P3) has to handle `null`; sort them last.
+- A card with no price shows "—", a neutral badge, no "Delayed" marker, and the accessible name "ORCL, Oracle Corporation, no price yet". The dialog shows "No trades yet" and "No data yet" (snapshot 404).
+- `/quotes/:symbol/snapshot` still answers 404 both for an unknown symbol and for a registered symbol with no ticks; the `code` is `NOT_FOUND` in both and only the message differs. The frontend only asks for symbols in the list, so it reads 404 as "no data yet".
+- Frontend structure change: `StreamProvider` now owns the symbol list (`useSymbolList`), opens the stream only once the list has symbols (sorted, stable identity across list reloads), and keeps the merged live `stocks`. `useStreamData()` returns `{ prices, feed, stocks, listStatus, retryList }`; `QuotesPage` no longer fetches. When the list fails, no stream is opened, the status is "Disconnected" and the stale banner stays off. A reload with the list loaded resets `stocks` while rendering, not in an effect: an effect left one render with a ready list and no stocks, which stripped `?sector=` on reload.
+- Radix `ToggleGroup` with `type="single"` renders `role="radio"` items with `aria-checked` in a `role="group"` labelled "Filter by sector". It is one tab stop, and the arrows move between pills. Sector changes replace the history entry. On narrow screens the row scrolls sideways and scrolls the selected pill into view.
+- Verified against `pnpm dev:all`: with curl, discovery (18 entries, sector, exchange), snapshot 200/404/400 (`aapl`, `BRK.B`, `ZZZZ`, `1ABC`, `A B`, 14 characters), `/stream` 404 and 400 as JSON, empty `symbols=` streams everything, duplicates collapse. In headless Chrome (Playwright, axe-core 4.14, reduced motion) at 360×740, 768×1024 and 1440×900: the list request completes before the one `/stream` request, which names all 18 symbols; no horizontal page scroll; Financials shows JPM, BAC, V, BRK.B and the top bar counts 4; reload keeps `?sector=`; open and close a dialog under a filter keeps it and returns focus to the card; `?sector=energy&symbol=AAPL` opens AAPL's dialog; an unknown sector is removed from the URL; keyboard selection of pills; axe clean on the filtered and full dashboard. "Done when": with the ingestor paused, one added line (ORCL) appeared in discovery, the stream query, the Technology filter and the grid as "—"; after resuming the ingestor it got prices and appeared in the feed. The test line was removed afterwards. List failure (mocked 500) and Retry checked. Phase 04's keyboard and focus-return script still passes.
+- Decided by the owner during review: **no `any`, no non-null `!`, no `as` casts anywhere in the repo.** All 16 existing ones were removed in this phase.
+  - JSON from outside the process is checked, not cast. `PriceEvent`, `LatestPrice` and `StreamQuote` are TypeBox schemas in `packages/types`, with their types inferred from them; `parseJson(schema, text)` returns the typed value or `null`. Auth has `userSummarySchema`. The frontend uses `isRecord` and `finiteOrNull` from `utils/guards.ts`.
+  - Changed behaviour:
+    - A Kafka message that is valid JSON but the wrong shape now fails in the consumer like invalid JSON already did. The message is not committed and is retried. Not tested by injecting one.
+    - A latest-price record in Redis of the wrong shape counts as absent. The SSE service returns 404 for it, and the consumer rebuilds it from the next tick, which resets high, low and volume.
+    - A malformed stream entry is skipped.
+    - A malformed stored refresh entry is an unknown token (401).
+    - A user service response of the wrong shape is a 502.
+    - A malformed snapshot shows the dialog's error state.
+  - Verified against `pnpm dev:all`:
+    - Snapshot and stream work end to end.
+    - Bad entries injected into `price:updates` are skipped while the stream continues.
+    - A corrupted `price:latest:AAPL` gives a 404 until the next tick.
+    - Auth: register, login, refresh, single use, the JWT guard with a good and a bad token, and both services' 400 validation responses; a corrupted refresh entry gives 401.
+    - The browser checks above were re-run, plus the dialog tiles and a mocked malformed snapshot.
+- Not checked: a real phone, a screen reader, Safari/Firefox, the Dockerfiles (`packages/symbols` was added to the ingestor's and SSE service's, but no image was built).
+- Defects noticed outside the scope, not fixed:
+  - The Dockerfiles of the SSE service, ingestor and consumer do not copy all their workspace dependencies (`errors`, `schemas`, `redis` for the SSE service), so the images probably do not build. Not tried.
+  - The narrow feed tab's scrolling list fails axe `scrollable-region-focusable` (serious): it can be scrolled but holds nothing focusable. D2 rebuilds the feed.
+  - With 18 symbols the feed scrolls by ~18 rows a second, and without reduced motion axe catches several rows mid fade-in (contrast). Same cause as the phase 04 note; more visible now. D2's pause control would help.
+  - Still open from earlier notes: `Sparkline` clipping, the sparkline/change colour disagreement, SSE shutdown wedging `tsx watch`, "Connection lost" on a first load, no main landmark on the narrow feed tab.

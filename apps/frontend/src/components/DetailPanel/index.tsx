@@ -6,6 +6,7 @@ import { Sparkline } from "../Sparkline";
 import { StaleBanner } from "../StaleBanner";
 import type { ActiveStock, ListStatus, SnapshotData } from "../../types";
 import { formatChange, formatPrice, formatTimeAgo, formatVolume } from "../../utils/format";
+import { finiteOrNull, isRecord } from "../../utils/guards";
 
 type Props = {
   /** Symbol from the URL; `null` closes the dialog. */
@@ -28,6 +29,35 @@ type SnapshotState =
   | { symbol: string; status: "loading" }
   | { symbol: string; status: "ready"; data: SnapshotData | null }
   | { symbol: string; status: "error" };
+
+/** Checks the snapshot response field by field; null when it is not a snapshot. */
+function parseSnapshot(json: unknown): SnapshotData | null {
+  if (!isRecord(json)) return null;
+  const { symbol, name } = json;
+  const currentPrice = finiteOrNull(json.currentPrice);
+  const previousPrice = finiteOrNull(json.previousPrice);
+  const changeValue = finiteOrNull(json.changeValue);
+  const changePercent = finiteOrNull(json.changePercent);
+  const high24h = finiteOrNull(json.high24h);
+  const low24h = finiteOrNull(json.low24h);
+  const volume24h = finiteOrNull(json.volume24h);
+  const lastUpdated = finiteOrNull(json.lastUpdated);
+  if (
+    typeof symbol !== "string" ||
+    typeof name !== "string" ||
+    currentPrice === null ||
+    previousPrice === null ||
+    changeValue === null ||
+    changePercent === null ||
+    high24h === null ||
+    low24h === null ||
+    volume24h === null ||
+    lastUpdated === null
+  ) {
+    return null;
+  }
+  return { symbol, name, currentPrice, previousPrice, changeValue, changePercent, high24h, low24h, volume24h, lastUpdated };
+}
 
 function formatSignedPrice(n: number): string {
   return `${n > 0 ? "+" : ""}${formatPrice(n)}`;
@@ -54,10 +84,13 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
     setSnapshot({ symbol, status: "loading" });
 
     fetch(`/quotes/${encodeURIComponent(symbol)}/snapshot`, { signal: controller.signal })
-      .then(async (response) => {
+      .then(async (response): Promise<SnapshotData | null> => {
         if (response.status === 404) return null;
         if (!response.ok) throw new Error(`Snapshot request failed with ${response.status}`);
-        return (await response.json()) as SnapshotData;
+        const data = parseSnapshot(await response.json());
+        // A response of the wrong shape is shown as an error, with Retry.
+        if (!data) throw new Error("Snapshot response has an unexpected shape");
+        return data;
       })
       .then((data) => {
         if (controller.signal.aborted) return;
@@ -159,9 +192,13 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
             <>
               <section className={`px-5 pt-5 pb-3 text-center transition-[filter] duration-300 ${stale ? "grayscale" : ""}`}>
                 <div className="font-mono text-[36px] font-semibold wrap-anywhere">{formatPrice(stock.currentPrice)}</div>
-                <div className={`font-mono ${trendUp ? "text-positive" : "text-negative"}`}>
-                  {formatSignedPrice(stock.changeValue)} / {formatChange(stock.changePercent)}
-                </div>
+                {stock.changeValue === null || stock.changePercent === null ? (
+                  <div className="text-secondary">No trades yet</div>
+                ) : (
+                  <div className={`font-mono ${trendUp ? "text-positive" : "text-negative"}`}>
+                    {formatSignedPrice(stock.changeValue)} / {formatChange(stock.changePercent)}
+                  </div>
+                )}
               </section>
 
               <StaleBanner compact />
@@ -218,14 +255,17 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
  * contradict the price shown above them. Volume is as of when the dialog opened.
  */
 function tiles(stock: ActiveStock, data: SnapshotData): [string, string][] {
-  const high = Math.max(data.high24h, stock.currentPrice);
-  const low = Math.min(data.low24h, stock.currentPrice);
+  // The list may predate the symbol's first tick while the snapshot does not.
+  const price = stock.currentPrice ?? data.currentPrice;
+  const change = stock.changeValue ?? data.changeValue;
+  const high = Math.max(data.high24h, price);
+  const low = Math.min(data.low24h, price);
   return [
     ["High since start", formatPrice(high)],
     ["Low since start", formatPrice(low)],
     ["Volume since start", formatVolume(data.volume24h)],
-    ["Previous tick", formatPrice(stock.currentPrice - stock.changeValue)],
+    ["Previous tick", formatPrice(price - change)],
     ["Range since start", formatPrice(high - low)],
-    ["Last updated", formatTimeAgo(stock.lastUpdated)],
+    ["Last updated", formatTimeAgo(stock.lastUpdated || data.lastUpdated)],
   ];
 }

@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FeedEvent, LiveQuote } from "../types";
+import { finiteOrNull, isRecord } from "../utils/guards";
 
 export type StreamStatus = "connecting" | "live" | "reconnecting" | "disconnected";
 
-const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000, 30000];
+const BACKOFF = [500, 1000, 2000, 4000, 8000, 16000];
+/** The wait once BACKOFF is used up. */
+const MAX_BACKOFF_MS = 30000;
 
 /**
  * Temporary until S1 adds a server heartbeat: a connection that has delivered
@@ -16,33 +19,29 @@ const SILENCE_LIMIT_MS = 15_000;
 /** Returns null for a malformed message so one bad frame cannot throw inside a listener. */
 function parseQuote(raw: unknown): LiveQuote | null {
   if (typeof raw !== "string") return null;
-  let data: Partial<LiveQuote> | null;
+  let data: unknown;
   try {
-    data = JSON.parse(raw) as Partial<LiveQuote> | null;
+    data = JSON.parse(raw);
   } catch {
     return null;
   }
-  if (!data || typeof data !== "object" || typeof data.symbol !== "string" || data.symbol === "") {
+  if (!isRecord(data) || typeof data.symbol !== "string" || data.symbol === "") {
     return null;
   }
-  const num = (value: unknown, fallback: number): number =>
-    typeof value === "number" && Number.isFinite(value) ? value : fallback;
   return {
     symbol: data.symbol,
     name: typeof data.name === "string" && data.name !== "" ? data.name : data.symbol,
-    price: num(data.price, 0),
-    changeValue:
-      typeof data.changeValue === "number" && Number.isFinite(data.changeValue)
-        ? data.changeValue
-        : undefined,
-    changePercent: num(data.changePercent, 0),
-    quantity: num(data.quantity, 0),
+    price: finiteOrNull(data.price) ?? 0,
+    changeValue: finiteOrNull(data.changeValue) ?? undefined,
+    changePercent: finiteOrNull(data.changePercent) ?? 0,
+    quantity: finiteOrNull(data.quantity) ?? 0,
     side: data.side === "sell" ? "sell" : "buy",
-    timestamp: num(data.timestamp, Date.now()),
+    timestamp: finiteOrNull(data.timestamp) ?? Date.now(),
   };
 }
 
-export function usePriceStream(symbols: string[]): {
+/** Opens no connection while `symbols` is null or empty. */
+export function usePriceStream(symbols: string[] | null): {
   prices: Map<string, LiveQuote>;
   feed: FeedEvent[];
   status: StreamStatus;
@@ -64,9 +63,10 @@ export function usePriceStream(symbols: string[]): {
   /** Set by the effect below; reconnects immediately. A no-op before mount and after unmount. */
   const retryRef = useRef<() => void>(() => {});
 
-  const query = useMemo(() => symbols.join(","), [symbols]);
+  const query = useMemo(() => symbols?.join(",") ?? "", [symbols]);
 
   useEffect(() => {
+    if (query === "") return;
     let mounted = true;
 
     const clearTimer = (): void => {
@@ -88,8 +88,7 @@ export function usePriceStream(symbols: string[]): {
       closeSource();
       if (!mounted) return;
       setStatus("reconnecting");
-      const index = Math.min(retriesRef.current, BACKOFF.length - 1);
-      const delay = BACKOFF[index]!;
+      const delay = BACKOFF[retriesRef.current] ?? MAX_BACKOFF_MS;
       retriesRef.current += 1;
       setReconnectAttempts(retriesRef.current);
       setNextRetryAt(Date.now() + delay);
@@ -125,13 +124,13 @@ export function usePriceStream(symbols: string[]): {
       // Sent once per connection: current state, not trades. Prices only, never the feed.
       source.addEventListener("snapshot", (event) => {
         lastMessageRef.current = Date.now();
-        const quote = parseQuote((event as MessageEvent).data);
+        const quote = parseQuote(event.data);
         if (quote) applyQuote(quote);
       });
 
       source.addEventListener("price", (event) => {
         lastMessageRef.current = Date.now();
-        const safeData = parseQuote((event as MessageEvent).data);
+        const safeData = parseQuote(event.data);
         if (!safeData) return;
 
         applyQuote(safeData);

@@ -1,5 +1,6 @@
 import type { PriceEvent } from "@stock-platform/types";
-import { SYMBOL_CONFIG, RANDOM_WALK, type SymbolConfigRow } from "../constants.js";
+import { SYMBOL_REGISTRY, type SymbolInfo } from "@stock-platform/symbols";
+import { RANDOM_WALK } from "../constants.js";
 
 export function randomWalkMultiplier(): number {
   return 1 + (Math.random() * 2 * RANDOM_WALK - RANDOM_WALK);
@@ -14,12 +15,12 @@ export class PriceEventService {
   private readonly previousPrices = new Map<string, number>();
 
   constructor() {
-    for (const row of SYMBOL_CONFIG) {
+    for (const row of SYMBOL_REGISTRY) {
       this.previousPrices.set(row.symbol, row.seed);
     }
   }
 
-  buildNextEvent(row: SymbolConfigRow): PriceEvent {
+  buildNextEvent(row: SymbolInfo): PriceEvent {
     const previousPrice = this.previousPrices.get(row.symbol) ?? row.seed;
     const nextPrice = calculateNextPrice(previousPrice);
     this.previousPrices.set(row.symbol, nextPrice);
@@ -42,7 +43,7 @@ export class PriceEventService {
       source: "fake",
       size,
       side,
-      exchange: "NASDAQ",
+      exchange: row.exchange,
       conditions: [],
     };
   }

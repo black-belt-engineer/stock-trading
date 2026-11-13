@@ -1,4 +1,8 @@
-export function formatPrice(n: number): string {
+/** Shown in place of a value that does not exist yet (a symbol with no ticks). */
+export const NO_VALUE = "—";
+
+export function formatPrice(n: number | null): string {
+  if (n === null) return NO_VALUE;
   const value = Number.isFinite(n) ? n : 0;
   return value.toLocaleString("en-US", {
     style: "currency",
@@ -8,14 +12,16 @@ export function formatPrice(n: number): string {
   });
 }
 
-export function formatChange(n: number): string {
+export function formatChange(n: number | null): string {
+  if (n === null) return NO_VALUE;
   const value = Number.isFinite(n) ? n : 0;
   const arrow = value >= 0 ? "▲" : "▼";
   const sign = value >= 0 ? "+" : "";
   return `${arrow} ${sign}${value.toFixed(2)}%`;
 }
 
-export function formatVolume(n: number): string {
+export function formatVolume(n: number | null): string {
+  if (n === null) return NO_VALUE;
   const value = Number.isFinite(n) ? n : 0;
   return Math.round(value).toLocaleString("en-US");
 }

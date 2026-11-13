@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
 import type { Logger } from "@stock-platform/logger";
+import { parseSymbolList } from "../models/symbols.js";
 import type { ConnectionTrackerService } from "../services/connection-tracker.service.js";
 import type { StreamSubscriptionService } from "../services/stream-subscription.service.js";
 
@@ -23,17 +24,20 @@ const streamRoutesImpl: FastifyPluginAsync<StreamRouteDeps> = async (fastify, op
   const { connectionTracker, log, streamSubscriptionService } = opts;
 
   fastify.get<{ Querystring: { symbols?: string } }>("/stream", async (request, reply) => {
+    // Validated before any SSE header is sent, so a bad list gets a normal 400 or 404.
+    const symbols = parseSymbolList(request.query.symbols);
+
     request.raw.setTimeout(0);
     setSseHeaders(reply);
     connectionTracker.increment();
 
-    const initialQuotes = await streamSubscriptionService.getInitialQuotes(request.query.symbols);
+    const initialQuotes = await streamSubscriptionService.getInitialQuotes(symbols);
     // Current state, not trades: sent as `snapshot` so clients keep them out of the feed.
     for (const payload of initialQuotes) {
       reply.raw.write(`event: snapshot\ndata: ${JSON.stringify(payload)}\n\n`);
     }
 
-    const unsubscribe = streamSubscriptionService.subscribe(request.query.symbols, (quote) => {
+    const unsubscribe = streamSubscriptionService.subscribe(symbols, (quote) => {
       try {
         reply.raw.write(`event: price\ndata: ${JSON.stringify(quote)}\n\n`);
       } catch (err) {

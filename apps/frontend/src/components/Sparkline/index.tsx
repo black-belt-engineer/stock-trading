@@ -9,7 +9,9 @@ type Props = {
 export function Sparkline({ prices, height }: Props): JSX.Element | null {
   const width = 100;
   const shape = useMemo(() => {
-    if (prices.length < 2) return null;
+    const first = prices[0];
+    const last = prices[prices.length - 1];
+    if (prices.length < 2 || first === undefined || last === undefined) return null;
     const min = Math.min(...prices);
     const max = Math.max(...prices);
     const points = prices.map((price, index) => {
@@ -19,7 +21,7 @@ export function Sparkline({ prices, height }: Props): JSX.Element | null {
     });
     const polyline = points.join(" ");
     const polygon = [`0,${height}`, ...points, `${width},${height}`].join(" ");
-    const isUp = prices[prices.length - 1]! >= prices[0]!;
+    const isUp = last >= first;
     const color = isUp ? "var(--positive)" : "var(--negative)";
     return { polyline, polygon, color };
   }, [prices, height]);
