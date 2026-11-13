@@ -7,9 +7,15 @@ import { DetailPanel } from "../components/DetailPanel";
 import { ALL_SECTORS, SectorFilter, sectorId } from "../components/SectorFilter";
 import type { SectorOption } from "../components/SectorFilter";
 import { useStreamData, useStreamStatus } from "../stream/StreamProvider";
+import { isRecord } from "../utils/guards";
 
 /** Marks a history entry the dashboard pushed itself, so closing the dialog can go back. */
-type DialogState = { openedFromList: true } | null;
+type DialogState = { openedFromList: true };
+
+/** History state can be anything another page or a reload left there; check it field by field. */
+function isOpenedFromList(state: unknown): boolean {
+  return isRecord(state) && state.openedFromList === true;
+}
 
 export function QuotesPage(): JSX.Element {
   const [now, setNow] = useState(Date.now());
@@ -77,9 +83,9 @@ export function QuotesPage(): JSX.Element {
 
   // Normalise `?symbol=aapl` to upper case without adding a history entry.
   useEffect(() => {
-    if (rawSymbol === null || rawSymbol === selected) return;
+    if (selected === null || rawSymbol === selected) return;
     const next = new URLSearchParams(searchParams);
-    next.set("symbol", selected!);
+    next.set("symbol", selected);
     navigate({ search: `?${next.toString()}` }, { replace: true, state: location.state });
   }, [rawSymbol, selected, searchParams, location.state, navigate]);
 
@@ -110,7 +116,7 @@ export function QuotesPage(): JSX.Element {
     // Opened from the list: going back removes the entry, so the back button
     // and the close button agree. Opened from a link: there is no entry of ours
     // to go back to, so replace the URL instead of leaving the site.
-    if ((location.state as DialogState)?.openedFromList) {
+    if (isOpenedFromList(location.state)) {
       navigate(-1);
       return;
     }

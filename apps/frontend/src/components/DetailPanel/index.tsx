@@ -6,6 +6,7 @@ import { Sparkline } from "../Sparkline";
 import { StaleBanner } from "../StaleBanner";
 import type { ActiveStock, ListStatus, SnapshotData } from "../../types";
 import { formatChange, formatPrice, formatTimeAgo, formatVolume } from "../../utils/format";
+import { finiteOrNull, isRecord } from "../../utils/guards";
 
 type Props = {
   /** Symbol from the URL; `null` closes the dialog. */
@@ -28,6 +29,35 @@ type SnapshotState =
   | { symbol: string; status: "loading" }
   | { symbol: string; status: "ready"; data: SnapshotData | null }
   | { symbol: string; status: "error" };
+
+/** Checks the snapshot response field by field; null when it is not a snapshot. */
+function parseSnapshot(json: unknown): SnapshotData | null {
+  if (!isRecord(json)) return null;
+  const { symbol, name } = json;
+  const currentPrice = finiteOrNull(json.currentPrice);
+  const previousPrice = finiteOrNull(json.previousPrice);
+  const changeValue = finiteOrNull(json.changeValue);
+  const changePercent = finiteOrNull(json.changePercent);
+  const high24h = finiteOrNull(json.high24h);
+  const low24h = finiteOrNull(json.low24h);
+  const volume24h = finiteOrNull(json.volume24h);
+  const lastUpdated = finiteOrNull(json.lastUpdated);
+  if (
+    typeof symbol !== "string" ||
+    typeof name !== "string" ||
+    currentPrice === null ||
+    previousPrice === null ||
+    changeValue === null ||
+    changePercent === null ||
+    high24h === null ||
+    low24h === null ||
+    volume24h === null ||
+    lastUpdated === null
+  ) {
+    return null;
+  }
+  return { symbol, name, currentPrice, previousPrice, changeValue, changePercent, high24h, low24h, volume24h, lastUpdated };
+}
 
 function formatSignedPrice(n: number): string {
   return `${n > 0 ? "+" : ""}${formatPrice(n)}`;
@@ -54,10 +84,13 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
     setSnapshot({ symbol, status: "loading" });
 
     fetch(`/quotes/${encodeURIComponent(symbol)}/snapshot`, { signal: controller.signal })
-      .then(async (response) => {
+      .then(async (response): Promise<SnapshotData | null> => {
         if (response.status === 404) return null;
         if (!response.ok) throw new Error(`Snapshot request failed with ${response.status}`);
-        return (await response.json()) as SnapshotData;
+        const data = parseSnapshot(await response.json());
+        // A response of the wrong shape is shown as an error, with Retry.
+        if (!data) throw new Error("Snapshot response has an unexpected shape");
+        return data;
       })
       .then((data) => {
         if (controller.signal.aborted) return;

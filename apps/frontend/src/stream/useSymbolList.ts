@@ -1,14 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ActiveStock, ListStatus } from "../types";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** A number from the server, or null for anything else (missing, null, NaN). */
-function priceOrNull(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
+import { finiteOrNull, isRecord } from "../utils/guards";
 
 function text(value: unknown, fallback: string): string {
   return typeof value === "string" && value !== "" ? value : fallback;
@@ -23,16 +15,16 @@ function parseStock(item: unknown): ActiveStock | null {
     name: text(item.name, item.symbol),
     sector: text(item.sector, "Other"),
     exchange: text(item.exchange, ""),
-    currentPrice: priceOrNull(item.currentPrice),
-    changePercent: priceOrNull(item.changePercent),
-    changeValue: priceOrNull(item.changeValue),
-    high24h: priceOrNull(item.high24h),
-    low24h: priceOrNull(item.low24h),
-    volume24h: priceOrNull(item.volume24h),
+    currentPrice: finiteOrNull(item.currentPrice),
+    changePercent: finiteOrNull(item.changePercent),
+    changeValue: finiteOrNull(item.changeValue),
+    high24h: finiteOrNull(item.high24h),
+    low24h: finiteOrNull(item.low24h),
+    volume24h: finiteOrNull(item.volume24h),
     sparkline: Array.isArray(item.sparkline)
       ? item.sparkline.filter((p): p is number => typeof p === "number" && Number.isFinite(p))
       : [],
-    lastUpdated: priceOrNull(item.lastUpdated) ?? 0,
+    lastUpdated: finiteOrNull(item.lastUpdated) ?? 0,
   };
 }
 
