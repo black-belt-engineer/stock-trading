@@ -9,7 +9,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | Phase | Items | Plan file | Needs | Status |
 |---|---|---|---|---|
 | 01 | B1, B2, B3, S3 step 1 | 01-bug-fixes.md, 07-streaming.md | — | done |
-| 02 | U1 | 02-ui-foundation.md | 01 | in progress |
+| 02 | U1 | 02-ui-foundation.md | 01 | done |
 | 03 | U5, U4 | 02-ui-foundation.md | 02 | todo |
 | 04 | U2, U3 | 02-ui-foundation.md | 03 | todo |
 | 05 | M1 | 03-market-data.md | 03 | todo |
@@ -47,6 +47,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 
 ### 04 · Responsive and accessible (U2, U3)
 - U2 first, then U3.
+- Already done in phase 02: the flash, pulse, feed-row and skeleton animations stop under `prefers-reduced-motion` (`motion-reduce:animate-none`), and the card already carries `focus-visible` ring classes that take effect once U3 makes it focusable. U3 step 4 still has to decide whether "a static colour" needs more than the animation simply not running.
 - Already done in phase 01: dialog width `min(420px, calc(100vw - 32px))` (U2 turns it into a full-screen sheet on narrow screens) and `aria-label="Close"` on the dialog close button (U3 step 7).
 - Neither item can be verified by the type-checker. Check 360px, 768px and 1440px, and tab through the whole dashboard.
 
@@ -138,3 +139,18 @@ Each session appends here when it finishes: what the next phases need to know th
 - `StreamQuote` gained `changeValue` (tick-to-tick).
 - The marker cleanup script is `apps/consumer/scripts/cleanup-processed-markers.mjs` (`pnpm --filter @stock-platform/consumer cleanup:markers`, `--dry-run` to count). It removes only markers without an expiry.
 - Open: Kafka retention versus the 24-hour marker (phase 18 brief). Open: feed rows carry `quantity: 0` and a guessed side (phase 06 brief).
+
+### After phase 02 (2026-11-13)
+- U1 is complete: no component has a `style` prop, and `global.css` has no component classes left (`.mono`, `.card-surface`, `.flash-*`, `.text-muted` are gone).
+- Verified in headless Chromium at 1440px against the running stack (`pnpm dev:all`): computed styles and bounding boxes of every element were compared before and after each component's conversion, and hover, tab focus, pill states, the dialog's loading and error states and reduced motion were exercised. Other widths were not checked; layout at narrow widths is unchanged and still U2's job.
+- Token names now: `--accent-brand`, `--accent-brand-dim`, `--positive`, `--negative`, `--warning`; new `--bg-overlay` and `--dialog-shadow`. The old `--accent-teal/lime/green/red/amber` no longer exist.
+- Tailwind classes come from the `@theme inline` block in `global.css`. Backgrounds, text and borders use per-property namespaces, so the classes are `bg-{base,surface,elevated,sidebar,input,overlay}`, `text-{primary,secondary,muted,inverse}` and `border-{subtle,default,strong}`. Accents work with any utility: `brand`, `brand-dim`, `positive`, `negative`, `warning` (for example `text-positive`, `bg-negative/15`, `outline-brand`). Also `shadow-card`, `shadow-dialog`, `font-mono`, and `animate-{flash-up,flash-down,pulse-live,pulse-reconnecting,skeleton,feed-in}`.
+- Conventions the conversion follows, worth keeping: font sizes are arbitrary pixel values (`text-[11px]`) because the named sizes (`text-xs`) also set a line height and the body is 13px/1.4; a dynamic class is picked from a map of complete class strings, never assembled from parts, or Tailwind's scanner misses it; the focus ring is `focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand`.
+- Do not add plain CSS rules to `global.css` outside an `@layer`: unlayered CSS beats every Tailwind utility. The old `.card-surface` would have overridden `shadow-*` and `bg-*` on the same element.
+- Buy/sell badges in the feed are now `--positive`/`--negative` (were brand lime/red), matching the cards.
+- Not done, by the plan's own condition: the dialog overlay keeps `backdrop-filter` under reduced motion. The plan says to drop it only "if it stutters", which could not be measured here.
+- Defects noticed outside the scope, not fixed:
+  - `Sparkline` maps prices to between 30% and 110% of its height, so the lowest part of every line is clipped and the line shows gaps. The offset should be subtracted, not added (`Sparkline/index.tsx`, the `y` formula).
+  - The sidebar nav buttons have no horizontal padding, so "Quotes" touches its border. Kept as it was to avoid a layout change; U5 rebuilds the navigation.
+  - The sidebar buttons have `role="menuitem"` without a parent `menu` role (U3/U5).
+  - In the dialog the sparkline colour (first point versus last) can disagree with the change line above it (tick-to-tick), for example a red chart under a green "+0.26%". M2 makes the change a session value, which should resolve it.
