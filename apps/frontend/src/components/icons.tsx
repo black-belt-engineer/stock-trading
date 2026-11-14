@@ -44,6 +44,20 @@ export function FeedIcon(): JSX.Element {
 }
 
 /** A clock with a back arrow: the tick history. */
+/** Three candles: the chart. */
+export function ChartIcon(): JSX.Element {
+  return (
+    <Icon>
+      <path d="M5 3.5v13" />
+      <rect x="3.5" y="6" width="3" height="6" rx="0.6" />
+      <path d="M10 2.5v12" />
+      <rect x="8.5" y="4.5" width="3" height="7" rx="0.6" />
+      <path d="M15 6v11" />
+      <rect x="13.5" y="9" width="3" height="5" rx="0.6" />
+    </Icon>
+  );
+}
+
 export function HistoryIcon(): JSX.Element {
   return (
     <Icon>

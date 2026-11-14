@@ -19,3 +19,8 @@ export function sessionIdFor(timestamp: number, exchange: string): string {
 export function sessionStartFor(timestamp: number, _exchange: string): number {
   return Math.floor(timestamp / DAY_MS) * DAY_MS;
 }
+
+/** End (exclusive) of the session that contains `timestamp`, which is also the start of the next one, in epoch ms. */
+export function sessionEndFor(timestamp: number, exchange: string): number {
+  return sessionStartFor(timestamp, exchange) + DAY_MS;
+}

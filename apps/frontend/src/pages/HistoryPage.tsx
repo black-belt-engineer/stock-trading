@@ -1,12 +1,13 @@
-import * as ToggleGroup from "@radix-ui/react-toggle-group";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, JSX } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
-import { pillClass } from "../components/SectorFilter";
+import { buttonClass, panelClass } from "../components/pageStyles";
+import { PillGroup } from "../components/PillGroup";
+import { SymbolPicker } from "../components/SymbolPicker";
 import { useTickHistory } from "../hooks/useTickHistory";
 import type { HistoryTick, QueriedRange } from "../hooks/useTickHistory";
 import { useStreamData } from "../stream/StreamProvider";
-import type { ActiveStock, FeedEvent } from "../types";
+import type { FeedEvent } from "../types";
 import {
   differentLocalDays,
   formatPrice,
@@ -30,12 +31,6 @@ const DEFAULT_RANGE = RANGES[0];
 
 /** Live mode keeps at most this many streamed rows above the stored ones. */
 const MAX_LIVE_ROWS = 2000;
-
-const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
-const buttonClass =
-  "inline-flex h-8 cursor-pointer items-center rounded-md border border-default bg-elevated px-3.5 text-primary transition-colors duration-150 " +
-  `hover:border-strong disabled:cursor-default disabled:opacity-60 ${focusRing}`;
-const panelClass = "rounded-[10px] border border-default bg-surface px-4 py-8 text-center text-secondary";
 
 /**
  * `/history/:symbol?range=1h`: the stored trades of one symbol, newest first,
@@ -91,19 +86,7 @@ export function HistoryPage(): JSX.Element {
       <h1 className="text-[18px] font-semibold text-primary">History</h1>
       <section aria-label="History filters" className="flex flex-wrap items-center gap-x-4 gap-y-2.5">
         <SymbolPicker stocks={stocks} value={known ? symbol : null} onChange={changeSymbol} />
-        <ToggleGroup.Root
-          type="single"
-          value={range.id}
-          onValueChange={(v) => v && changeRange(v)}
-          aria-label="Time range"
-          className="flex flex-wrap gap-2"
-        >
-          {RANGES.map((r) => (
-            <ToggleGroup.Item key={r.id} value={r.id} className={pillClass}>
-              {r.label}
-            </ToggleGroup.Item>
-          ))}
-        </ToggleGroup.Root>
+        <PillGroup pills={RANGES} value={range.id} onChange={changeRange} label="Time range" />
         {known && (
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -135,53 +118,6 @@ export function HistoryPage(): JSX.Element {
         live={live}
       />
     </>
-  );
-}
-
-function SymbolPicker({
-  stocks,
-  value,
-  onChange,
-}: {
-  stocks: ActiveStock[];
-  value: string | null;
-  onChange: (event: ChangeEvent<HTMLSelectElement>) => void;
-}): JSX.Element {
-  // Grouped by sector, like the dashboard's filter.
-  const groups = useMemo(() => {
-    const bySector = new Map<string, ActiveStock[]>();
-    for (const stock of stocks) bySector.set(stock.sector, [...(bySector.get(stock.sector) ?? []), stock]);
-    return [...bySector.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [stocks]);
-
-  return (
-    <label className="flex max-w-full min-w-0 items-center gap-2 text-[12px] tracking-widest text-secondary uppercase">
-      Symbol
-      <select
-        value={value ?? ""}
-        onChange={onChange}
-        disabled={stocks.length === 0}
-        className={
-          "h-8 min-w-0 flex-1 cursor-pointer truncate rounded-md border border-default bg-input px-2 text-[13px] tracking-normal text-primary normal-case " +
-          `hover:border-strong ${focusRing}`
-        }
-      >
-        {value === null && (
-          <option value="" disabled>
-            Choose…
-          </option>
-        )}
-        {groups.map(([sector, items]) => (
-          <optgroup key={sector} label={sector}>
-            {items.map((s) => (
-              <option key={s.symbol} value={s.symbol}>
-                {s.symbol} · {s.name}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
-    </label>
   );
 }
 

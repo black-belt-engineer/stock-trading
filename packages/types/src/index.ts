@@ -121,19 +121,37 @@ export const LatestPriceSchema = Type.Object({
 });
 export type LatestPrice = Static<typeof LatestPriceSchema>;
 
+/** Candle widths of `GET /quotes/:symbol/candles`. `1d` is one market session (see `sessionStartFor`). */
+export const CandleIntervalSchema = Type.Union([
+  Type.Literal("1m"),
+  Type.Literal("5m"),
+  Type.Literal("1h"),
+  Type.Literal("1d"),
+]);
+export type CandleInterval = Static<typeof CandleIntervalSchema>;
+
 /**
- * OHLCV candle for charting (Phase 3).
+ * One OHLCV candle. Buckets are UTC; a `1d` bucket is one market session.
+ * A bucket with no trades is either left out or, when the request asks for
+ * it, a flat bar at the previous close with `volume` 0.
  */
-export type OhlcvBar = {
-  symbol: string;
-  timestamp: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-  interval: "1m" | "5m" | "1h" | "1d";
-};
+export const OhlcvBarSchema = Type.Object({
+  symbol: Type.String(),
+  /** Bucket start, epoch ms, inclusive. */
+  timestamp: Type.Number(),
+  /** Bucket end, epoch ms, exclusive. Sessions vary in length, so the client never computes it. */
+  end: Type.Number(),
+  open: Type.Number(),
+  high: Type.Number(),
+  low: Type.Number(),
+  close: Type.Number(),
+  /** Shares traded in the bucket. */
+  volume: Type.Number(),
+  interval: CandleIntervalSchema,
+  /** `false` while the bucket is still open: the bar keeps changing until `end`. */
+  complete: Type.Boolean(),
+});
+export type OhlcvBar = Static<typeof OhlcvBarSchema>;
 
 /**
  * Payload streamed to browsers via SSE: the day values of the symbol's

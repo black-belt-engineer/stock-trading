@@ -74,4 +74,4 @@ export function findSymbol(symbol: string): SymbolInfo | undefined {
   return bySymbol.get(symbol);
 }
 
-export { sessionIdFor, sessionStartFor } from "./market-calendar.js";
+export { sessionEndFor, sessionIdFor, sessionStartFor } from "./market-calendar.js";
