@@ -15,7 +15,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 05 | M1 | 03-market-data.md | 03 | done |
 | 06 | M2, M5 | 03-market-data.md | 05 | done |
 | 07 | M3, M6 | 03-market-data.md | 05 | done |
-| 08 | M4 | 03-market-data.md | 07 | in progress |
+| 08 | M4 | 03-market-data.md | 07 | done |
 | 09 | A1 | 04-auth.md | — | todo |
 | 10 | A2, A3 | 04-auth.md | 03, 09 | todo |
 | 11 | A4 | 04-auth.md | 10 | todo |
@@ -85,7 +85,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 ### 10 · Guard and login (A2, A3)
 - The two items ship together. Do not leave the branch in a state where endpoints are protected and no login exists.
 - Decided: fetch-based stream reader (Q1), refresh token in an `httpOnly` cookie (Q2).
-- Existing callers to route through the new API client: the symbol list fetch (now in `stream/useSymbolList.ts`, called by `StreamProvider`; a `401` there must also count as logged out), the tick history fetch (`fetchPage` in `hooks/useTickHistory.ts`), the CSV download, and the candles if phase 08 is done. The CSV download is a plain `<a href download>` today (`ExportLink` in `pages/HistoryPage.tsx`); it becomes a blob fetch with the header, and must then show the server's `400` message (range over 24 hours, more than 100,000 rows) instead of a failed download.
+- Existing callers to route through the new API client: the symbol list fetch (now in `stream/useSymbolList.ts`, called by `StreamProvider`; a `401` there must also count as logged out), the tick history fetch (`fetchPage` in `hooks/useTickHistory.ts`), the CSV download, and the candles (`fetchCandles` in `hooks/useCandles.ts`; a `401` from its background refetches must also log out, not count as a failed refetch that is retried every 5 s). The CSV download is a plain `<a href download>` today (`ExportLink` in `pages/HistoryPage.tsx`); it becomes a blob fetch with the header, and must then show the server's `400` message (range over 24 hours, more than 100,000 rows) instead of a failed download.
 - The stream hook must tell `401` (logged out) from `503` (retry) from a dropped connection (U4's banner). The hook is used only through `StreamProvider`; the router is React Router 7 in declarative mode (`BrowserRouter`), so the route guard is a layout route around the shell.
 - This is the largest phase. If it will not fit one session, finish A2's server side and the API client first, record exactly where you stopped under "Notes between phases", and leave the status `in progress`.
 
@@ -103,6 +103,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 ### 13 · Light theme and shortcuts (D4, D5)
 - D4 first.
 - D4 needs every colour to come from a token; grep for leftover `rgba(` and hex values before starting.
+- The candle chart (phase 08, `components/CandleChart`) already takes every colour from a token through `var(--…)` in SVG attributes, so it follows the theme. Check in the light theme: the last-price tag is `--text-inverse` on `--positive`/`--negative`, gridlines are `--border-subtle`, and the volume bars are the accents at 45% opacity.
 - Phase 04 set dark-theme values for AA: `--text-secondary` `#7d89a4` and `--negative` `#f56674`. The light theme needs its own values checked the same way; the axe script approach in the phase 04 notes covers it.
 - D5's `p` and `v` shortcuts need D2 and D3 from phase 12; the `g s` shortcut and the theme control need the Settings page from phase 11.
 
@@ -127,12 +128,14 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 - S1's client watchdog replaces U4's temporary "no message for 15 s" rule (`SILENCE_LIMIT_MS` in `usePriceStream.ts`). With the ingestor down that rule reconnects every 15 s; a heartbeat ends that.
 - Feed row keys switch to event ids (D2 edge case).
 - The token-expiry close from A2 takes precedence over the heartbeat.
+- The Chart page (phase 08) refetches its last two candles when `useStreamStatus().status` goes from `live` to something else and back. With S1's resume the refetch becomes unnecessary but stays harmless; keep the status transitions as they are or update `useCandles`.
 
 ### 18 · Retention and compression (S3 steps 2–6, M4 step 3)
 - Order is fixed: create the candle continuous aggregates (M4 step 3) first, then enable retention. The reverse deletes history for good.
 - Check the TimescaleDB docs for the current policy functions before writing them.
 - **Open decision from phase 01, ask the owner:** no Kafka topic retention is set, so the broker default applies (7 days for Redpanda, to be confirmed against its docs). That is longer than the 24-hour idempotency marker, so a replay older than a day would double-apply ticks to Redis. Propose an explicit topic retention under 24 hours.
 - Includes the retention ADR (step 6).
+- From phase 08, for the continuous aggregates: candles are read by `CandleRepository.aggregate` (`apps/sse-service/src/repositories/candle.repository.ts`). Fixed widths use `time_bucket(width, time, TIMESTAMPTZ 'epoch')`; `1d` groups by explicit session starts from `packages/symbols` with `width_bucket`, which a continuous aggregate cannot express. So build only the `1m` aggregate (and maybe `1h`), and roll `1d` up from it with the same session-start array. The aggregate must also store `max(time)` per bucket: the response's `lastTradeAt` is what stops the browser counting a streamed trade twice. The open bucket is not materialised yet, so keep real-time aggregation on (`materialized_only = false`) or read the open bucket from raw ticks.
 
 ## Notes between phases
 
@@ -348,3 +351,56 @@ Each session appends here when it finishes: what the next phases need to know th
     - "Connection lost" on a first load
     - no main landmark on the narrow feed tab, and the feed tab's `scrollable-region-focusable`
     - Dockerfiles missing workspace dependencies
+
+### After phase 08 (2026-11-14)
+- Decided by the owner:
+  - An empty bucket is a flat bar at the previous close, volume 0, by default; `fill=gaps` leaves it out.
+  - Without TimescaleDB the endpoint answers `501 NOT_IMPLEMENTED` (no plain-Postgres fallback).
+  - The chart shows the latest 120 bars, which is also the server's default window.
+- Choices the plan left open, made here:
+  - Endpoint: `GET /quotes/:symbol/candles?interval=1m|5m|1h|1d&from=&to=&fill=previous|gaps`. `interval` is required. A missing `to` is now, and a future one is clamped.
+  - `from` and `to` widen to whole buckets. A missing `from` gives the latest 120 buckets. More than 500 buckets gives `400`, with a message telling the client to choose a larger interval.
+  - **Departure from the plan:** step 1 says the endpoint returns `OhlcvBar[]`. It returns `{ symbol, interval, fill, from, to, bars, lastTradeAt }`, echoing the window like M3's response. `lastTradeAt` (the newest trade the bars include) was added so the browser never counts a streamed trade twice after a refetch.
+  - `OhlcvBar` is now a TypeBox schema in `packages/types`, with `end` (exclusive) and `complete` added. Sessions vary in length, so the client never computes a bucket end itself.
+  - Buckets before a symbol's first trade are left out in both fill modes.
+  - Daily buckets come from `sessionStartFor` / the new `sessionEndFor` in `packages/symbols` (a `width_bucket` over the session starts). Fixed widths use `time_bucket` with origin `'epoch'`, so the server and JavaScript agree on the edges.
+  - Frontend:
+    - route `/chart/:symbol?interval=…`, default `1m` (no param)
+    - an interval change replaces the history entry; a symbol change pushes one (like History)
+    - the dialog's "Open chart" link goes to `/chart/<symbol>`
+  - Live bar (`hooks/useCandles.ts`):
+    - the hook keeps its own buffer of this symbol's streamed trades, because the shared feed holds only about a second of events across 18 symbols
+    - it refetches the newest bars 1.5 s after the open bucket's end, retrying every 5 s on failure, and the last two bars when the stream comes back after a drop
+    - only trades newer than `lastTradeAt` are added on top of the server's bars
+    - a server bar with volume 0 (a filled bucket) takes all four prices from its first trade, as the server would
+  - Chart keyboard: the chart is one tab stop. Left/Right/Home/End move the crosshair, and Escape goes back to following the latest bar. A polite live region reads the selected bar only after a key press, never on ticks.
+- The History page's symbol picker and pills are now shared: `components/SymbolPicker`, `components/PillGroup`, and `components/pageStyles.ts` (`focusRing`, `buttonClass`, `panelClass`).
+- Verified against the running stack (Postgres 15 with TimescaleDB 2.28):
+  - With curl:
+    - all four intervals, `aapl` and `BRK.B`
+    - `400` for: a missing or unknown interval, `1ABC`, `from` after `to`, a full day of `1m` (more than 500 bars), `1d` from 2024, `fill=zero`
+    - `404` for `ZZZZ`; 500 `1m` bars exactly gives `200`; a future `to` is clamped
+  - Against SQL that does not use the Timescale functions (`array_agg … ORDER BY time`), OHLC and volume matched exactly for: one `1h`, `5m` and `1d` bucket each, and the closed `1m` bars below. Today's `1d` bar equals the day values in Redis (open, high, low, volume).
+  - `501` against a scratch database with the extension dropped (it is preinstalled in `template1` of the Timescale image), for `1m` and `1d`.
+  - In headless Chromium (Playwright, axe-core 4.11, reduced motion):
+    - the open `1m` bar moves with the stream, and after its bucket closes the refetched bar matches SQL (MSFT, BRK.B)
+    - the `1d` bar equals the dashboard's day values while it ticks
+    - SSE service killed for 20 s mid-bucket, then restarted:
+      - the bar open during the outage matched SQL after it closed (`1m`)
+      - on `1h`, with no bucket close involved, the reconnect refetch fired and the open bar's volume equalled SQL
+    - Chrome's offline mode does not cut an open streaming fetch, so that test only exercised the 5 s retry
+    - no horizontal scroll and axe clean at 360×740, 768×1024, 1440×900 and 740×360 for `1m` and `1d`; axe also clean on the dialog and History
+    - keyboard crosshair and its announcement, pointer crosshair, "Open chart" from the dialog and Back to the open dialog, nav `aria-current`
+    - `/chart` without a symbol, `/chart/ZZZZ`, an unknown `?interval=`
+    - mocked `500` with Retry, `501`, an empty series, and an all-flat series (axis 99.60–100.40, flat bodies drawn as lines, no NaN)
+  - Latency on this data (88k rows): 8–35 ms. No load test; continuous aggregates (phase 18) are the plan's answer to slow queries.
+- Not checked: a real phone, including the crosshair by touch (it uses pointer events, so it should work, but untested), a screen reader, Safari/Firefox, a real midnight rollover of the `1d` bar, the Dockerfiles (none changed).
+- Left open, small:
+  - At 360px the 120 candles are about 2 px wide. Pan and zoom are the plan's later step.
+  - A symbol with no bars at all (no trade ever) gets no live bar from its first streamed trade, because there are no bucket edges to put it in. It appears on the next refetch or a reload.
+  - The flat bars of a long quiet stretch look like a dotted line close to the dashed last-price line.
+  - Background refetches have no `401` handling yet (phase 10 brief).
+- Defects noticed outside the scope, not fixed:
+  - A SIGKILLed SSE service is not restarted by `tsx watch` even after a real file change ("Process hasn't exited. Killing process..."), and killing that watcher stops the whole `pnpm dev:all`. Same root as the phase 03 shutdown note.
+  - The random walk moved AAPL from about $231 to $258 in 8 minutes (phase 06's mean-reversion note), which makes every chart look like a spike.
+  - Still open from earlier notes: the `Sparkline` defects, "Connection lost" on a first load, no main landmark on the narrow feed tab and its `scrollable-region-focusable`, Dockerfiles missing workspace dependencies, `tsconfig.app.tsbuildinfo` tracked in git.
