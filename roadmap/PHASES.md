@@ -15,7 +15,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 05 | M1 | 03-market-data.md | 03 | done |
 | 06 | M2, M5 | 03-market-data.md | 05 | done |
 | 07 | M3, M6 | 03-market-data.md | 05 | done |
-| 08 | M4 | 03-market-data.md | 07 | todo |
+| 08 | M4 | 03-market-data.md | 07 | in progress |
 | 09 | A1 | 04-auth.md | — | todo |
 | 10 | A2, A3 | 04-auth.md | 03, 09 | todo |
 | 11 | A4 | 04-auth.md | 10 | todo |
