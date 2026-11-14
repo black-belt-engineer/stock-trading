@@ -2,6 +2,7 @@ import { useRef } from "react";
 import type { JSX } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
+import { Link } from "react-router";
 import { Sparkline } from "../Sparkline";
 import { StaleBanner } from "../StaleBanner";
 import type { ActiveStock, ListStatus } from "../../types";
@@ -151,6 +152,12 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
                   ))}
                 </section>
               )}
+
+              <footer className="px-5 pb-5">
+                <Link to={`/chart/${encodeURIComponent(stock.symbol)}`} className={`${buttonClass} block text-center`}>
+                  Open chart
+                </Link>
+              </footer>
             </>
           )}
         </Dialog.Content>
