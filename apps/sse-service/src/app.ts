@@ -5,12 +5,15 @@ import { createLogger } from "@stock-platform/logger";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { AppConfig } from "./config/index.js";
+import { CandleRepository } from "./repositories/candle.repository.js";
 import { LatestPriceRepository } from "./repositories/latest-price.repository.js";
 import { TickRepository } from "./repositories/tick.repository.js";
+import { candlesRoutes } from "./routes/candles.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { quotesRoutes } from "./routes/quotes.routes.js";
 import { streamRoutes } from "./routes/stream.routes.js";
 import { ticksRoutes } from "./routes/ticks.routes.js";
+import { CandlesService } from "./services/candles.service.js";
 import { ConnectionTrackerService } from "./services/connection-tracker.service.js";
 import { HealthService } from "./services/health.service.js";
 import { QuotesService } from "./services/quotes.service.js";
@@ -41,7 +44,7 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   });
 
   await app.register(redisPlugin, { url: config.REDIS_URL });
-  // Tick history (M3, M6) reads the table the consumer writes.
+  // Tick history (M3, M6) and candles (M4) read the table the consumer writes.
   await app.register(dbPlugin, { connectionString: config.DATABASE_URL });
 
   const latestPriceRepository = new LatestPriceRepository(app.redis);
@@ -52,11 +55,13 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   );
   const connectionTracker = new ConnectionTrackerService();
   const ticksService = new TicksService(new TickRepository(app.db));
+  const candlesService = new CandlesService(new CandleRepository(app.db));
   const healthService = new HealthService(app.redis);
 
   await app.register(healthRoutes, { healthService, connectionTracker });
   await app.register(quotesRoutes, { quotesService });
   await app.register(ticksRoutes, { ticksService });
+  await app.register(candlesRoutes, { candlesService });
   await app.register(streamRoutes, { connectionTracker, log, streamSubscriptionService });
 
   return app;
