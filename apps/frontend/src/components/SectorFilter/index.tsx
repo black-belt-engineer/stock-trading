@@ -8,6 +8,13 @@ export type SectorOption = {
   label: string;
 };
 
+/** A pill in a Radix toggle group; Radix marks the selected one with `data-state="on"`. */
+export const pillClass =
+  "h-7 shrink-0 cursor-pointer rounded-[20px] border border-subtle px-3.5 text-[12px] font-medium whitespace-nowrap text-secondary transition-colors duration-150 " +
+  "data-[state=on]:border-brand data-[state=on]:bg-brand-dim data-[state=on]:text-brand " +
+  "data-[state=off]:hover:border-strong data-[state=off]:hover:text-primary " +
+  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
+
 /** The pill that shows every sector; it has no `?sector=` in the URL. */
 export const ALL_SECTORS = "all";
 
@@ -58,12 +65,7 @@ export function SectorFilter({ sectors, value, onChange }: Props): JSX.Element {
         <ToggleGroup.Item
           key={pill.id}
           value={pill.id}
-          className={
-            "h-7 shrink-0 cursor-pointer rounded-[20px] border border-subtle px-3.5 text-[12px] font-medium whitespace-nowrap text-secondary transition-colors duration-150 " +
-            "data-[state=on]:border-brand data-[state=on]:bg-brand-dim data-[state=on]:text-brand " +
-            "data-[state=off]:hover:border-strong data-[state=off]:hover:text-primary " +
-            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          }
+          className={pillClass}
         >
           {pill.label}
         </ToggleGroup.Item>

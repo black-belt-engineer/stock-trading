@@ -228,6 +228,9 @@ importers:
       '@sinclair/typebox':
         specifier: ^0.34.33
         version: 0.34.49
+      '@stock-platform/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@stock-platform/env':
         specifier: workspace:*
         version: link:../../packages/env
@@ -258,10 +261,22 @@ importers:
       ioredis:
         specifier: ^5.8.1
         version: 5.10.1
+      pg:
+        specifier: ^8.20.0
+        version: 8.20.0
+      pg-cursor:
+        specifier: ^2.22.1
+        version: 2.22.1(pg@8.20.0)
     devDependencies:
       '@types/node':
         specifier: ^22.10.0
         version: 22.19.17
+      '@types/pg':
+        specifier: ^8.15.6
+        version: 8.20.0
+      '@types/pg-cursor':
+        specifier: ^2.7.2
+        version: 2.7.2
       tsx:
         specifier: ^4.19.3
         version: 4.21.0
@@ -1502,6 +1517,9 @@ packages:
   '@types/node@22.19.17':
     resolution: {integrity: sha512-wGdMcf+vPYM6jikpS/qhg6WiqSV/OhG+jeeHT/KlVqxYfD40iYJf9/AE1uQxVWFvU7MipKRkRv8NSHiCGgPr8Q==}
 
+  '@types/pg-cursor@2.7.2':
+    resolution: {integrity: sha512-m3xT8bVFCvx98LuzbvXyuCdT/Hjdd/v8ml4jL4K1QF70Y8clOfCFdgoaEB1FWdcSwcpoFYZTJQaMD9/GQ27efQ==}
+
   '@types/pg@8.20.0':
     resolution: {integrity: sha512-bEPFOaMAHTEP1EzpvHTbmwR8UsFyHSKsRisLIHVMXnpNefSbGA1bD6CVy+qKjGSqmZqNqBDV2azOBo8TgkcVow==}
 
@@ -1819,6 +1837,11 @@ packages:
 
   pg-connection-string@2.12.0:
     resolution: {integrity: sha512-U7qg+bpswf3Cs5xLzRqbXbQl85ng0mfSV/J0nnA31MCLgvEaAo7CIhmeyrmJpOr7o+zm0rXK+hNnT5l9RHkCkQ==}
+
+  pg-cursor@2.22.1:
+    resolution: {integrity: sha512-X10ldv3wwBONQkOSwgWEbaEITMGLd92V2Zd+xsFPhDt3nhhU3hpAT08SERBChnIFmomczLax6lKXLJrHPPXfxA==}
+    peerDependencies:
+      pg: ^8
 
   pg-int8@1.0.1:
     resolution: {integrity: sha512-WCtabS6t3c8SkpDBUlb1kjOs7l66xsGdKpIPZsg4wR+B3+u9UAum2odSsF9tnvxg80h4ZxLWMy4pRjOsFIqQpw==}
@@ -2972,6 +2995,11 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
+  '@types/pg-cursor@2.7.2':
+    dependencies:
+      '@types/node': 22.19.17
+      '@types/pg': 8.20.0
+
   '@types/pg@8.20.0':
     dependencies:
       '@types/node': 22.19.17
@@ -3302,6 +3330,10 @@ snapshots:
     optional: true
 
   pg-connection-string@2.12.0: {}
+
+  pg-cursor@2.22.1(pg@8.20.0):
+    dependencies:
+      pg: 8.20.0
 
   pg-int8@1.0.1: {}
 

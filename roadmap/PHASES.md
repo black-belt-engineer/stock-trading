@@ -14,7 +14,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 04 | U2, U3 | 02-ui-foundation.md | 03 | done |
 | 05 | M1 | 03-market-data.md | 03 | done |
 | 06 | M2, M5 | 03-market-data.md | 05 | done |
-| 07 | M3, M6 | 03-market-data.md | 05 | todo |
+| 07 | M3, M6 | 03-market-data.md | 05 | done |
 | 08 | M4 | 03-market-data.md | 07 | todo |
 | 09 | A1 | 04-auth.md | — | todo |
 | 10 | A2, A3 | 04-auth.md | 03, 09 | todo |
@@ -75,6 +75,8 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 - Hand-written SVG (README Q5); no charting library.
 - Check the TimescaleDB docs for `time_bucket`, `first` and `last` before writing the query.
 - Daily bars must align with M2's session boundary (phase 06 is done): take the bucket edges from `sessionStartFor` in `packages/symbols`, not from a hard-coded UTC day, so a real exchange calendar later moves both together.
+- Postgres access already exists in the SSE service (phase 07): `app.db` from `dbPlugin`, and `TickRepository` / `TicksService` / `ticks.routes.ts` as the pattern for a read endpoint with TypeBox query schemas. Add the candle query there. `resolveTimeRange` in `models/tick-query.ts` caps a range at 24 hours, which suits raw ticks, not daily candles; give candles their own limits rather than widening it.
+- The History page (`pages/HistoryPage.tsx`) has the symbol picker and range pills the Chart page will want; lift them into components instead of copying them.
 
 ### 09 · Ownership checks (A1)
 - Backend only (`apps/user`, `apps/auth`, `packages/errors`). No login UI.
@@ -83,7 +85,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 ### 10 · Guard and login (A2, A3)
 - The two items ship together. Do not leave the branch in a state where endpoints are protected and no login exists.
 - Decided: fetch-based stream reader (Q1), refresh token in an `httpOnly` cookie (Q2).
-- Existing callers to route through the new API client: the symbol list fetch (now in `stream/useSymbolList.ts`, called by `StreamProvider`; a `401` there must also count as logged out), and, if phases 07 and 08 are done, history, candles and the CSV download (blob fetch with the header).
+- Existing callers to route through the new API client: the symbol list fetch (now in `stream/useSymbolList.ts`, called by `StreamProvider`; a `401` there must also count as logged out), the tick history fetch (`fetchPage` in `hooks/useTickHistory.ts`), the CSV download, and the candles if phase 08 is done. The CSV download is a plain `<a href download>` today (`ExportLink` in `pages/HistoryPage.tsx`); it becomes a blob fetch with the header, and must then show the server's `400` message (range over 24 hours, more than 100,000 rows) instead of a failed download.
 - The stream hook must tell `401` (logged out) from `503` (retry) from a dropped connection (U4's banner). The hook is used only through `StreamProvider`; the router is React Router 7 in declarative mode (`BrowserRouter`), so the route guard is a layout route around the shell.
 - This is the largest phase. If it will not fit one session, finish A2's server side and the API client first, record exactly where you stopped under "Notes between phases", and leave the status `in progress`.
 
@@ -284,3 +286,65 @@ Each session appends here when it finishes: what the next phases need to know th
 - Defects noticed outside the scope, not fixed:
   - The `Sparkline` colour (first versus last of 30 points) still disagrees with the day change in the dialog and on cards. M2 did not resolve it, contrary to the phase 02 note's guess, because they cover different time spans. The clipping defect is also still open.
   - Still open from earlier notes: SSE shutdown wedging `tsx watch`, "Connection lost" on a first load that never connected, no main landmark on the narrow feed tab, the feed tab's `scrollable-region-focusable`, Dockerfiles missing workspace dependencies.
+
+### After phase 07 (2026-11-13)
+- No owner decisions were needed. Choices the plan left open, made here:
+  - The history API lives in the SSE service, as the brief says. It needs `DATABASE_URL` now; the service README calls it the "market API".
+  - Ranges are `from` inclusive, `to` exclusive. A missing `to` is now, a future one is clamped, and a missing `from` is 15 minutes before `to`.
+  - The response echoes the range it used (`{ symbol, from, to, ticks, nextCursor }`). The client pages on and exports with exactly those values.
+  - The cursor is base64url of `[time, idempotency_key]`. The time is the exact Postgres text with microseconds, so a millisecond rounding in JavaScript can never skip or repeat a row.
+  - Unknown query parameters are dropped, not rejected (Fastify's default `removeAdditional`).
+  - CSV:
+    - columns `time,symbol,price,size,side`, oldest first (the page is newest first)
+    - file name `AAPL_20261113T145651Z_20261113T155651Z.csv`
+    - at most 100,000 rows, checked with a `count(*)` before any header is sent, so an over-large range still gets a JSON `400`
+    - read from a `pg-cursor` in batches of 500
+  - Frontend:
+    - route `/history/:symbol?range=…` with presets 15 min (default, no param), 1 hour, 4 hours and 24 hours
+    - changing the symbol pushes a history entry; changing the range replaces it (like the sector filter)
+    - symbols are grouped by sector in a native `<select>`
+    - a symbol not in the list is "not found" without a request
+  - Live mode (plan edge case): turning it on reloads the range up to now, then prepends this symbol's trades from the feed that are newer than every row shown. The consumer writes Postgres before the stream entry, so that rule cannot duplicate a row. For the same reason the table cannot lag the cards, and the plan's "consumer lag" caption was not needed. The export covers the queried range, not the live rows, and the caption says so.
+- Fixed in passing (needed for M3): the SSE service's error handler turned Fastify schema-validation errors into `500`. They are now `400 VALIDATION_ERROR`, as in the user service.
+- `navItems` entries have an `end` flag, so "History" stays active on `/history/AAPL`. `pillClass` is exported from `SectorFilter` for other pill groups.
+- Verified against `pnpm dev:all`:
+  - With curl:
+    - `aapl`, `BRK.B`
+    - `404` for `ZZZZ`; `400` for `1ABC`, `limit` 0/1001/abc, a non-ISO or zone-less `from`, `from` after `to`, a range over 24 h and a garbage cursor
+    - a future `to` clamped; an empty range gives `200 []` with no cursor
+  - Paging:
+    - 11 rows with identical timestamps (inserted, then removed) paged at limits 2 and 3 with no repeats
+    - one live hour of AAPL paged at limit 97: 1,124 rows, all distinct, equal to SQL's count, while ticks kept arriving
+  - Performance (scratch database `stockdb_perf`, dropped afterwards; 1.56 M rows = 18 symbols × 24 h at 1/s, TimescaleDB hypertable):
+    - a 24-hour page of 1,000 rows: 16 ms over HTTP (134 ms on the first request); Postgres 1.3 ms through the `(symbol, time DESC)` index
+    - the second page also 16 ms
+  - CSV:
+    - a 24-hour export of 86,296 rows matched SQL's count, 4.9 MB in 1.2 s
+    - server RSS stayed flat at about 118 MB through a download throttled to 300 kB/s
+    - 12 downloads aborted mid-stream (more than the pool's 10 connections) left no active connection, and the next export worked
+    - an empty range gives the header only; 106,251 rows gives `400`
+  - In headless Chromium (Playwright 1.57, axe-core 4.14, reduced motion):
+    - `/history` prompts for a symbol; picking AAPL loads it
+    - 1 hour paged by keyboard (Enter on "Load more") to the end: 1,487 rows in 3 pages, all distinct; focus lands on "Start of the range reached"
+    - the downloaded CSV had the same 1,487 rows
+    - Live added about one row a second, newest first, no duplicates
+    - `/history/aapl` normalised; `/history/ZZZZ` gives "not found"
+    - mocked: an empty range, a `500` with Retry, a failed "Load more" (rows kept, message shown), a failed symbol list
+    - range pills by arrow keys; Back after a symbol change; sticky table header
+    - nav `aria-current` at 360, 1024 and 1440
+    - no horizontal scroll at 360×740, 768×1024, 1440×900 and 740×360
+    - axe clean on the History page
+- Not checked: a real phone, a screen reader, Safari/Firefox, a real browser's download UI (only Playwright's download event), the Dockerfile (`packages/db` added to the SSE service image, not built).
+- Left open, small:
+  - The SSE service's readiness check covers Redis only. With Postgres down, history fails with `500` while the service reports ready. Adding the check would also take streaming out of rotation, so it is a choice for whoever builds the deployment.
+  - A CSV export holds one pooled connection for its whole duration (plan "Future issues").
+  - Live mode can miss a trade when more than 20 feed events (the feed's length) arrive while the reload is in flight. Refresh fills it.
+  - No link from the quote dialog to the symbol's history; small and useful, not in the plan.
+- Defects noticed outside the scope, not fixed:
+  - `apps/frontend/tsconfig.app.tsbuildinfo`, a build output, is tracked in git and changes with every build.
+  - Still open from earlier notes:
+    - `Sparkline` clipping and colour disagreement
+    - SSE shutdown wedging `tsx watch`; it now also has a Postgres pool to close, which `onClose` already does
+    - "Connection lost" on a first load
+    - no main landmark on the narrow feed tab, and the feed tab's `scrollable-region-focusable`
+    - Dockerfiles missing workspace dependencies

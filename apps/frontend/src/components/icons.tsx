@@ -42,3 +42,14 @@ export function FeedIcon(): JSX.Element {
     </Icon>
   );
 }
+
+/** A clock with a back arrow: the tick history. */
+export function HistoryIcon(): JSX.Element {
+  return (
+    <Icon>
+      <path d="M3.5 10a6.5 6.5 0 1 0 1.9-4.6" />
+      <path d="M3.5 3v3.4h3.4" />
+      <path d="M10 6.5V10l2.5 1.5" />
+    </Icon>
+  );
+}
