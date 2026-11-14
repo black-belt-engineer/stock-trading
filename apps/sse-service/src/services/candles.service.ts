@@ -33,6 +33,7 @@ export class CandlesService {
       }
     });
 
+    const lastTrade = rows.reduce<number | null>((max, row) => (max === null || row.lastTrade > max ? row.lastTrade : max), null);
     return {
       symbol,
       interval: query.interval,
@@ -40,6 +41,7 @@ export class CandlesService {
       from: new Date(window.from).toISOString(),
       to: new Date(window.to).toISOString(),
       bars,
+      lastTradeAt: lastTrade === null ? null : new Date(lastTrade).toISOString(),
     };
   }
 }

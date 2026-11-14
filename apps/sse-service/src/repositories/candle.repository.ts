@@ -6,6 +6,8 @@ import type { CandleWindow } from "../models/candles.js";
 export type CandleRow = {
   /** Bucket start, epoch ms. */
   start: number;
+  /** Time of the bucket's newest trade, epoch ms. */
+  lastTrade: number;
   open: number;
   high: number;
   low: number;
@@ -26,14 +28,15 @@ function finiteNumber(value: unknown): number | null {
 function toCandleRow(row: unknown): CandleRow | null {
   if (typeof row !== "object" || row === null) return null;
   const start = finiteNumber(Reflect.get(row, "bucket_ms"));
+  const lastTrade = finiteNumber(Reflect.get(row, "last_trade_ms"));
   const open = finiteNumber(Reflect.get(row, "open"));
   const high = finiteNumber(Reflect.get(row, "high"));
   const low = finiteNumber(Reflect.get(row, "low"));
   const close = finiteNumber(Reflect.get(row, "close"));
-  if (start === null || open === null || high === null || low === null || close === null) return null;
+  if (start === null || lastTrade === null || open === null || high === null || low === null || close === null) return null;
   // Rows older than the current schema can lack a size; they add nothing to the volume.
   const volume = finiteNumber(Reflect.get(row, "volume")) ?? 0;
-  return { start, open, high, low, close, volume };
+  return { start, lastTrade, open, high, low, close, volume };
 }
 
 /** Postgres `undefined_function`: `time_bucket`, `first` or `last` without the TimescaleDB extension. */
@@ -76,7 +79,8 @@ export class CandleRepository {
           max(price) AS high,
           min(price) AS low,
           last(price, time) AS close,
-          sum(size) AS volume
+          sum(size) AS volume,
+          extract(epoch FROM max(time))::float8 * 1000 AS last_trade_ms
         FROM stock_ticks
         WHERE symbol = $1 AND time >= $2::timestamptz AND time < $3::timestamptz AND price IS NOT NULL
         GROUP BY 1

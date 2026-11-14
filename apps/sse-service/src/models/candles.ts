@@ -36,6 +36,12 @@ export const candlesResponseSchema = Type.Object({
   to: Type.String(),
   /** Oldest first. The last bar has `complete: false` while its bucket is open. */
   bars: Type.Array(OhlcvBarSchema),
+  /**
+   * ISO time of the newest trade the bars include, or `null` when there is none.
+   * A client that adds streamed trades to the last bar applies only newer ones,
+   * so no trade is counted twice.
+   */
+  lastTradeAt: Type.Union([Type.String(), Type.Null()]),
 });
 
 export type CandlesQuery = Static<typeof candlesQuerySchema>;
