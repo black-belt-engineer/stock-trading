@@ -1,3 +1,4 @@
+import { createJwtGuard } from "@stock-platform/auth-guard";
 import { dbPlugin } from "@stock-platform/db";
 import { isAppError } from "@stock-platform/errors";
 import { redisPlugin } from "@stock-platform/redis";
@@ -58,11 +59,25 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   const candlesService = new CandlesService(new CandleRepository(app.db));
   const healthService = new HealthService(app.redis);
 
+  const jwtGuard = createJwtGuard({
+    jwksUrl: new URL("/.well-known/jwks.json", config.AUTH_SERVICE_URL),
+    issuer: config.JWT_ISSUER,
+    audience: config.JWT_AUDIENCE,
+  });
+
+  // Probes stay open.
   await app.register(healthRoutes, { healthService, connectionTracker });
-  await app.register(quotesRoutes, { quotesService });
-  await app.register(ticksRoutes, { ticksService });
-  await app.register(candlesRoutes, { candlesService });
-  await app.register(streamRoutes, { connectionTracker, log, streamSubscriptionService });
+
+  // Everything else sits behind login. The route plugins use fastify-plugin, so they join this
+  // scope and its hook. A `preHandler` runs before the stream handler sends any SSE header, so a
+  // rejected stream gets a normal JSON 401 or 503.
+  await app.register(async (protectedScope) => {
+    protectedScope.addHook("preHandler", jwtGuard);
+    await protectedScope.register(quotesRoutes, { quotesService });
+    await protectedScope.register(ticksRoutes, { ticksService });
+    await protectedScope.register(candlesRoutes, { candlesService });
+    await protectedScope.register(streamRoutes, { connectionTracker, log, streamSubscriptionService });
+  });
 
   return app;
 }

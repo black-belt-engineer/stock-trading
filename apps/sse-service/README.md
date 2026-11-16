@@ -2,7 +2,16 @@
 
 The market API: realtime quotes over HTTP Server-Sent Events (from Redis) and
 tick history (from the Postgres `stock_ticks` table the consumer writes).
-Needs `REDIS_URL` and `DATABASE_URL`.
+Needs `REDIS_URL` and `DATABASE_URL`, and `AUTH_SERVICE_URL`, `JWT_ISSUER` and
+`JWT_AUDIENCE` for the JWT guard (defaults match `apps/auth`).
+
+## Authentication
+
+Every endpoint except `/health/*` needs `Authorization: Bearer <access token>`.
+The guard (`packages/auth-guard`) verifies the token against the auth service's
+JWKS, with 30 seconds of clock tolerance. A missing, invalid or expired token is
+`401`; `503 JWKS_UNAVAILABLE` means the keys could not be fetched, so a client
+should retry with backoff rather than log out.
 
 ## Endpoints
 
@@ -19,6 +28,11 @@ Needs `REDIS_URL` and `DATABASE_URL`.
 - `price`: one event per new tick.
 
 Both carry the same `StreamQuote` JSON payload.
+
+- `session-expired`: empty data. Sent just before the server closes the stream
+  when the access token's `exp` passes, so a stream never outlives its token
+  (for example after logout). The client refreshes and reconnects at once; a
+  close without this event is a dropped connection.
 
 ## Tick history
 
