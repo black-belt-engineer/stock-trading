@@ -29,13 +29,17 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
         // Same origin as the app, so the refresh cookie (Path=/auth, A3) is first-party.
+        // `xfwd` adds X-Forwarded-For, which the services trust from loopback (TRUST_PROXY)
+        // to rate-limit by the browser's IP rather than the proxy's.
         "/auth": {
           target: env.VITE_AUTH_URL ?? "http://localhost:3005",
           changeOrigin: true,
+          xfwd: true,
         },
         "/users": {
           target: env.VITE_USER_URL ?? "http://localhost:3004",
           changeOrigin: true,
+          xfwd: true,
         },
       },
     },
