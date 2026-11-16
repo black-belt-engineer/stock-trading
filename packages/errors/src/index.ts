@@ -40,6 +40,16 @@ export class ForbiddenError extends AppError {
   }
 }
 
+/** Too many requests. `retryAfterSeconds` goes out as the `Retry-After` header. */
+export class RateLimitedError extends AppError {
+  readonly retryAfterSeconds: number;
+
+  constructor(retryAfterSeconds: number, message = "Too many attempts, try again later") {
+    super(message, 429, "RATE_LIMITED");
+    this.retryAfterSeconds = Math.max(1, Math.ceil(retryAfterSeconds));
+  }
+}
+
 export function isAppError(error: unknown): error is AppError {
   return error instanceof AppError;
 }
