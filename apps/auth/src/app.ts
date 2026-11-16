@@ -1,4 +1,5 @@
-import { isAppError } from "@stock-platform/errors";
+import cookie from "@fastify/cookie";
+import { isAppError, RateLimitedError } from "@stock-platform/errors";
 import { createLogger } from "@stock-platform/logger";
 import { redisPlugin } from "@stock-platform/redis";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
@@ -10,6 +11,7 @@ import { authRoutes } from "./routes/auth.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { internalRoutes } from "./routes/internal.routes.js";
 import { AuthService } from "./services/auth.service.js";
+import { LoginRateLimiter } from "./services/login-rate-limiter.js";
 import { HealthService } from "./services/health.service.js";
 import { TokenService } from "./services/token.service.js";
 import { UserClientService } from "./services/user-client.service.js";
@@ -17,9 +19,15 @@ import { UserClientService } from "./services/user-client.service.js";
 export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   const log = createLogger("auth", { level: config.LOG_LEVEL, environment: config.NODE_ENV });
 
-  const app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
+  const app = Fastify({
+    logger: false,
+    trustProxy: config.TRUST_PROXY === "" ? false : config.TRUST_PROXY,
+  }).withTypeProvider<TypeBoxTypeProvider>();
 
   app.setErrorHandler((error: Error, _request, reply) => {
+    if (error instanceof RateLimitedError) {
+      reply.header("retry-after", String(error.retryAfterSeconds));
+    }
     if (isAppError(error)) {
       return reply.code(error.statusCode).send({ error: error.message, code: error.code });
     }
@@ -32,6 +40,7 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   });
 
   await app.register(redisPlugin, { url: config.REDIS_URL });
+  await app.register(cookie);
 
   const tokenService = await TokenService.create({
     privateKeyPem: config.JWT_PRIVATE_KEY,
@@ -43,6 +52,7 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
     new UserClientService(config.USER_SERVICE_URL, config.INTERNAL_API_TOKEN),
     tokenService,
     new RefreshTokenRepository(app.redis),
+    new LoginRateLimiter(app.redis),
     {
       accessTtlSeconds: config.ACCESS_TOKEN_TTL_SECONDS,
       refreshTtlSeconds: config.REFRESH_TOKEN_TTL_SECONDS,
@@ -50,7 +60,11 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   );
 
   await app.register(healthRoutes, { healthService: new HealthService(app.redis) });
-  await app.register(authRoutes, { authService, tokenService });
+  await app.register(authRoutes, {
+    authService,
+    tokenService,
+    cookie: { secure: config.NODE_ENV === "production", maxAgeSeconds: config.REFRESH_TOKEN_TTL_SECONDS },
+  });
   await app.register(internalRoutes, { authService, internalGuard: createInternalGuard(config.INTERNAL_API_TOKEN) });
 
   return app;
