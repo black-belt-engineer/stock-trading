@@ -8,11 +8,11 @@ import { HistoryPage } from "./pages/HistoryPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { SettingsPage } from "./pages/SettingsPage";
 
 /**
  * Routes. Login and register are the only pages without a session; everything
- * else, the 404 page included, sits behind the guard. The settings page is added
- * with its feature (A4); until then that path falls through to the 404 page.
+ * else, the 404 page included, sits behind the guard.
  */
 export default function App(): JSX.Element {
   return (
@@ -26,6 +26,7 @@ export default function App(): JSX.Element {
           <Route index element={<QuotesPage />} />
           <Route path="chart/:symbol?" element={<ChartPage />} />
           <Route path="history/:symbol?" element={<HistoryPage />} />
+          <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>

@@ -51,6 +51,14 @@ export class AuthService {
     await this.refreshTokens.revokeAllForUser(userId);
   }
 
+  /**
+   * Stores a changed summary with every session of the user, so refreshes return it. Access tokens
+   * already issued keep the old claims until they expire.
+   */
+  async updateSessionSummaries(user: UserSummary): Promise<void> {
+    await this.refreshTokens.replaceSummaryForUser(user);
+  }
+
   private async issueTokens(user: UserSummary): Promise<IssuedTokens> {
     const refreshToken = this.tokens.generateRefreshToken();
     const [accessToken] = await Promise.all([

@@ -18,7 +18,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 08 | M4 | 03-market-data.md | 07 | done |
 | 09 | A1 | 04-auth.md | — | done |
 | 10 | A2, A3 | 04-auth.md | 03, 09 | done |
-| 11 | A4 | 04-auth.md | 10 | todo |
+| 11 | A4 | 04-auth.md | 10 | done |
 | 12 | D1, D2, D3 | 05-dashboard.md | 04, 06 | todo |
 | 13 | D4, D5 | 05-dashboard.md | 11, 12 | todo |
 | 14 | Portfolio service, P1 | 06-personal.md | 05, 10 | todo |
@@ -130,12 +130,13 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 - The candle chart (phase 08, `components/CandleChart`) already takes every colour from a token through `var(--…)` in SVG attributes, so it follows the theme. Check in the light theme: the last-price tag is `--text-inverse` on `--positive`/`--negative`, gridlines are `--border-subtle`, and the volume bars are the accents at 45% opacity.
 - Phase 04 set dark-theme values for AA: `--text-secondary` `#7d89a4` and `--negative` `#f56674`. The light theme needs its own values checked the same way; the axe script approach in the phase 04 notes covers it.
 - D5's `p` and `v` shortcuts need D2 and D3 from phase 12; the `g s` shortcut and the theme control need the Settings page from phase 11.
+- From phase 11: the Settings page has no Preferences section yet (owner decision: it comes with its first setting). D4 adds it in `pages/SettingsPage.tsx`, between Password and Danger zone, with `SettingsSection` from `pages/settings/fields.tsx`; D3's default view joins it there. `/settings` is the route and the nav entry already exists.
 
 ### 14 · Portfolio service and watchlist (P1)
 - Build the shared groundwork section of `06-personal.md` first, then P1.
 - New app `apps/portfolio` on port 3006 (Q4). Add it to `scripts/dev.sh`, `.env.local.example` and the Vite proxy.
 - **Ask the owner:** the plan's "Future issues" suggests starting with a `watchlists` table if multiple named lists are likely. Ask which before creating the table.
-- Raise the account-deletion cleanup left open in phase 11.
+- Raise the account-deletion cleanup left open in phase 11: `DELETE /users/:id` (user service) ends the sessions and deletes the row, and nothing tells the portfolio service. The plan names the two options (a call from the user service, or a "user deleted" event on Kafka).
 
 ### 15 · Price alerts (P2)
 - Evaluated in the browser (Q7). The UI must say alerts are only checked while the app is open.
@@ -557,4 +558,45 @@ Each session appends here when it finishes: what the next phases need to know th
   - Key rotation (owner decision); refresh-token reuse detection (A3 future issue).
 - Defects noticed outside the scope, not fixed:
   - When `pnpm install` ran during `pnpm dev:all`, `tsx watch` restarted the user service mid-install and it stayed down until a source file changed. Same family as the earlier `tsx watch` notes.
+  - Still open from earlier notes: the `Sparkline` defects, SSE shutdown wedging `tsx watch`, "Connection lost" on a first load, the narrow feed tab's landmark and `scrollable-region-focusable`, Dockerfiles missing workspace dependencies, `tsconfig.app.tsbuildinfo` tracked in git, the `close` listener order in `stream.routes.ts`.
+
+### After phase 11 (2026-11-16)
+- Decided by the owner during the session:
+  - After an email or password change the page logs in again with the new credentials (`useAuth().logIn`), as the brief suggested; no "keep this session" option on the revoke endpoint. Other browsers and devices are logged out; the other tabs of this browser follow the login broadcast.
+  - The user service refuses a taken email (`409`) **before** it revokes, so a typo no longer ends every session. The unique index still decides a race; if that `409` comes after the revoke, the page logs in again with the unchanged email and the current password (it does so on every `409`; when nothing was revoked that login just replaces this browser's session).
+  - **Departure from the plan, found in the code:** the auth service stores the user summary with each refresh token at login and returns that copy on every refresh, so a changed name never reached a refresh (a reload brought the old name back until the next login). The plan's "update it from the `PATCH` response rather than waiting for the next refresh" assumed the refresh would catch up. Fixed: a name-only change makes the user service call a new internal endpoint, `PUT /internal/users/:id/sessions/summary` (`{ email, name }`, internal token, `204`), which rewrites every stored summary of that user with `SET … KEEPTTL XX` (expiry kept, consumed tokens not brought back). It runs **before** the write, like the revoke: with the auth service unreachable or refusing, the rename fails (`503`/`502`) and nothing changed.
+  - No Preferences section until D3 or D4 has a setting for it (phase 13 brief updated).
+- Choices made here:
+  - The session has `updateUser(user)` and `onUserUpdated`; `tabSync` carries it as a `{ type: "user" }` message. It is ignored when the tab has no user or a different one. `useAuth().updateUser` is how the page uses it.
+  - `api/account.ts` (`updateAccount`, `deleteAccount`) maps `400`, `403` (wrong current password), `409` (email taken) and anything else (`5xx`, network, auth unavailable) to typed errors. A `LoggedOutError` is passed through to the guard.
+  - Profile sends only the changed fields, with the name trimmed; the current-password field appears only when the email changed. Save is disabled with no change. A field the user has not edited follows a change from another tab.
+  - Field rules mirror `apps/user/src/models/user.ts` in `pages/settings/validation.ts`, the email pattern being ajv-formats' "full" one that Fastify uses. Errors show on submit, under their field (`aria-invalid`, `aria-describedby`), and clear when the field is edited.
+  - Delete: a Radix dialog asking for the email (case and surrounding spaces ignored); it cannot be closed while the request runs. The copy says there is no grace period and no data export (plan "Future issues").
+  - Settings nav icon: three sliders (`SettingsIcon`).
+- Verified:
+  - curl against the dev services, 25 checks, plus a scratch user service:
+    - a taken email `409` (also in another case) and the caller's refresh token still works afterwards; a taken email with a wrong password `403`
+    - a rename returns the new name from the next refresh of both of the user's sessions, with the TTL unchanged and a consumed token not recreated
+    - an email change still ends every session; the user's own email in another case is not a conflict
+    - the internal endpoint: `401` without the token, `400` for a bad body or id, `204` for a user without sessions
+    - a scratch user service with a wrong internal token: a rename gives `502` and the name is unchanged
+  - Unit tests: 54 in all, new ones for the user update across tabs (shown, token kept, unchanged or other-account details ignored, a logged-out tab not signed in) and for the field rules.
+  - Headless Chromium (Playwright 1.64, axe-core 4.11, reduced motion) against `pnpm dev:all`, 61 checks, two tabs of one context plus a second context as "another device":
+    - Settings nav link current at 1440 and in the narrow tab bar; no Preferences section; Save disabled with no change
+    - a blank name and a malformed email show their errors and send nothing; a double-click sends one `PATCH`
+    - rename: both tabs show the new name at once and after a reload; the other device keeps its session and gets the new name on reload
+    - email: missing and wrong current password on its field, `409` on the email field, the other device still logged in after the `409`; a mocked `503` shows "Service unavailable, try again"; a real change keeps both tabs logged in with the new email and logs the other device out
+    - password: short and mismatched errors, wrong current password on its field, success clears the fields, both tabs stay in, the other device is out, the old password no longer logs in
+    - delete: focus starts in the confirmation field, Escape returns focus to the trigger, Delete stays disabled until the email is typed, a double-click sends one `DELETE`, both tabs land on `/login`, a reload stays logged out, the account cannot log in
+    - no horizontal scroll at 360×740, 768×1024, 740×360 and 1440×900; axe clean on the page at 360, 768 and 1440 and on the dialog at 360 and 1440
+    - the stream stays on one connection and "Live" through an email change
+  - Screenshots at 1440, 768 and 360 and of the dialog were looked at.
+- Not checked: the `409`-after-revoke race and its re-login (needs two writes at the same moment), a password manager actually offering to save the new password, a real phone, Safari and Firefox, a screen reader.
+- Left open:
+  - Account deletion leaves the user's portfolio data (phase 14 brief).
+  - The summary rewrite is not atomic with a concurrent login, like the revoke: a login between the rewrite and the database write stores the old name until its next login.
+  - A rename's summary call happens before the write, so a failed write (rare: a database error) leaves the sessions with a name that was not saved, until the next login.
+  - If the re-login after a credential change fails (rate limit, outage), the page says so and the session ends at the next refresh.
+- Defects noticed outside the scope, not fixed:
+  - `apps/user/src/repositories/user.repository.ts` still has an `as` cast in `rethrowUniqueViolation` (`(err as { code?: string }).code`), against the owner's no-casts rule from phase 05.
   - Still open from earlier notes: the `Sparkline` defects, SSE shutdown wedging `tsx watch`, "Connection lost" on a first load, the narrow feed tab's landmark and `scrollable-region-focusable`, Dockerfiles missing workspace dependencies, `tsconfig.app.tsbuildinfo` tracked in git, the `close` listener order in `stream.routes.ts`.

@@ -1,6 +1,6 @@
 import { isRecord } from "../utils/guards";
-import { parseCredentials } from "./credentials";
-import type { Credentials, RefreshOutcome, Session } from "./session";
+import { parseCredentials, parseUser } from "./credentials";
+import type { AuthUser, Credentials, RefreshOutcome, Session } from "./session";
 
 /**
  * Keeps the tabs of one browser on one session (A3, owner decision):
@@ -18,7 +18,11 @@ import type { Credentials, RefreshOutcome, Session } from "./session";
 const LOCK_NAME = "auth-refresh";
 const CHANNEL_NAME = "auth";
 
-type TabMessage = { type: "credentials"; credentials: Credentials } | { type: "logout" };
+type TabMessage =
+  | { type: "credentials"; credentials: Credentials }
+  /** The signed-in user's details changed (a new name), with no new token. */
+  | { type: "user"; user: AuthUser }
+  | { type: "logout" };
 
 function parseMessage(data: unknown): TabMessage | null {
   if (!isRecord(data)) return null;
@@ -26,6 +30,10 @@ function parseMessage(data: unknown): TabMessage | null {
   if (data.type === "credentials") {
     const credentials = parseCredentials(data.credentials);
     return credentials ? { type: "credentials", credentials } : null;
+  }
+  if (data.type === "user") {
+    const user = parseUser(data.user);
+    return user ? { type: "user", user } : null;
   }
   return null;
 }
@@ -86,18 +94,22 @@ export function withRefreshLock(refresh: () => Promise<RefreshOutcome>, channel:
 }
 
 /**
- * Relays this tab's logins and logouts to the other tabs, and theirs into this
- * tab's session. Credentials from a refresh are posted by `withRefreshLock`.
+ * Relays this tab's logins, user updates and logouts to the other tabs, and theirs
+ * into this tab's session. Credentials from a refresh are posted by `withRefreshLock`.
  */
 export function connectTabs(session: Session, channel: TabChannel): void {
   session.onCredentials((credentials, origin) => {
     if (origin === "login") channel.post({ type: "credentials", credentials });
+  });
+  session.onUserUpdated((user, origin) => {
+    if (origin === "local") channel.post({ type: "user", user });
   });
   session.onLoggedOut((origin) => {
     if (origin === "local") channel.post({ type: "logout" });
   });
   channel.subscribe((message) => {
     if (message.type === "credentials") session.setCredentials(message.credentials, "remote");
+    else if (message.type === "user") session.updateUser(message.user, "remote");
     else session.logOut("remote");
   });
 }

@@ -78,3 +78,17 @@ export function LogoutIcon(): JSX.Element {
     </Icon>
   );
 }
+
+/** Three sliders: settings. */
+export function SettingsIcon(): JSX.Element {
+  return (
+    <Icon>
+      <path d="M3.5 5.5h6M13.5 5.5h3" />
+      <circle cx="11.5" cy="5.5" r="2" />
+      <path d="M3.5 10h2M9.5 10h7" />
+      <circle cx="7.5" cy="10" r="2" />
+      <path d="M3.5 14.5h7.5M15 14.5h1.5" />
+      <circle cx="13" cy="14.5" r="2" />
+    </Icon>
+  );
+}

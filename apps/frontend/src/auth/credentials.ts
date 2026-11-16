@@ -7,7 +7,8 @@ export const BROWSER_HEADERS: Readonly<Record<string, string>> = {
   "X-Requested-With": "fetch",
 };
 
-function parseUser(value: unknown): AuthUser | null {
+/** The user summary of a login or refresh response, or null when it is not one. */
+export function parseUser(value: unknown): AuthUser | null {
   if (!isRecord(value)) return null;
   const { id, email, name } = value;
   if (typeof id !== "string" || typeof email !== "string" || typeof name !== "string") return null;
