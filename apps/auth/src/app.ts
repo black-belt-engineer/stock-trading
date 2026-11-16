@@ -5,8 +5,10 @@ import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { AppConfig } from "./config/index.js";
 import { RefreshTokenRepository } from "./repositories/refresh-token.repository.js";
+import { createInternalGuard } from "./plugins/internal-guard.js";
 import { authRoutes } from "./routes/auth.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
+import { internalRoutes } from "./routes/internal.routes.js";
 import { AuthService } from "./services/auth.service.js";
 import { HealthService } from "./services/health.service.js";
 import { TokenService } from "./services/token.service.js";
@@ -49,6 +51,7 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
 
   await app.register(healthRoutes, { healthService: new HealthService(app.redis) });
   await app.register(authRoutes, { authService, tokenService });
+  await app.register(internalRoutes, { authService, internalGuard: createInternalGuard(config.INTERNAL_API_TOKEN) });
 
   return app;
 }

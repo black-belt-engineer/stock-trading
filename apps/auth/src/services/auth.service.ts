@@ -34,6 +34,11 @@ export class AuthService {
     await this.refreshTokens.delete(refreshToken);
   }
 
+  /** Revokes every refresh token of a user. Their access tokens still verify until they expire. */
+  async revokeAllSessions(userId: string): Promise<void> {
+    await this.refreshTokens.revokeAllForUser(userId);
+  }
+
   private async issueTokens(user: UserSummary): Promise<TokenResponse> {
     const refreshToken = this.tokens.generateRefreshToken();
     const [accessToken] = await Promise.all([
