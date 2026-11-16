@@ -11,7 +11,8 @@
     "dev:all": "bash scripts/dev.sh",
     "dev:setup": "bash scripts/dev.sh --setup-only",
     "dev:down": "bash scripts/dev.sh --down",
-    "lint": "turbo run lint"
+    "lint": "turbo run lint",
+    "docs:api": "node scripts/api-docs.mjs"
   },
   "devDependencies": {
     "turbo": "^2.9.8"

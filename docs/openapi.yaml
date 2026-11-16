@@ -1,0 +1,1360 @@
+openapi: 3.1.0
+info:
+  title: Stock Trading Platform API
+  version: 1.0.0
+  description: |
+    HTTP API of the backend services in `apps/`:
+
+    | Service       | Port | Paths                                              |
+    |---------------|------|----------------------------------------------------|
+    | auth          | 3005 | `/auth/*`, `/.well-known/jwks.json`, `/internal/*` |
+    | user          | 3004 | `/users*`                                          |
+    | sse-service   | 3003 | `/quotes/*`, `/stream`                             |
+    | consumer      | 3002 | health only                                        |
+    | ingestor      | 3001 | health only                                        |
+
+    Every service also exposes `/health`, `/health/live` and `/health/ready`.
+
+    **Authentication.** The auth service issues ES256 access tokens. The user and sse services check
+    them locally against `/.well-known/jwks.json`. Send them as `Authorization: Bearer <token>`.
+    Service-to-service endpoints take the shared secret in `X-Internal-Token` instead.
+
+    **Refresh tokens.** A browser sends `X-Requested-With: fetch` on login and gets the refresh token
+    as an `httpOnly` cookie (`refresh_token`, `Path=/auth`, `SameSite=Strict`), never in the body.
+    Other clients leave the header off at login and get the token in the body. `/auth/refresh` and
+    `/auth/logout` require `X-Requested-With: fetch` from every client (CSRF protection).
+
+    **Errors.** Every error body is `{ "error": "<message>", "code": "<CODE>" }`.
+
+    **Servers.** The first server is the docs server started by `pnpm docs:api`: it proxies
+    each path to its service the same way the Vite dev proxy does, so "Try it out" works without CORS.
+    Health paths exist on every service, so pick that service's direct server to call them.
+servers:
+  - url: /
+    description: Docs server proxy (pnpm docs:api)
+  - url: http://localhost:3005
+    description: auth
+  - url: http://localhost:3004
+    description: user
+  - url: http://localhost:3003
+    description: sse-service
+  - url: http://localhost:3002
+    description: consumer
+  - url: http://localhost:3001
+    description: ingestor
+
+tags:
+  - name: Auth
+    description: Login, token refresh and logout (auth service).
+  - name: Users
+    description: Registration and account management (user service).
+  - name: Quotes
+    description: Latest quotes, tick history and candles (sse-service). All need a bearer token.
+  - name: Stream
+    description: Server-sent price events (sse-service).
+  - name: Internal
+    description: Service-to-service endpoints. Never exposed through the public proxy.
+  - name: Health
+    description: Probes, present on every service.
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Log in with email and password
+      description: |
+        Rate limited per IP and per email. With `X-Requested-With: fetch` (cookie mode) the refresh
+        token is set as the `refresh_token` cookie and left out of the body; a refresh cookie already
+        present is revoked first. Without the header (body mode) it is returned in the body.
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWithOptional"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginBody"
+      responses:
+        "200":
+          description: Logged in.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          description: Invalid email or password.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refresh
+      summary: Exchange a refresh token for new tokens
+      description: |
+        The refresh token is rotated. It is read from the body when given (body mode, the new token
+        comes back in the body), otherwise from the `refresh_token` cookie (cookie mode, the new
+        token is set as the cookie). A refused cookie is cleared.
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshBody"
+      responses:
+        "200":
+          description: New tokens.
+          headers:
+            Set-Cookie:
+              $ref: "#/components/headers/RefreshCookie"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          description: No refresh token, or it is invalid or expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          $ref: "#/components/responses/MissingBrowserHeader"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Revoke a refresh token
+      description: |
+        Revokes the token from the body, or from the cookie when the body has none. In cookie mode
+        the cookie is cleared. Succeeds even when there is no token.
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshBody"
+      responses:
+        "204":
+          description: Logged out.
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "403":
+          $ref: "#/components/responses/MissingBrowserHeader"
+
+  /.well-known/jwks.json:
+    get:
+      tags: [Auth]
+      operationId: getJwks
+      summary: Public keys for verifying access tokens
+      description: Cached for 5 minutes (`Cache-Control: public, max-age=300`).
+      responses:
+        "200":
+          description: The JSON Web Key Set.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Jwks"
+
+  /internal/users/{id}/sessions/revoke:
+    post:
+      tags: [Internal]
+      operationId: revokeUserSessions
+      summary: Revoke every session of a user
+      description: Called by the user service before it deletes an account or changes its email or password.
+      security:
+        - internalToken: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204":
+          description: Sessions revoked.
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/InternalAuthFailed"
+
+  /internal/users/{id}/sessions/summary:
+    put:
+      tags: [Internal]
+      operationId: updateUserSessionSummary
+      summary: Rewrite the user summary stored with each session
+      description: Called by the user service before a name change, so refreshes stop returning the old name.
+      security:
+        - internalToken: []
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionSummaryBody"
+      responses:
+        "204":
+          description: Summaries updated.
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/InternalAuthFailed"
+
+  /users:
+    post:
+      tags: [Users]
+      operationId: register
+      summary: Register a new user
+      description: Rate limited to 5 attempts per IP per hour; every attempt counts, including malformed ones.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserBody"
+      responses:
+        "201":
+          description: User created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/EmailTaken"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /users/me:
+    get:
+      tags: [Users]
+      operationId: getMe
+      summary: The caller's own account
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/JwksUnavailable"
+
+  /users/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    get:
+      tags: [Users]
+      operationId: getUser
+      summary: Get an account by id (own account only)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/NotSelf"
+        "503":
+          $ref: "#/components/responses/JwksUnavailable"
+    patch:
+      tags: [Users]
+      operationId: updateUser
+      summary: Update the caller's account
+      description: |
+        Changing `email` or `password` needs `currentPassword` and ends every session of the user,
+        including the caller's, so the client logs in again. A name change alone keeps the sessions
+        and updates the summary the auth service returns on refresh.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserBody"
+      responses:
+        "200":
+          description: The updated account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Not the caller's own account, or `currentPassword` is incorrect.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          $ref: "#/components/responses/EmailTaken"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    delete:
+      tags: [Users]
+      operationId: deleteUser
+      summary: Delete the caller's account
+      description: Every session of the user is revoked before the account is deleted.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Account deleted.
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/NotSelf"
+        "502":
+          $ref: "#/components/responses/UpstreamError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /users/verify-credentials:
+    post:
+      tags: [Internal]
+      operationId: verifyCredentials
+      summary: Check an email and password
+      description: Called by the auth service at login. The same 401 is returned for an unknown email and a wrong password.
+      security:
+        - internalToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginBody"
+      responses:
+        "200":
+          description: Credentials are valid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          description: Invalid email or password, or a bad internal token (`INTERNAL_AUTH_FAILED`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /quotes/discovery/active-stocks:
+    get:
+      tags: [Quotes]
+      operationId: getActiveStocks
+      summary: Every registered symbol with its latest quote and sparkline
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The discovery list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActiveStocksResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/JwksUnavailable"
+
+  /quotes/{symbol}/snapshot:
+    get:
+      tags: [Quotes]
+      operationId: getSnapshot
+      summary: Latest quote of one symbol
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Symbol"
+      responses:
+        "200":
+          description: The latest quote.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LatestPrice"
+        "400":
+          $ref: "#/components/responses/InvalidSymbol"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Unknown symbol, or no quote received for it yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/JwksUnavailable"
+
+  /quotes/{symbol}/ticks:
+    get:
+      tags: [Quotes]
+      operationId: getTicks
+      summary: A page of stored ticks, newest first
+      description: |
+        `from` defaults to 15 minutes before `to`, `to` defaults to now and is clamped to now.
+        The range may not exceed 24 hours. Page on with `nextCursor` and the same `from` and `to`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Symbol"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 500
+        - name: cursor
+          in: query
+          description: The `nextCursor` of the previous page. Opaque.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 256
+      responses:
+        "200":
+          description: One page of ticks.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicksPage"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/UnknownSymbol"
+        "503":
+          $ref: "#/components/responses/JwksUnavailable"
+
+  /quotes/{symbol}/ticks.csv:
+    get:
+      tags: [Quotes]
+      operationId: exportTicksCsv
+      summary: Download stored ticks as CSV
+      description: |
+        Same range rules as `/quotes/{symbol}/ticks`. At most 100,000 rows; a larger range is a 400.
+        Columns: `time,symbol,price,size,side`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Symbol"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+      responses:
+        "200":
+          description: The CSV file, streamed.
+          headers:
+            Content-Disposition:
+              description: '`attachment; filename="<SYMBOL>_<from>_<to>.csv"`, times in ISO-8601 basic format.'
+              schema:
+                type: string
+          content:
+            text/csv:
+              schema:
+                type: string
+              example: |
+                time,symbol,price,size,side
+                2026-11-12T10:30:00.123Z,AAPL,228.51,120,buy
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/UnknownSymbol"
+        "503":
+          $ref: "#/components/responses/JwksUnavailable"
+
+  /quotes/{symbol}/candles:
+    get:
+      tags: [Quotes]
+      operationId: getCandles
+      summary: OHLCV candles aggregated from stored ticks
+      description: |
+        Without `from` the window is the latest 120 bars. At most 500 bars per request. `to` is
+        exclusive and clamped to now. A `1d` bar is one market session of the symbol's exchange.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Symbol"
+        - name: interval
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/CandleInterval"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - name: fill
+          in: query
+          description: "`previous`: an empty bucket is a flat bar at the previous close. `gaps`: it is left out."
+          schema:
+            $ref: "#/components/schemas/CandleFill"
+      responses:
+        "200":
+          description: The candles, oldest first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CandlesResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/UnknownSymbol"
+        "503":
+          $ref: "#/components/responses/JwksUnavailable"
+
+  /stream:
+    get:
+      tags: [Stream]
+      operationId: streamPrices
+      summary: Live price events (Server-Sent Events)
+      description: |
+        Opens a `text/event-stream`. Events:
+
+        - `snapshot`: one per requested symbol that has a quote, sent first. Data: `StreamQuote`.
+          Current state, not a trade.
+        - `price`: one per trade. Data: `StreamQuote`.
+        - `session-expired`: sent when the access token expires, then the stream closes. Empty data.
+          Refresh the token and reconnect.
+
+        The symbol list and the token are checked before any SSE header is sent, so a rejected
+        request gets a normal JSON error.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: symbols
+          in: query
+          description: Comma-separated symbols. Missing or empty means every registered symbol. Duplicates are dropped.
+          schema:
+            type: string
+          example: AAPL,MSFT,BRK.B
+      responses:
+        "200":
+          description: The event stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              example: |
+                event: snapshot
+                data: {"symbol":"AAPL","name":"Apple Inc.","sessionId":"2026-11-16","price":228.5, ...}
+
+                event: price
+                data: {"symbol":"AAPL","name":"Apple Inc.","sessionId":"2026-11-16","price":228.52, ...}
+
+                event: session-expired
+                data:
+        "400":
+          $ref: "#/components/responses/InvalidSymbol"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/UnknownSymbol"
+        "503":
+          $ref: "#/components/responses/JwksUnavailable"
+
+  /health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Service status
+      description: The body depends on the service; see the `oneOf` variants.
+      responses:
+        "200":
+          description: Status.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/BasicHealth"
+                  - $ref: "#/components/schemas/ConsumerHealth"
+                  - $ref: "#/components/schemas/IngestorHealth"
+                  - $ref: "#/components/schemas/SseHealth"
+
+  /health/live:
+    get:
+      tags: [Health]
+      operationId: getLiveness
+      summary: Liveness probe
+      responses:
+        "200":
+          description: The process is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LivenessResponse"
+
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: getReadiness
+      summary: Readiness probe
+      description: "Checks the service's dependencies: Redis (auth, sse-service), Postgres (user), both (consumer), none (ingestor)."
+      responses:
+        "200":
+          description: Ready.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+        "503":
+          description: A dependency is down.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: ES256 access token from `/auth/login` or `/auth/refresh`.
+    internalToken:
+      type: apiKey
+      in: header
+      name: X-Internal-Token
+      description: Shared secret between the auth and user services (`INTERNAL_API_TOKEN`).
+
+  parameters:
+    XRequestedWith:
+      name: X-Requested-With
+      in: header
+      required: true
+      description: Must be `fetch`. A cross-site form cannot set it.
+      schema:
+        type: string
+        enum: [fetch]
+    XRequestedWithOptional:
+      name: X-Requested-With
+      in: header
+      required: false
+      description: "`fetch` selects cookie mode (browsers). Leave it off to get the refresh token in the body."
+      schema:
+        type: string
+        enum: [fetch]
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Symbol:
+      name: symbol
+      in: path
+      required: true
+      description: A registered ticker. Lower case is accepted.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 32
+      example: AAPL
+    From:
+      name: from
+      in: query
+      description: ISO-8601 date-time with a time zone, inclusive.
+      schema:
+        type: string
+        format: date-time
+    To:
+      name: to
+      in: query
+      description: ISO-8601 date-time with a time zone, exclusive. Clamped to now.
+      schema:
+        type: string
+        format: date-time
+
+  headers:
+    RefreshCookie:
+      description: Cookie mode only. `refresh_token=<token>; Path=/auth; HttpOnly; SameSite=Strict` (and `Secure` in production).
+      schema:
+        type: string
+    RetryAfter:
+      description: Seconds until the next attempt is allowed.
+      schema:
+        type: integer
+
+  responses:
+    ValidationError:
+      description: The request is malformed (`VALIDATION_ERROR`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example: { error: "body/email must match format \"email\"", code: VALIDATION_ERROR }
+    InvalidSymbol:
+      description: Malformed symbol (`VALIDATION_ERROR`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    UnknownSymbol:
+      description: The symbol is not in the registry (`NOT_FOUND`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing, invalid or expired bearer token, or the account no longer exists (`UNAUTHORIZED`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotSelf:
+      description: The id is not the caller's own account (`FORBIDDEN`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    MissingBrowserHeader:
+      description: "`X-Requested-With: fetch` is missing (`FORBIDDEN`)."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalAuthFailed:
+      description: Missing or invalid internal token (`INTERNAL_AUTH_FAILED`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    EmailTaken:
+      description: A user with this email already exists (`CONFLICT`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: Too many attempts (`RATE_LIMITED`).
+      headers:
+        Retry-After:
+          $ref: "#/components/headers/RetryAfter"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    UpstreamError:
+      description: Another service answered with an error or an unexpected body (`USER_SERVICE_ERROR` and similar).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServiceUnavailable:
+      description: A dependency is down (`RATE_LIMIT_UNAVAILABLE`, `USER_SERVICE_UNAVAILABLE`, `JWKS_UNAVAILABLE` and similar).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    JwksUnavailable:
+      description: The token could not be verified because the auth service's keys could not be fetched (`JWKS_UNAVAILABLE`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+          description: Human-readable message.
+        code:
+          type: string
+          description: Machine-readable code.
+          examples:
+            - VALIDATION_ERROR
+            - UNAUTHORIZED
+            - FORBIDDEN
+            - NOT_FOUND
+            - CONFLICT
+            - RATE_LIMITED
+            - INTERNAL_AUTH_FAILED
+            - JWKS_UNAVAILABLE
+            - RATE_LIMIT_UNAVAILABLE
+            - USER_SERVICE_UNAVAILABLE
+            - USER_SERVICE_ERROR
+            - INTERNAL_ERROR
+
+    LoginBody:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+          format: password
+
+    RefreshBody:
+      type: object
+      additionalProperties: false
+      description: Leave `refreshToken` out to use the `refresh_token` cookie (browsers). Send `{}` then.
+      properties:
+        refreshToken:
+          type: string
+          minLength: 1
+
+    UserSummary:
+      type: object
+      required: [id, email, name]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+
+    TokenResponse:
+      type: object
+      required: [accessToken, tokenType, expiresIn, user]
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+          description: Body mode only. In cookie mode it is set as the `refresh_token` cookie instead.
+        tokenType:
+          type: string
+          const: Bearer
+        expiresIn:
+          type: integer
+          description: Access token lifetime in seconds.
+        user:
+          $ref: "#/components/schemas/UserSummary"
+
+    Jwks:
+      type: object
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          items:
+            type: object
+            description: An EC P-256 public key.
+            properties:
+              kty:
+                type: string
+                example: EC
+              crv:
+                type: string
+                example: P-256
+              x:
+                type: string
+              y:
+                type: string
+              kid:
+                type: string
+                description: The key's JWK thumbprint.
+              alg:
+                type: string
+                example: ES256
+              use:
+                type: string
+                example: sig
+
+    SessionSummaryBody:
+      type: object
+      additionalProperties: false
+      required: [email, name]
+      properties:
+        email:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+
+    User:
+      type: object
+      required: [id, email, name, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        name:
+          type: string
+        createdAt:
+          type: string
+          description: ISO-8601 date-time.
+        updatedAt:
+          type: string
+          description: ISO-8601 date-time.
+
+    CreateUserBody:
+      type: object
+      additionalProperties: false
+      required: [email, name, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+
+    UpdateUserBody:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: At least one of `email`, `name` or `password`.
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+        currentPassword:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 128
+          description: Required when `email` or `password` changes.
+
+    Sector:
+      type: string
+      enum:
+        - Communication Services
+        - Consumer Discretionary
+        - Consumer Staples
+        - Energy
+        - Financials
+        - Health Care
+        - Technology
+
+    Exchange:
+      type: string
+      enum: [NASDAQ, NYSE]
+
+    TickDirection:
+      type: string
+      enum: [up, down, flat]
+      description: How the last tick moved the price against the tick before it.
+
+    TradeSide:
+      type: string
+      enum: [buy, sell]
+
+    ActiveStock:
+      type: object
+      description: |
+        A registered symbol with no ticks yet has `null` prices and `lastUpdated`, never zeros.
+        Day values belong to `sessionId`; `change` and `changePercent` are against `previousClose`.
+      required:
+        - symbol
+        - name
+        - sector
+        - exchange
+        - sessionId
+        - currentPrice
+        - previousClose
+        - open
+        - high
+        - low
+        - volume
+        - change
+        - changePercent
+        - tickDirection
+        - lastUpdated
+        - sparkline
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        sector:
+          $ref: "#/components/schemas/Sector"
+        exchange:
+          $ref: "#/components/schemas/Exchange"
+        sessionId:
+          type: [string, "null"]
+        currentPrice:
+          type: [number, "null"]
+        previousClose:
+          type: [number, "null"]
+        open:
+          type: [number, "null"]
+        high:
+          type: [number, "null"]
+        low:
+          type: [number, "null"]
+        volume:
+          type: [number, "null"]
+        change:
+          type: [number, "null"]
+        changePercent:
+          type: [number, "null"]
+        tickDirection:
+          oneOf:
+            - $ref: "#/components/schemas/TickDirection"
+            - type: "null"
+        lastUpdated:
+          type: [number, "null"]
+          description: Epoch milliseconds.
+        sparkline:
+          type: array
+          items:
+            type: number
+
+    ActiveStocksResponse:
+      type: object
+      required: [listName, stocks]
+      properties:
+        listName:
+          type: string
+          const: active-stocks
+        stocks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActiveStock"
+
+    LatestPrice:
+      type: object
+      description: The latest quote with the values of the current session. `change` and `changePercent` are against `previousClose`.
+      required:
+        - symbol
+        - name
+        - sessionId
+        - currentPrice
+        - previousClose
+        - open
+        - high
+        - low
+        - volume
+        - change
+        - changePercent
+        - tickDirection
+        - lastSize
+        - lastSide
+        - lastUpdated
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        sessionId:
+          type: string
+        currentPrice:
+          type: number
+        previousClose:
+          type: number
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        volume:
+          type: number
+        change:
+          type: number
+        changePercent:
+          type: number
+        tickDirection:
+          $ref: "#/components/schemas/TickDirection"
+        lastSize:
+          type: number
+          description: Size of the last trade, in shares.
+        lastSide:
+          $ref: "#/components/schemas/TradeSide"
+        lastUpdated:
+          type: number
+          description: Epoch milliseconds.
+
+    StreamQuote:
+      type: object
+      description: |
+        Data of the `snapshot` and `price` SSE events: the day values of the symbol's current session
+        plus the trade that produced them. A new `sessionId` replaces the client's day values.
+      required:
+        - symbol
+        - name
+        - sessionId
+        - price
+        - previousClose
+        - open
+        - high
+        - low
+        - volume
+        - change
+        - changePercent
+        - tickDirection
+        - quantity
+        - side
+        - timestamp
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        sessionId:
+          type: string
+        price:
+          type: number
+        previousClose:
+          type: number
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        volume:
+          type: number
+        change:
+          type: number
+        changePercent:
+          type: number
+        tickDirection:
+          $ref: "#/components/schemas/TickDirection"
+        quantity:
+          type: number
+          description: Size of the trade, in shares.
+        side:
+          $ref: "#/components/schemas/TradeSide"
+        timestamp:
+          type: number
+          description: Epoch milliseconds.
+
+    Tick:
+      type: object
+      description: One stored trade. A column is `null` only in rows older than the current schema.
+      required: [id, time, price, size, side]
+      properties:
+        id:
+          type: string
+          description: Unique per row; stable across pages.
+        time:
+          type: string
+          description: ISO-8601 UTC, millisecond precision.
+        price:
+          type: [number, "null"]
+        size:
+          type: [number, "null"]
+        side:
+          oneOf:
+            - $ref: "#/components/schemas/TradeSide"
+            - type: "null"
+
+    TicksPage:
+      type: object
+      required: [symbol, from, to, ticks, nextCursor]
+      properties:
+        symbol:
+          type: string
+        from:
+          type: string
+          description: The range actually queried (defaults applied). Page on with the same values.
+        to:
+          type: string
+          description: The range end actually queried (clamped to now).
+        ticks:
+          type: array
+          description: Newest first.
+          items:
+            $ref: "#/components/schemas/Tick"
+        nextCursor:
+          type: [string, "null"]
+          description: Pass as `cursor` for the next (older) page; `null` on the last page.
+
+    CandleInterval:
+      type: string
+      enum: ["1m", "5m", "1h", "1d"]
+      description: "`1d` is one market session."
+
+    CandleFill:
+      type: string
+      enum: [previous, gaps]
+      default: previous
+
+    OhlcvBar:
+      type: object
+      required: [symbol, timestamp, end, open, high, low, close, volume, interval, complete]
+      properties:
+        symbol:
+          type: string
+        timestamp:
+          type: number
+          description: Bucket start, epoch ms, inclusive.
+        end:
+          type: number
+          description: Bucket end, epoch ms, exclusive.
+        open:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        close:
+          type: number
+        volume:
+          type: number
+          description: Shares traded in the bucket.
+        interval:
+          $ref: "#/components/schemas/CandleInterval"
+        complete:
+          type: boolean
+          description: "`false` while the bucket is still open."
+
+    CandlesResponse:
+      type: object
+      required: [symbol, interval, fill, from, to, bars, lastTradeAt]
+      properties:
+        symbol:
+          type: string
+        interval:
+          $ref: "#/components/schemas/CandleInterval"
+        fill:
+          $ref: "#/components/schemas/CandleFill"
+        from:
+          type: string
+          description: Start of the first bucket in the window.
+        to:
+          type: string
+          description: End (exclusive) of the last bucket in the window.
+        bars:
+          type: array
+          description: Oldest first. The last bar has `complete false` while its bucket is open.
+          items:
+            $ref: "#/components/schemas/OhlcvBar"
+        lastTradeAt:
+          type: [string, "null"]
+          description: ISO time of the newest trade the bars include. Apply only newer streamed trades to the last bar.
+
+    LivenessResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+
+    ReadinessResponse:
+      type: object
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [ok, unavailable]
+        checks:
+          type: object
+          properties:
+            db:
+              type: boolean
+            redis:
+              type: boolean
+
+    BasicHealth:
+      title: auth, user
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+
+    ConsumerHealth:
+      title: consumer
+      type: object
+      required: [status, messagesProcessed, lastMessageAt]
+      properties:
+        status:
+          type: string
+          enum: [starting, healthy]
+        messagesProcessed:
+          type: integer
+        lastMessageAt:
+          type: [number, "null"]
+          description: Epoch milliseconds.
+
+    IngestorHealth:
+      title: ingestor
+      type: object
+      required: [status, tickCount]
+      properties:
+        status:
+          type: string
+          const: ok
+        tickCount:
+          type: integer
+
+    SseHealth:
+      title: sse-service
+      type: object
+      required: [status, activeConnections]
+      properties:
+        status:
+          type: string
+          const: ok
+        activeConnections:
+          type: integer
