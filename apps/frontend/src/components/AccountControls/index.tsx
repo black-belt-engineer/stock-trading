@@ -22,7 +22,7 @@ export function AccountControls({ name, onLogOut }: Props): JSX.Element {
 
   return (
     <div className="flex min-w-0 items-center md:grid md:gap-1.5">
-      <p className="sr-only truncate px-1.5 text-[13px] text-secondary xl:not-sr-only" title={name}>
+      <p className="sr-only truncate pl-[15px] text-[13px] text-secondary xl:not-sr-only" title={name}>
         <span className="sr-only">Signed in as </span>
         {name}
       </p>

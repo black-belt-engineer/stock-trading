@@ -61,7 +61,7 @@ export function formText(form: FormData, name: string): string {
 
 export function SubmitButton({ busy, label, busyLabel }: { busy: boolean; label: string; busyLabel: string }): JSX.Element {
   return (
-    <button type="submit" disabled={busy} className={`${buttonClass} h-10 w-full justify-center border-brand! bg-brand-dim text-brand`}>
+    <button type="submit" disabled={busy} className={`${buttonClass} h-10 w-full justify-center border-brand! bg-brand-dim! text-brand!`}>
       {busy ? busyLabel : label}
     </button>
   );

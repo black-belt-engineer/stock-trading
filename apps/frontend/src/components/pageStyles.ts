@@ -14,4 +14,5 @@ export const inputClass =
   "h-10 w-full rounded-md border border-default bg-input px-3 text-primary placeholder:text-secondary " +
   `transition-colors duration-150 hover:border-strong ${focusRing}`;
 
-export const linkClass = `rounded-sm text-brand underline-offset-2 hover:underline ${focusRing}`;
+/** Underlined, not only coloured, so it stands out from the text around it. */
+export const linkClass = `rounded-sm text-brand underline underline-offset-2 hover:decoration-2 ${focusRing}`;

@@ -24,7 +24,7 @@ export function Splash({ unavailable = false, onRetry }: Props): JSX.Element {
 
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-base px-4 text-center">
-      <div className="font-bold tracking-[0.08em] text-brand">STREAMTICK</div>
+      <h1 className="font-bold tracking-[0.08em] text-brand">STREAMTICK</h1>
       {unavailable ? (
         <section role="alert" className="grid justify-items-center gap-3 text-secondary">
           <p>Service unavailable, try again.</p>
