@@ -67,3 +67,14 @@ export function HistoryIcon(): JSX.Element {
     </Icon>
   );
 }
+
+/** A door with an arrow leaving it: log out. */
+export function LogoutIcon(): JSX.Element {
+  return (
+    <Icon>
+      <path d="M8 3.5H5a1.5 1.5 0 0 0-1.5 1.5v10A1.5 1.5 0 0 0 5 16.5h3" />
+      <path d="M12.5 6.5 16 10l-3.5 3.5" />
+      <path d="M16 10H8" />
+    </Icon>
+  );
+}

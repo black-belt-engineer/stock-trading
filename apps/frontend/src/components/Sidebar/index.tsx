@@ -1,4 +1,5 @@
 import { NavLink } from "react-router";
+import { AccountControls } from "../AccountControls";
 import { ConnectionStatus } from "../ConnectionStatus";
 import { FeedIcon } from "../icons";
 import { navItems } from "../navItems";
@@ -11,6 +12,8 @@ type Props = {
   feedOpen: boolean;
   onToggleFeed: () => void;
   feedToggleRef: RefObject<HTMLButtonElement | null>;
+  userName: string;
+  onLogOut: () => Promise<void>;
 };
 
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand";
@@ -18,9 +21,11 @@ const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-
 /**
  * Narrow: a header row with the brand and the connection status; navigation is
  * in the bottom tab bar. Medium: an icon rail, labels visually hidden but still
- * read out, plus the feed drawer toggle. Wide: the full sidebar.
+ * read out, plus the feed drawer toggle. Wide: the full sidebar. The account
+ * controls sit next to the connection status: at the end of the header row, or
+ * at the foot of the rail and the sidebar.
  */
-export function Sidebar({ status, attempts, feedOpen, onToggleFeed, feedToggleRef }: Props): JSX.Element {
+export function Sidebar({ status, attempts, feedOpen, onToggleFeed, feedToggleRef, userName, onLogOut }: Props): JSX.Element {
   return (
     <aside
       className={
@@ -77,7 +82,10 @@ export function Sidebar({ status, attempts, feedOpen, onToggleFeed, feedToggleRe
           </button>
         </nav>
       </div>
-      <ConnectionStatus status={status} attempts={attempts} />
+      <div className="flex min-w-0 items-center gap-2 md:grid md:gap-3">
+        <AccountControls name={userName} onLogOut={onLogOut} />
+        <ConnectionStatus status={status} attempts={attempts} />
+      </div>
     </aside>
   );
 }
