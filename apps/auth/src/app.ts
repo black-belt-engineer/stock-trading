@@ -5,7 +5,7 @@ import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { AppConfig } from "./config/index.js";
 import { RefreshTokenRepository } from "./repositories/refresh-token.repository.js";
-import { createInternalGuard } from "./plugins/internal-guard.js";
+import { createInternalGuard } from "@stock-platform/auth-guard";
 import { authRoutes } from "./routes/auth.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { internalRoutes } from "./routes/internal.routes.js";

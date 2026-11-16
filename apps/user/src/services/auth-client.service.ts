@@ -1,5 +1,5 @@
 import { AppError } from "@stock-platform/errors";
-import { INTERNAL_TOKEN_HEADER } from "../plugins/internal-guard.js";
+import { INTERNAL_TOKEN_HEADER } from "@stock-platform/auth-guard";
 
 /** Calls the auth service's internal endpoints, authenticated by the shared internal token. */
 export class AuthClientService {

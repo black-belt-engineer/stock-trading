@@ -20,6 +20,9 @@ importers:
       '@sinclair/typebox':
         specifier: ^0.34.33
         version: 0.34.49
+      '@stock-platform/auth-guard':
+        specifier: workspace:*
+        version: link:../../packages/auth-guard
       '@stock-platform/env':
         specifier: workspace:*
         version: link:../../packages/env
@@ -228,6 +231,9 @@ importers:
       '@sinclair/typebox':
         specifier: ^0.34.33
         version: 0.34.49
+      '@stock-platform/auth-guard':
+        specifier: workspace:*
+        version: link:../../packages/auth-guard
       '@stock-platform/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -292,6 +298,9 @@ importers:
       '@sinclair/typebox':
         specifier: ^0.34.33
         version: 0.34.49
+      '@stock-platform/auth-guard':
+        specifier: workspace:*
+        version: link:../../packages/auth-guard
       '@stock-platform/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -313,9 +322,6 @@ importers:
       fastify-plugin:
         specifier: ^5.0.1
         version: 5.1.0
-      jose:
-        specifier: ^6.0.11
-        version: 6.2.15
       pg:
         specifier: ^8.16.3
         version: 8.20.0
@@ -329,6 +335,25 @@ importers:
       tsx:
         specifier: ^4.19.3
         version: 4.21.0
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
+  packages/auth-guard:
+    dependencies:
+      '@stock-platform/errors':
+        specifier: workspace:*
+        version: link:../errors
+      fastify:
+        specifier: ^5.2.1
+        version: 5.8.5
+      jose:
+        specifier: ^6.0.11
+        version: 6.2.15
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.17
       typescript:
         specifier: ^5.8.3
         version: 5.9.3

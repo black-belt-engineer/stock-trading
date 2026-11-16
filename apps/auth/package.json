@@ -16,6 +16,7 @@
   "dependencies": {
     "@fastify/type-provider-typebox": "^5.1.0",
     "@sinclair/typebox": "^0.34.33",
+    "@stock-platform/auth-guard": "workspace:*",
     "@stock-platform/env": "workspace:*",
     "@stock-platform/errors": "workspace:*",
     "@stock-platform/logger": "workspace:*",

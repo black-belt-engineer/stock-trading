@@ -8,8 +8,7 @@ import {
   userSchema,
   verifyCredentialsBodySchema,
 } from "../models/user.js";
-import type { InternalGuard } from "../plugins/internal-guard.js";
-import type { JwtGuard } from "../plugins/jwt-guard.js";
+import type { InternalGuard, JwtGuard } from "@stock-platform/auth-guard";
 import type { UserService } from "../services/user.service.js";
 
 export type UserRouteDeps = { userService: UserService; jwtGuard: JwtGuard; internalGuard: InternalGuard };
