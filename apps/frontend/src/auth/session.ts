@@ -1,16 +1,24 @@
 /**
- * The access token, in memory only (README Q2), and the single-flight refresh.
+ * The access token and the signed-in user, in memory only (README Q2), and the
+ * single-flight refresh.
  *
  * Refresh tokens are single-use (`GETDEL` in the auth service): two refreshes in
  * parallel would consume the token twice, the second would fail and the user would
  * be logged out. So every caller that needs a new token shares one refresh call.
- *
- * Phase 10 / A3 adds on top: the refresh cookie, the auth context and its pages,
- * the cross-tab lock and broadcast, and the proactive refresh before expiry.
+ * Across tabs the same holds through the lock in `tabSync.ts`.
  */
 
+export type AuthUser = { id: string; email: string; name: string };
+
+export type Credentials = {
+  accessToken: string;
+  /** Access token lifetime in seconds, as the server sent it. */
+  expiresIn: number;
+  user: AuthUser;
+};
+
 export type RefreshOutcome =
-  | { kind: "ok"; accessToken: string; expiresIn: number }
+  | ({ kind: "ok" } & Credentials)
   /** The server has no session for us: log out. */
   | { kind: "unauthorized" }
   /** The auth service could not be reached or failed: keep the session state and retry later. */
@@ -18,8 +26,17 @@ export type RefreshOutcome =
 
 export type RenewResult = "ok" | "logged-out" | "unavailable";
 
+/** Where new credentials came from: this tab's login, this tab's refresh, or another tab. */
+export type CredentialsOrigin = "login" | "refresh" | "remote";
+/** Who ended the session: this tab, or another tab that told us. */
+export type LogoutOrigin = "local" | "remote";
+
 export type Session = {
   getAccessToken: () => string | null;
+  getUser: () => AuthUser | null;
+  /** Stores credentials from a login (or, with `"remote"`, from another tab) and tells the listeners. */
+  setCredentials: (credentials: Credentials, origin?: "login" | "remote") => void;
+  /** Replaces the token only, for callers that have no user. Tells no one. */
   setAccessToken: (token: string | null) => void;
   /**
    * Gets a token to replace `rejected`, the one the server just refused. When the
@@ -27,26 +44,45 @@ export type Session = {
    * it is used without a new refresh. Concurrent calls share one refresh.
    */
   renew: (rejected: string | null) => Promise<RenewResult>;
-  /** Forgets the token and tells the listeners. */
-  logOut: () => void;
+  /** Forgets the token and the user, and tells the listeners. */
+  logOut: (origin?: LogoutOrigin) => void;
   /** Called on every logout. Returns the unsubscribe function. */
-  onLoggedOut: (listener: () => void) => () => void;
+  onLoggedOut: (listener: (origin: LogoutOrigin) => void) => () => void;
+  /** Called whenever new credentials are stored. Returns the unsubscribe function. */
+  onCredentials: (listener: (credentials: Credentials, origin: CredentialsOrigin) => void) => () => void;
 };
+
+function subscribe<T>(set: Set<T>, listener: T): () => void {
+  set.add(listener);
+  return () => {
+    set.delete(listener);
+  };
+}
 
 export function createSession(refresh: () => Promise<RefreshOutcome>): Session {
   let accessToken: string | null = null;
+  let user: AuthUser | null = null;
   let inFlight: Promise<RenewResult> | null = null;
-  const listeners = new Set<() => void>();
+  const logoutListeners = new Set<(origin: LogoutOrigin) => void>();
+  const credentialListeners = new Set<(credentials: Credentials, origin: CredentialsOrigin) => void>();
 
-  const logOut = (): void => {
+  const store = (credentials: Credentials, origin: CredentialsOrigin): void => {
+    accessToken = credentials.accessToken;
+    user = credentials.user;
+    for (const listener of [...credentialListeners]) listener(credentials, origin);
+  };
+
+  const logOut = (origin: LogoutOrigin = "local"): void => {
     accessToken = null;
-    for (const listener of [...listeners]) listener();
+    user = null;
+    for (const listener of [...logoutListeners]) listener(origin);
   };
 
   const runRefresh = async (): Promise<RenewResult> => {
     const outcome = await refresh().catch((): RefreshOutcome => ({ kind: "unavailable" }));
     if (outcome.kind === "ok") {
-      accessToken = outcome.accessToken;
+      const { kind: _ok, ...credentials } = outcome;
+      store(credentials, "refresh");
       return "ok";
     }
     if (outcome.kind === "unauthorized") {
@@ -58,6 +94,8 @@ export function createSession(refresh: () => Promise<RefreshOutcome>): Session {
 
   return {
     getAccessToken: () => accessToken,
+    getUser: () => user,
+    setCredentials: (credentials, origin = "login") => store(credentials, origin),
     setAccessToken: (token) => {
       accessToken = token;
     },
@@ -71,11 +109,7 @@ export function createSession(refresh: () => Promise<RefreshOutcome>): Session {
       return inFlight;
     },
     logOut,
-    onLoggedOut: (listener) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
+    onLoggedOut: (listener) => subscribe(logoutListeners, listener),
+    onCredentials: (listener) => subscribe(credentialListeners, listener),
   };
 }

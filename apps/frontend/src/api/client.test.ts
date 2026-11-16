@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { createSession, type RefreshOutcome } from "../auth/session";
 import { createApiClient, AuthUnavailableError, LoggedOutError } from "./client";
 
+const USER = { id: "u1", email: "ada@example.com", name: "Ada" };
+
 /** A promise with its resolver, to hold a refresh open while requests pile up. */
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   let resolve: (value: T) => void = () => {};
@@ -13,7 +15,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 
 /** A fake server: `valid` is the token it accepts; `status` overrides the answer. */
 function setup(options: { valid?: string; status?: number; refresh?: () => Promise<RefreshOutcome> } = {}) {
-  const refresh = vi.fn(options.refresh ?? (async (): Promise<RefreshOutcome> => ({ kind: "ok", accessToken: "new", expiresIn: 600 })));
+  const refresh = vi.fn(options.refresh ?? (async (): Promise<RefreshOutcome> => ({ kind: "ok", accessToken: "new", expiresIn: 600, user: USER })));
   const session = createSession(refresh);
   const seen: Array<string | null> = [];
   const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -43,7 +45,7 @@ describe("createApiClient", () => {
     const requests = Promise.all([apiFetch("/a"), apiFetch("/b"), apiFetch("/c"), apiFetch("/d")]);
     // Let all four reach the refresh before it answers.
     await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
-    gate.resolve({ kind: "ok", accessToken: "new", expiresIn: 600 });
+    gate.resolve({ kind: "ok", accessToken: "new", expiresIn: 600, user: USER });
     const responses = await requests;
     expect(responses.map((r) => r.status)).toEqual([200, 200, 200, 200]);
     expect(refresh).toHaveBeenCalledTimes(1);

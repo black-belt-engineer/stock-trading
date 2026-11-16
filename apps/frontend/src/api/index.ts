@@ -1,13 +1,13 @@
+import { BROWSER_HEADERS, parseCredentials } from "../auth/credentials";
 import { createSession, type RefreshOutcome } from "../auth/session";
-import { isRecord } from "../utils/guards";
+import { connectTabs, createTabChannel, startProactiveRefresh, withRefreshLock } from "../auth/tabSync";
 import { createApiClient } from "./client";
 
 export { AuthUnavailableError, LoggedOutError } from "./client";
 
 /**
  * Asks the auth service for a new access token. The refresh token travels in the
- * `httpOnly` cookie (README Q2; the cookie is set from A3 on), so the body is empty.
- * `X-Requested-With` is a header a cross-site form cannot send (A3's CSRF check).
+ * `httpOnly` cookie (README Q2), so the body is empty.
  *
  * Any `4xx` means there is no usable session. A `5xx` or a network error means the
  * auth service is in trouble, which must not log the user out.
@@ -18,7 +18,7 @@ async function refreshFromServer(): Promise<RefreshOutcome> {
     response = await fetch("/auth/refresh", {
       method: "POST",
       credentials: "same-origin",
-      headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" },
+      headers: BROWSER_HEADERS,
       body: "{}",
     });
   } catch {
@@ -26,13 +26,15 @@ async function refreshFromServer(): Promise<RefreshOutcome> {
   }
   if (response.status >= 400 && response.status < 500) return { kind: "unauthorized" };
   if (!response.ok) return { kind: "unavailable" };
-  const json: unknown = await response.json().catch(() => null);
-  if (!isRecord(json) || typeof json.accessToken !== "string" || typeof json.expiresIn !== "number") {
-    return { kind: "unavailable" };
-  }
-  return { kind: "ok", accessToken: json.accessToken, expiresIn: json.expiresIn };
+  const credentials = parseCredentials(await response.json().catch(() => null));
+  return credentials ? { kind: "ok", ...credentials } : { kind: "unavailable" };
 }
 
-export const session = createSession(refreshFromServer);
+const tabs = createTabChannel();
+
+/** The app's one session: the refresh is single-flight in this tab and, through the lock, across tabs. */
+export const session = createSession(withRefreshLock(refreshFromServer, tabs));
+connectTabs(session, tabs);
+startProactiveRefresh(session);
 
 export const apiFetch = createApiClient(session);
