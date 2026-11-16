@@ -27,6 +27,8 @@ export const updateUserBodySchema = Type.Object(
     email: Type.Optional(Type.String({ format: "email", maxLength: 254 })),
     name: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
     password: Type.Optional(Type.String({ minLength: 8, maxLength: 128 })),
+    /** Required when `email` or `password` changes. */
+    currentPassword: Type.Optional(Type.String({ minLength: 1, maxLength: 128 })),
   },
   { additionalProperties: false, minProperties: 1 },
 );
