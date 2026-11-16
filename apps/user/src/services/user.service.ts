@@ -1,4 +1,4 @@
-import { NotFoundError, UnauthorizedError } from "@stock-platform/errors";
+import { UnauthorizedError } from "@stock-platform/errors";
 import type { CreateUserBody, UpdateUserBody, User, VerifyCredentialsBody } from "../models/user.js";
 import { toUser, type UserRepository } from "../repositories/user.repository.js";
 import { hashPassword, verifyPassword } from "./password.js";
@@ -10,14 +10,10 @@ export class UserService {
     return this.users.prepareSchema();
   }
 
-  async list(): Promise<User[]> {
-    return (await this.users.findAll()).map(toUser);
-  }
-
   async getById(id: string): Promise<User> {
     const user = await this.users.findById(id);
     if (!user) {
-      throw new NotFoundError(`User ${id} not found`);
+      throw new UnauthorizedError("Account no longer exists");
     }
     return toUser(user);
   }
@@ -35,14 +31,14 @@ export class UserService {
       passwordHash,
     });
     if (!updated) {
-      throw new NotFoundError(`User ${id} not found`);
+      throw new UnauthorizedError("Account no longer exists");
     }
     return toUser(updated);
   }
 
   async delete(id: string): Promise<void> {
     if (!(await this.users.delete(id))) {
-      throw new NotFoundError(`User ${id} not found`);
+      throw new UnauthorizedError("Account no longer exists");
     }
   }
 
