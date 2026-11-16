@@ -28,6 +28,15 @@ export default defineConfig(({ mode }) => {
           target,
           changeOrigin: true,
         },
+        // Same origin as the app, so the refresh cookie (Path=/auth, A3) is first-party.
+        "/auth": {
+          target: env.VITE_AUTH_URL ?? "http://localhost:3005",
+          changeOrigin: true,
+        },
+        "/users": {
+          target: env.VITE_USER_URL ?? "http://localhost:3004",
+          changeOrigin: true,
+        },
       },
     },
   };
