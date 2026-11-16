@@ -8,10 +8,11 @@ import {
   userSchema,
   verifyCredentialsBodySchema,
 } from "../models/user.js";
+import type { InternalGuard } from "../plugins/internal-guard.js";
 import type { JwtGuard } from "../plugins/jwt-guard.js";
 import type { UserService } from "../services/user.service.js";
 
-export type UserRouteDeps = { userService: UserService; jwtGuard: JwtGuard };
+export type UserRouteDeps = { userService: UserService; jwtGuard: JwtGuard; internalGuard: InternalGuard };
 
 /** The caller's id from the JWT guard. Only `sub` is used for authorisation, never the email claim. */
 function callerId(authUserId: string | undefined): string {
@@ -34,7 +35,7 @@ function requireSelf(authUserId: string | undefined, targetId: string): string {
 }
 
 const userRoutesImpl: FastifyPluginAsyncTypebox<UserRouteDeps> = async (fastify, opts) => {
-  const { userService, jwtGuard } = opts;
+  const { userService, jwtGuard, internalGuard } = opts;
 
   fastify.get("/users/me", { preHandler: jwtGuard, schema: { response: { 200: userSchema } } }, (request) =>
     userService.getById(callerId(request.authUserId)),
@@ -70,11 +71,11 @@ const userRoutesImpl: FastifyPluginAsyncTypebox<UserRouteDeps> = async (fastify,
     },
   );
 
-  // Public (no guard): auth calls this to log in, before any token exists. Not for external exposure.
-  // Internal: called by the auth service to validate login credentials.
+  // Internal: the auth service calls this to log in, before any token exists. It proves itself
+  // with the shared internal token instead of a user JWT.
   fastify.post(
     "/users/verify-credentials",
-    { schema: { body: verifyCredentialsBodySchema, response: { 200: userSchema } } },
+    { preHandler: internalGuard, schema: { body: verifyCredentialsBodySchema, response: { 200: userSchema } } },
     (request) => userService.verifyCredentials(request.body),
   );
 };

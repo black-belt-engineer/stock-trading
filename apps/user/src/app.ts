@@ -5,6 +5,7 @@ import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { AppConfig } from "./config/index.js";
 import { UserRepository } from "./repositories/user.repository.js";
+import { createInternalGuard } from "./plugins/internal-guard.js";
 import { createJwtGuard } from "./plugins/jwt-guard.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { userRoutes } from "./routes/user.routes.js";
@@ -43,6 +44,7 @@ export async function buildApp(config: AppConfig): Promise<UserApp> {
       issuer: config.JWT_ISSUER,
       audience: config.JWT_AUDIENCE,
     }),
+    internalGuard: createInternalGuard(config.INTERNAL_API_TOKEN),
   });
 
   return { app, userService };

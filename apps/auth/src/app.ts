@@ -38,7 +38,7 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
     accessTtlSeconds: config.ACCESS_TOKEN_TTL_SECONDS,
   });
   const authService = new AuthService(
-    new UserClientService(config.USER_SERVICE_URL),
+    new UserClientService(config.USER_SERVICE_URL, config.INTERNAL_API_TOKEN),
     tokenService,
     new RefreshTokenRepository(app.redis),
     {
