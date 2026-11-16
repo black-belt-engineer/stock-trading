@@ -21,6 +21,8 @@ type AuthValue = {
   logIn: (email: string, password: string) => Promise<AuthResult>;
   register: (email: string, name: string, password: string) => Promise<AuthResult>;
   logOut: () => Promise<void>;
+  /** Shows changed details (a new name from `PATCH /users/:id`) here and in the other tabs. */
+  updateUser: (user: AuthUser) => void;
   /** Repeats the startup refresh after it found the auth service unavailable. */
   retry: () => void;
 };
@@ -47,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
 
   useEffect(() => {
     const offCredentials = session.onCredentials(({ user }) => setState({ status: "authenticated", user }));
+    const offUser = session.onUserUpdated((user) => setState({ status: "authenticated", user }));
     const offLoggedOut = session.onLoggedOut((origin) => {
       const chosen = origin === "remote" || loggingOut.current;
       loggingOut.current = false;
@@ -54,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     });
     return () => {
       offCredentials();
+      offUser();
       offLoggedOut();
     };
   }, []);
@@ -91,11 +95,13 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     session.logOut();
   }, []);
 
+  const updateUser = useCallback((user: AuthUser) => session.updateUser(user), []);
+
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
   const value = useMemo(
-    () => ({ state, logIn: doLogIn, register: doRegister, logOut: doLogOut, retry }),
-    [state, doLogIn, doRegister, doLogOut, retry],
+    () => ({ state, logIn: doLogIn, register: doRegister, logOut: doLogOut, updateUser, retry }),
+    [state, doLogIn, doRegister, doLogOut, updateUser, retry],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

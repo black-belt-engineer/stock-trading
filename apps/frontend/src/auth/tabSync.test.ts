@@ -109,4 +109,44 @@ describe("connectTabs", () => {
     expect(ca.posted).toEqual([{ type: "credentials", credentials: creds("t") }, { type: "logout" }]);
     expect(cb.posted).toEqual([]);
   });
+
+  it("shows a changed name in every tab, keeps the token and ignores another account's details", () => {
+    const join = network();
+    const [ca, cb] = [join(), join()];
+    const a = createSession(async () => ({ kind: "unauthorized" }));
+    const b = createSession(async () => ({ kind: "unauthorized" }));
+    connectTabs(a, ca);
+    connectTabs(b, cb);
+    a.setCredentials(creds("t"));
+
+    const seenByB = vi.fn();
+    b.onUserUpdated(seenByB);
+    const renamed = { ...USER, name: "Ada Lovelace" };
+    a.updateUser(renamed);
+    expect(a.getUser()).toEqual(renamed);
+    expect(b.getUser()).toEqual(renamed);
+    expect(b.getAccessToken()).toBe("t");
+    expect(seenByB).toHaveBeenCalledWith(renamed, "remote");
+    expect(cb.posted).toEqual([]);
+
+    // Unchanged details, or someone else's, change nothing and post nothing.
+    const postedBefore = ca.posted.length;
+    a.updateUser(renamed);
+    a.updateUser({ id: "u2", email: "bob@example.com", name: "Bob" });
+    expect(ca.posted).toHaveLength(postedBefore);
+    expect(a.getUser()).toEqual(renamed);
+  });
+
+  it("does not sign a logged-out tab in from a user update", () => {
+    const join = network();
+    const [ca, cb] = [join(), join()];
+    const a = createSession(async () => ({ kind: "unauthorized" }));
+    const b = createSession(async () => ({ kind: "unauthorized" }));
+    connectTabs(a, ca);
+    connectTabs(b, cb);
+    a.setCredentials(creds("t"));
+    b.logOut("remote"); // b alone forgets the session, as after a missed message
+    a.updateUser({ ...USER, name: "Ada Lovelace" });
+    expect(b.getUser()).toBeNull();
+  });
 });

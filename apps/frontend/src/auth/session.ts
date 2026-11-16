@@ -44,12 +44,20 @@ export type Session = {
    * it is used without a new refresh. Concurrent calls share one refresh.
    */
   renew: (rejected: string | null) => Promise<RenewResult>;
+  /**
+   * Replaces the signed-in user's details (a changed name) and tells the listeners.
+   * Ignored when no one is signed in or `user` is someone else: a late message from
+   * another tab must not put a different account's details on this one.
+   */
+  updateUser: (user: AuthUser, origin?: "local" | "remote") => void;
   /** Forgets the token and the user, and tells the listeners. */
   logOut: (origin?: LogoutOrigin) => void;
   /** Called on every logout. Returns the unsubscribe function. */
   onLoggedOut: (listener: (origin: LogoutOrigin) => void) => () => void;
   /** Called whenever new credentials are stored. Returns the unsubscribe function. */
   onCredentials: (listener: (credentials: Credentials, origin: CredentialsOrigin) => void) => () => void;
+  /** Called whenever `updateUser` changes the user. Returns the unsubscribe function. */
+  onUserUpdated: (listener: (user: AuthUser, origin: "local" | "remote") => void) => () => void;
 };
 
 function subscribe<T>(set: Set<T>, listener: T): () => void {
@@ -65,6 +73,7 @@ export function createSession(refresh: () => Promise<RefreshOutcome>): Session {
   let inFlight: Promise<RenewResult> | null = null;
   const logoutListeners = new Set<(origin: LogoutOrigin) => void>();
   const credentialListeners = new Set<(credentials: Credentials, origin: CredentialsOrigin) => void>();
+  const userListeners = new Set<(user: AuthUser, origin: "local" | "remote") => void>();
 
   const store = (credentials: Credentials, origin: CredentialsOrigin): void => {
     accessToken = credentials.accessToken;
@@ -108,7 +117,14 @@ export function createSession(refresh: () => Promise<RefreshOutcome>): Session {
       }
       return inFlight;
     },
+    updateUser: (next, origin = "local") => {
+      if (user === null || user.id !== next.id) return;
+      if (user.email === next.email && user.name === next.name) return;
+      user = next;
+      for (const listener of [...userListeners]) listener(next, origin);
+    },
     logOut,
+    onUserUpdated: (listener) => subscribe(userListeners, listener),
     onLoggedOut: (listener) => subscribe(logoutListeners, listener),
     onCredentials: (listener) => subscribe(credentialListeners, listener),
   };
