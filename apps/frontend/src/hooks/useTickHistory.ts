@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { apiFetch } from "../api";
 import { finiteOrNull, isRecord, textOrNull } from "../utils/guards";
 
 /** One stored trade, as `GET /quotes/:symbol/ticks` returns it. */
@@ -69,7 +70,7 @@ async function fetchPage(
 ): Promise<Page> {
   const params = new URLSearchParams({ from: range.from, to: range.to, limit: String(PAGE_LIMIT) });
   if (cursor) params.set("cursor", cursor);
-  const response = await fetch(`/quotes/${encodeURIComponent(symbol)}/ticks?${params.toString()}`, { signal });
+  const response = await apiFetch(`/quotes/${encodeURIComponent(symbol)}/ticks?${params.toString()}`, { signal });
   if (response.status === 404) throw new NotFound();
   if (!response.ok) throw new Error(`Tick history request failed with ${response.status}`);
   const page = parsePage(await response.json());

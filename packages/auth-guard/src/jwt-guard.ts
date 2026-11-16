@@ -14,8 +14,13 @@ declare module "fastify" {
   interface FastifyRequest {
     /** Set by the JWT guard on protected routes. */
     authUserId?: string;
+    /** The access token's `exp`, in epoch milliseconds. Set by the JWT guard on protected routes. */
+    authExpiresAt?: number;
   }
 }
+
+/** Tolerance for clock skew between services, applied to `exp` and `nbf`. */
+export const CLOCK_TOLERANCE_SECONDS = 30;
 
 // jose error codes meaning "this token is bad" (as opposed to "could not fetch the keys").
 const TOKEN_ERROR_PREFIXES = ["ERR_JWT_", "ERR_JWS_", "ERR_JWKS_NO_MATCHING_KEY", "ERR_JWKS_MULTIPLE"];
@@ -28,6 +33,9 @@ function isTokenError(err: unknown): boolean {
 /**
  * Stateless guard: verifies the access token locally against the auth service's public keys.
  * The JWKS is fetched once and cached by jose; it is refetched only for an unknown `kid`.
+ *
+ * Use it as a `preHandler` (or `onRequest`), so a rejected request is answered before a handler
+ * writes anything; the SSE route depends on that.
  */
 export function createJwtGuard(options: JwtGuardOptions): JwtGuard {
   const jwks = createRemoteJWKSet(options.jwksUrl);
@@ -44,11 +52,15 @@ export function createJwtGuard(options: JwtGuardOptions): JwtGuard {
         algorithms: ["ES256"],
         issuer: options.issuer,
         audience: options.audience,
+        clockTolerance: CLOCK_TOLERANCE_SECONDS,
+        // Without `exp` a stream opened with the token would never be closed by the server.
+        requiredClaims: ["sub", "exp"],
       });
-      if (!payload.sub) {
+      if (!payload.sub || payload.exp === undefined) {
         throw new UnauthorizedError("Invalid token");
       }
       request.authUserId = payload.sub;
+      request.authExpiresAt = payload.exp * 1000;
     } catch (err) {
       if (err instanceof UnauthorizedError) {
         throw err;

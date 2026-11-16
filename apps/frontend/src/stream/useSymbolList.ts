@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "../api";
 import type { ActiveStock, ListStatus } from "../types";
 import { finiteOrNull, isRecord, parseDayValues, parseTickDirection } from "../utils/guards";
 
@@ -38,7 +39,9 @@ export function useSymbolList(): { stocks: ActiveStock[]; status: ListStatus; re
   useEffect(() => {
     const controller = new AbortController();
     setStatus("loading");
-    fetch("/quotes/discovery/active-stocks", { signal: controller.signal })
+    // A 401 here goes through the API client like every other call: one refresh,
+    // then LoggedOutError, which the session reports as a logout (A3 shows the login page).
+    apiFetch("/quotes/discovery/active-stocks", { signal: controller.signal })
       .then(async (response): Promise<unknown> => {
         if (!response.ok) throw new Error(`Active stocks request failed with ${response.status}`);
         return response.json();

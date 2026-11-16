@@ -1,7 +1,7 @@
 import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
 import fp from "fastify-plugin";
 import { userIdParamsSchema } from "../models/auth.js";
-import type { InternalGuard } from "../plugins/internal-guard.js";
+import type { InternalGuard } from "@stock-platform/auth-guard";
 import type { AuthService } from "../services/auth.service.js";
 
 export type InternalRouteDeps = { authService: AuthService; internalGuard: InternalGuard };

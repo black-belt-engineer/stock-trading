@@ -6,6 +6,7 @@ import { LiveFeed } from "../LiveFeed";
 import { StaleBanner } from "../StaleBanner";
 import { BottomTabBar } from "../BottomTabBar";
 import { useStreamData, useStreamStatus } from "../../stream/StreamProvider";
+import { useAuth } from "../../auth/AuthProvider";
 
 /**
  * Sidebar and feed persist across routes; the centre column is the route outlet.
@@ -76,7 +77,10 @@ function ShellSidebar(props: {
   feedToggleRef: RefObject<HTMLButtonElement | null>;
 }): JSX.Element {
   const { status, reconnectAttempts } = useStreamStatus();
-  return <Sidebar status={status} attempts={reconnectAttempts} {...props} />;
+  const { state, logOut } = useAuth();
+  // The shell renders only behind the route guard, so the user is always known here.
+  const userName = state.status === "authenticated" ? state.user.name : "";
+  return <Sidebar status={status} attempts={reconnectAttempts} userName={userName} onLogOut={logOut} {...props} />;
 }
 
 function ShellFeed({ open, onClose }: { open: boolean; onClose: () => void }): JSX.Element {

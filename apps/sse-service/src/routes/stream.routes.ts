@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
+import { UnauthorizedError } from "@stock-platform/errors";
 import type { Logger } from "@stock-platform/logger";
 import { parseSymbolList } from "../models/symbols.js";
 import type { ConnectionTrackerService } from "../services/connection-tracker.service.js";
@@ -14,6 +15,9 @@ function setSseHeaders(reply: FastifyReply): void {
   reply.raw.flushHeaders?.();
 }
 
+// setTimeout fires at once for delays above 2^31 - 1 ms; tokens live minutes, but stay safe.
+const MAX_TIMER_MS = 2_147_483_647;
+
 export type StreamRouteDeps = {
   connectionTracker: ConnectionTrackerService;
   log: Logger;
@@ -26,6 +30,11 @@ const streamRoutesImpl: FastifyPluginAsync<StreamRouteDeps> = async (fastify, op
   fastify.get<{ Querystring: { symbols?: string } }>("/stream", async (request, reply) => {
     // Validated before any SSE header is sent, so a bad list gets a normal 400 or 404.
     const symbols = parseSymbolList(request.query.symbols);
+    // Set by the JWT guard; checked here because the expiry timer below depends on it.
+    const expiresAt = request.authExpiresAt;
+    if (expiresAt === undefined) {
+      throw new UnauthorizedError("Missing token expiry");
+    }
 
     request.raw.setTimeout(0);
     setSseHeaders(reply);
@@ -45,7 +54,17 @@ const streamRoutesImpl: FastifyPluginAsync<StreamRouteDeps> = async (fastify, op
       }
     });
 
+    // A stream must not outlive its token, or it would stay open after logout. At `exp` the
+    // server says why it closes, so the client refreshes and reconnects at once instead of
+    // treating the close as a dropped connection.
+    const expiryTimer = setTimeout(() => {
+      if (reply.raw.writableEnded || reply.raw.destroyed) return;
+      reply.raw.write("event: session-expired\ndata:\n\n");
+      reply.raw.end();
+    }, Math.min(Math.max(expiresAt - Date.now(), 0), MAX_TIMER_MS));
+
     request.raw.on("close", () => {
+      clearTimeout(expiryTimer);
       unsubscribe();
       connectionTracker.decrement();
     });
