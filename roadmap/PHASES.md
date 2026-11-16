@@ -17,7 +17,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 07 | M3, M6 | 03-market-data.md | 05 | done |
 | 08 | M4 | 03-market-data.md | 07 | done |
 | 09 | A1 | 04-auth.md | — | done |
-| 10 | A2, A3 | 04-auth.md | 03, 09 | in progress |
+| 10 | A2, A3 | 04-auth.md | 03, 09 | done |
 | 11 | A4 | 04-auth.md | 10 | todo |
 | 12 | D1, D2, D3 | 05-dashboard.md | 04, 06 | todo |
 | 13 | D4, D5 | 05-dashboard.md | 11, 12 | todo |
@@ -102,7 +102,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
   - **After login or registration**: go to the validated requested URL, or `/` when there is none. No first-run screen.
   - **Login and register pages**: a centred card on the page background with the app name above it, built from `pageStyles.ts`. The only password hint is "At least 8 characters". There is no strength meter and no show-password toggle. Below the form: "There is no password reset yet. Keep your password somewhere safe."
   - **Splash**: during the startup refresh, a centred app name with a small spinner that appears only after 300 ms and does not animate under reduced motion. Never render the login page before that refresh has answered.
-  - **Shell**: the user's name and a "Log out" button sit at the end of the shell's top bar. At narrow widths they move into the existing nav.
+  - **Shell**: the user's name and a "Log out" button sit at the end of the shell's top bar. At narrow widths they move into the existing nav. *(The shell has no top bar; the owner moved them to the sidebar foot during the session, see the A3 notes.)*
   - **Tests**: add Vitest to `apps/frontend` and unit-test three pure modules: the event-stream parser (including chunk splits inside a line and inside a multi-byte character), the single-flight refresh (parallel `401`s give one refresh call; `403` and `503` never refresh), and the redirect-target validation (rejects `//evil.com`, `https://…`, `/\evil.com` and `javascript:`). The rest is verified by hand as in earlier phases.
   - **Splitting**: one phase, one PR. If it runs out of time, the fallback in the last bullet applies and the PR is opened as a draft; it is not merged until the login exists.
 - Existing callers to route through the new API client: the symbol list fetch (now in `stream/useSymbolList.ts`, called by `StreamProvider`; a `401` there must also count as logged out), the tick history fetch (`fetchPage` in `hooks/useTickHistory.ts`), the CSV download, and the candles (`fetchCandles` in `hooks/useCandles.ts`; a `401` from its background refetches must also log out, not count as a failed refetch that is retried every 5 s). The CSV download is a plain `<a href download>` today (`ExportLink` in `pages/HistoryPage.tsx`); it becomes a blob fetch with the header, and must then show the server's `400` message (range over 24 hours, more than 100,000 rows) instead of a failed download.
@@ -115,6 +115,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 - `PATCH` needs `currentPassword` when `email` or `password` is in the body: `400` when it is missing, `403` when it is wrong. A body with only `currentPassword` is `400` ("Nothing to update").
 - Deleting an account cannot clean up portfolio data until phase 14 exists; record that as an open item rather than inventing a mechanism.
 - The Preferences section stays empty until D3 and D4 exist.
+- From phase 10: log in again after a credential change with `useAuth().logIn(email, password)` (`auth/AuthProvider.tsx`); it sets the new cookie and tells the other tabs. The login limits apply to it (5 failures per email in 15 minutes). After a delete, call `useAuth().logOut()`: the server has already revoked the sessions, but that call clears the cookie and logs out the other tabs. A `403` from `PATCH` comes back from `apiFetch` as a plain response. The account controls are in `components/AccountControls`, at the sidebar foot; a Settings entry goes into `navItems.ts`.
 
 ### 12 · Search, feed controls, table view (D1, D2, D3)
 - In that order; D3's header sort shares D1's sort state.
@@ -151,6 +152,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 - S1's client watchdog replaces U4's temporary "no message for 15 s" rule (`SILENCE_LIMIT_MS` in `usePriceStream.ts`). With the ingestor down that rule reconnects every 15 s; a heartbeat ends that.
 - Feed row keys switch to event ids (D2 edge case).
 - The token-expiry close from A2 takes precedence over the heartbeat.
+- Since phase 10 `StreamProvider` is mounted by the route guard (`auth/RouteGuards.tsx`, `RequireAuth`), not in `main.tsx`: it exists only with a session, and logging out unmounts it. A resume after a logout and login is a fresh connection, not a resume.
 - The Chart page (phase 08) refetches its last two candles when `useStreamStatus().status` goes from `live` to something else and back. With S1's resume the refetch becomes unnecessary but stays harmless; keep the status transitions as they are or update `useCandles`.
 
 ### 18 · Retention and compression (S3 steps 2–6, M4 step 3)
@@ -495,3 +497,64 @@ Each session appends here when it finishes: what the next phases need to know th
   - In `stream.routes.ts` the `close` listener is attached after `await getInitialQuotes`, so a client that disconnects during that await leaves its Redis subscription and the connection count behind. Older than this phase; S2 rewrites the subscription.
   - The API client retries a request by sending the same `init` again. That is fine for a string body, but a `ReadableStream` body cannot be sent twice. No caller sends one.
   - Still open from earlier notes: the `Sparkline` defects, SSE shutdown wedging `tsx watch`, "Connection lost" on a first load, the narrow feed tab's landmark and `scrollable-region-focusable`, Dockerfiles missing workspace dependencies, `tsconfig.app.tsbuildinfo` tracked in git.
+
+### Phase 10, part 2: A3 (2026-11-16)
+- Decided by the owner during the session:
+  - The shell has no top bar, so the name and "Log out" sit at the sidebar foot, above the connection status. Wide: the name above a labelled button. Icon rail: an icon button with "Log out <name>" as its tooltip. Narrow: a "Log out" text button at the end of the header row, with the name read out only.
+  - A browser never gets the refresh token in a response body. Login with `X-Requested-With: fetch` gets the cookie and no `refreshToken` in the body; without the header it gets the body form and no cookie.
+  - `TRUST_PROXY` (auth and user) is passed to Fastify's `trustProxy`. It is empty (off) by default; `.env.local.example` sets `loopback`. The Vite proxy sends `X-Forwarded-For` (`xfwd`) on `/auth` and `/users`. Production sets it to the reverse proxy's address (Q9).
+  - Redis down: login and registration answer `503 RATE_LIMIT_UNAVAILABLE` (fail closed). The user service now needs `REDIS_URL`.
+- Choices made here:
+  - **Refinement of the body/cookie decision:** refresh and logout require `X-Requested-With` from every client, so there the header cannot pick the mode. The mode is where the token came from: a body token gets a body answer and no cookie, a cookie gets a cookie answer.
+  - The cookie is `refresh_token` (`HttpOnly; SameSite=Strict; Path=/auth; Max-Age` = the refresh TTL), with `Secure` when `NODE_ENV=production` (checked). A refused cookie refresh clears it, logout clears it, and a browser login that arrives with an old cookie revokes that old session first.
+  - Rate limits use `FixedWindowCounter` (`packages/redis`): `INCR` with `EXPIRE … NX` and `TTL` in one `MULTI`, which needs Redis 7. The keys are `ratelimit:login:ip:<ip>`, `ratelimit:login:email:<sha256 of the lower-cased email>` and `ratelimit:register:ip:<ip>`. `RateLimitedError` (`packages/errors`) carries `Retry-After`.
+  - Only a `401` from `verify-credentials` counts as a failed login; a user-service outage does not. Blocked attempts still count against the IP. Registration counts in `onRequest`, so invalid bodies count too.
+  - The redirect target travels as `/login?next=<path>`. It is validated by `auth/redirect.ts` and dropped after a chosen logout, so a logout lands on plain `/login`; a session that ended on its own keeps it.
+  - If the startup refresh cannot reach the auth service, the splash says "Service unavailable, try again" with a Try again button, instead of showing the login page.
+  - Proactive refresh fires 60 s before `expiresIn`. A token shorter than 2 minutes is refreshed at half its life, so a short test token cannot loop.
+  - Tabs (`auth/tabSync.ts`): the tab that wins the lock posts its new token before releasing the lock. Logins are broadcast too, so a tab on the login page follows a login in another tab. Every logout in a tab is broadcast, a refused refresh included, since the cookie is shared.
+  - `StreamProvider` moved from `main.tsx` into the route guard. The 404 page is behind the guard as well.
+  - Messages:
+    - "Invalid email or password"
+    - "Service unavailable, try again" (`5xx` or a network error)
+    - "Too many attempts, try again in N minutes" (from `Retry-After`)
+    - a `409` shows the server's "A user with this email already exists"
+    - a registration `400` shows the form's rules in one line
+- Verified:
+  - curl against the dev services, 41 checks:
+    - cookie attributes, the body/cookie modes for login, refresh and logout, and `403` without the header
+    - rotation; a reused cookie gets `401` and is cleared; logout; re-login revokes the old cookie
+    - 5 failures then `429` from a new IP even with the right password; the upper-cased email shares the counter; an unknown email is blocked the same way; a success resets the count
+    - 20 attempts per IP then `429`; 5 registrations then `429` (`Retry-After` near 3600); no plain email in any Redis key
+  - Scratch instances: Redis unreachable gives `503 RATE_LIMIT_UNAVAILABLE` from both services (after about 10 s of ioredis retries); `NODE_ENV=production` adds `Secure`.
+  - Unit tests, 49 in all, including:
+    - the redirect validation: `//evil.com`, `https://…`, `/\evil.com`, `javascript:`, control characters, `/login` as a target, round trip through `next`
+    - the tab sync: real Web Locks in Node 24, so a tab waiting on the lock uses the broadcast token and does not refresh; logout reaches the other tab without echoing back
+    - the proactive delay
+  - Headless Chromium (Playwright 1.57, axe-core 4.11) against `pnpm dev`, 60 checks:
+    - guard and registration: logged out, `/history/AAPL?x=1` goes to `/login?next=…`, with only `/auth/refresh` sent and no market request; registering from there lands on that page; the login body has no refresh token; the cookie is `httpOnly`, `Strict`, on `/auth` and invisible to `document.cookie`
+    - reload: the session survives and the login page never renders (MutationObserver from the first byte)
+    - the dashboard goes Live with one `/stream`; logged in, `/login?next=//evil.com` goes to `/`
+    - logout: it calls `/auth/logout`, clears the cookie and lands on `/login`, and a reload stays logged out
+    - errors: a wrong password, mocked `503`, `429` and a network error give the right messages, and the `409` message shows
+    - splash: no spinner before 300 ms, a static spinner under reduced motion, and a `503` on refresh shows the splash with Try again (never the login page)
+    - `autocomplete` attributes; no horizontal scroll and axe clean on login and register at 360×740, 768×1024, 740×360 and 1440×900, and on the dashboard at 360, 1024 and 1440
+  - Done when, with a second auth instance issuing 20 s tokens behind a second Vite:
+    - two tabs over 70 s: 7 refreshes in all, one every 10 s, all from one tab (the other took the broadcast token)
+    - both streams reconnected at each expiry, no `401` anywhere, "Live" in all 334 samples, no "Connection lost" banner
+    - logging out in one tab sent the other to `/login` in 93 ms, and logging in one tab logged in the other
+    - five rounds of reloading both tabs at the same moment: one refresh in four rounds, two in one, never a `401`
+- Not checked:
+  - the 600 s path of the proactive refresh in a browser (only unit-tested; the browser run used the half-life path of short tokens)
+  - a real phone, Safari and Firefox, a screen reader, and a password manager actually offering to save
+  - `scripts/dev.sh` from a fresh clone (it copies `TRUST_PROXY` from the example like any missing variable)
+  - the production cookie behind a real reverse proxy (Q9 does not exist)
+  - Dockerfiles: there is none for auth or user; the user service now needs `packages/redis`
+- Left open:
+  - Logging out while the auth service is down forgets the token in the tab, but the server never revoked the cookie, so a reload logs the user back in. JavaScript cannot clear an `httpOnly` cookie.
+  - The per-email check and the failure count are separate steps, so parallel wrong passwords can exceed 5 by a few; the IP limit bounds it.
+  - Without Redis, login and registration take about 10 s to answer `503`; a shorter `maxRetriesPerRequest` would shorten that.
+  - Key rotation (owner decision); refresh-token reuse detection (A3 future issue).
+- Defects noticed outside the scope, not fixed:
+  - When `pnpm install` ran during `pnpm dev:all`, `tsx watch` restarted the user service mid-install and it stayed down until a source file changed. Same family as the earlier `tsx watch` notes.
+  - Still open from earlier notes: the `Sparkline` defects, SSE shutdown wedging `tsx watch`, "Connection lost" on a first load, the narrow feed tab's landmark and `scrollable-region-focusable`, Dockerfiles missing workspace dependencies, `tsconfig.app.tsbuildinfo` tracked in git, the `close` listener order in `stream.routes.ts`.
