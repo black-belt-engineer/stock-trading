@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, JSX } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
+import { apiFetch, LoggedOutError } from "../api";
 import { buttonClass, panelClass } from "../components/pageStyles";
 import { PillGroup } from "../components/PillGroup";
 import { SymbolPicker } from "../components/SymbolPicker";
@@ -8,6 +9,7 @@ import { useTickHistory } from "../hooks/useTickHistory";
 import type { HistoryTick, QueriedRange } from "../hooks/useTickHistory";
 import { useStreamData } from "../stream/StreamProvider";
 import type { FeedEvent } from "../types";
+import { isRecord } from "../utils/guards";
 import {
   differentLocalDays,
   formatPrice,
@@ -121,16 +123,71 @@ export function HistoryPage(): JSX.Element {
   );
 }
 
+/** The server's message in a JSON error body (`{ error, code }`), or null. */
+async function errorMessageOf(response: Response): Promise<string | null> {
+  const json: unknown = await response.json().catch(() => null);
+  return isRecord(json) && typeof json.error === "string" && json.error !== "" ? json.error : null;
+}
+
+/** `AAPL_….csv` from `Content-Disposition: attachment; filename="AAPL_….csv"`, or null. */
+function fileNameOf(response: Response): string | null {
+  const match = /filename="([^"]+)"/.exec(response.headers.get("Content-Disposition") ?? "");
+  return match?.[1] ?? null;
+}
+
 /**
- * A plain link: the endpoint needs no token yet. After A2 it needs one, and
- * this becomes a fetch with the header and a download from the blob (phase 10).
+ * The export needs the access token, which a plain `<a href download>` cannot
+ * send, so it is fetched and saved from a blob. That holds the file in memory
+ * (at most 100,000 rows, about 6 MB). A `400` (range over 24 hours, too many
+ * rows) shows the server's message instead of a failed download.
  */
 function ExportLink({ symbol, range }: { symbol: string; range: QueriedRange }): JSX.Element {
-  const href = `/quotes/${encodeURIComponent(symbol)}/ticks.csv?${new URLSearchParams(range).toString()}`;
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const download = async (): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const path = `/quotes/${encodeURIComponent(symbol)}/ticks.csv?${new URLSearchParams(range).toString()}`;
+      const response = await apiFetch(path);
+      if (!response.ok) {
+        const serverMessage = response.status === 400 ? await errorMessageOf(response) : null;
+        setMessage(serverMessage ?? "Could not export the trades. Try again.");
+        return;
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileNameOf(response) ?? `${symbol}.csv`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      // Revoked on the next task: the click has started the download by then.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (err) {
+      setMessage(err instanceof LoggedOutError ? "Your session has ended. Log in again to export." : "Could not export the trades. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <a href={href} download className={buttonClass}>
-      Export CSV
-    </a>
+    <>
+      <button
+        type="button"
+        onClick={() => void download()}
+        // Not `disabled` while busy: that would drop keyboard focus. A second click is ignored.
+        aria-disabled={busy}
+        className={buttonClass}
+      >
+        {busy ? "Exporting…" : "Export CSV"}
+      </button>
+      <span role="status" className="text-[12px] text-secondary empty:hidden">
+        {message}
+      </span>
+    </>
   );
 }
 

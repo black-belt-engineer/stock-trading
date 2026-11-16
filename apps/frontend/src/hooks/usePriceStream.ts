@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { apiFetch, LoggedOutError, session } from "../api";
+import { createEventStreamParser, type StreamEvent } from "../stream/eventStream";
 import type { FeedEvent, LiveQuote } from "../types";
 import { finiteOrNull, isRecord, parseDayValues, parseTickDirection } from "../utils/guards";
 
@@ -17,8 +19,7 @@ const MAX_BACKOFF_MS = 30000;
 const SILENCE_LIMIT_MS = 15_000;
 
 /** Returns null for a malformed message so one bad frame cannot throw inside a listener. */
-function parseQuote(raw: unknown): LiveQuote | null {
-  if (typeof raw !== "string") return null;
+function parseQuote(raw: string): LiveQuote | null {
   let data: unknown;
   try {
     data = JSON.parse(raw);
@@ -44,7 +45,19 @@ function parseQuote(raw: unknown): LiveQuote | null {
   };
 }
 
-/** Opens no connection while `symbols` is null or empty. */
+/**
+ * The price stream, read with `fetch` so it can send the access token
+ * (README Q1; `EventSource` cannot set headers).
+ *
+ * How a connection ends decides what happens next:
+ * - `401` that a refresh cannot fix (logged out): stop, no retry.
+ * - `503` (the guard cannot fetch its keys), a network error, or a body that
+ *   ends without explanation: a dropped connection, retried with backoff.
+ * - `event: session-expired` before the end: the token ran out. Renew it and
+ *   reconnect at once, with no backoff and no status change.
+ *
+ * Opens no connection while `symbols` is null or empty.
+ */
 export function usePriceStream(symbols: string[] | null): {
   prices: Map<string, LiveQuote>;
   feed: FeedEvent[];
@@ -61,7 +74,10 @@ export function usePriceStream(symbols: string[] | null): {
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const [nextRetryAt, setNextRetryAt] = useState<number | null>(null);
   const retriesRef = useRef(0);
-  const sourceRef = useRef<EventSource | null>(null);
+  /** Aborts the current connection's fetch, or null when none is open. */
+  const connectionRef = useRef<AbortController | null>(null);
+  /** The current connection has answered 200 and its body is being read. */
+  const openRef = useRef(false);
   const timerRef = useRef<number | null>(null);
   const lastMessageRef = useRef(0);
   /** Set by the effect below; reconnects immediately. A no-op before mount and after unmount. */
@@ -72,6 +88,7 @@ export function usePriceStream(symbols: string[] | null): {
   useEffect(() => {
     if (query === "") return;
     let mounted = true;
+    let loggedOut = false;
 
     const clearTimer = (): void => {
       if (timerRef.current !== null) {
@@ -81,16 +98,17 @@ export function usePriceStream(symbols: string[] | null): {
       setNextRetryAt(null);
     };
 
-    const closeSource = (): void => {
-      if (sourceRef.current) {
-        sourceRef.current.close();
-        sourceRef.current = null;
+    const closeConnection = (): void => {
+      openRef.current = false;
+      if (connectionRef.current) {
+        connectionRef.current.abort();
+        connectionRef.current = null;
       }
     };
 
     const scheduleReconnect = (): void => {
-      closeSource();
-      if (!mounted) return;
+      closeConnection();
+      if (!mounted || loggedOut) return;
       setStatus("reconnecting");
       const delay = BACKOFF[retriesRef.current] ?? MAX_BACKOFF_MS;
       retriesRef.current += 1;
@@ -103,80 +121,155 @@ export function usePriceStream(symbols: string[] | null): {
       }, delay);
     };
 
-    const connect = (): void => {
-      if (!mounted) return;
-      setStatus(retriesRef.current > 0 ? "reconnecting" : "connecting");
-      const source = new EventSource(`/stream?symbols=${encodeURIComponent(query)}`);
-      sourceRef.current = source;
-      lastMessageRef.current = Date.now();
+    /** No session: stop for good, without backoff. The login flow (A3) takes over from here. */
+    const stopLoggedOut = (): void => {
+      loggedOut = true;
+      clearTimer();
+      closeConnection();
+      if (mounted) setStatus("disconnected");
+    };
 
-      source.addEventListener("open", () => {
-        retriesRef.current = 0;
-        lastMessageRef.current = Date.now();
-        setReconnectAttempts(0);
-        setStatus("live");
+    const applyQuote = (quote: LiveQuote): void => {
+      setPrices((prev) => {
+        const next = new Map(prev);
+        next.set(quote.symbol, quote);
+        return next;
       });
+    };
 
-      const applyQuote = (quote: LiveQuote): void => {
-        setPrices((prev) => {
-          const next = new Map(prev);
-          next.set(quote.symbol, quote);
-          return next;
-        });
-      };
-
+    const handleEvent = (event: StreamEvent): void => {
+      lastMessageRef.current = Date.now();
       // Sent once per connection: current state, not trades. Prices only, never the feed.
-      source.addEventListener("snapshot", (event) => {
-        lastMessageRef.current = Date.now();
+      if (event.type === "snapshot") {
         const quote = parseQuote(event.data);
         if (quote) applyQuote(quote);
+        return;
+      }
+      if (event.type !== "price") return;
+      const safeData = parseQuote(event.data);
+      if (!safeData) return;
+
+      applyQuote(safeData);
+
+      setFeed((prev) => {
+        const next: FeedEvent = {
+          ...safeData,
+          id: `${safeData.symbol}-${safeData.timestamp}-${Math.random().toString(16).slice(2)}`,
+        };
+        return [next, ...prev].slice(0, 20);
       });
+    };
 
-      source.addEventListener("price", (event) => {
-        lastMessageRef.current = Date.now();
-        const safeData = parseQuote(event.data);
-        if (!safeData) return;
-
-        applyQuote(safeData);
-
-        setFeed((prev) => {
-          const next: FeedEvent = {
-            ...safeData,
-            id: `${safeData.symbol}-${safeData.timestamp}-${Math.random().toString(16).slice(2)}`,
-          };
-          return [next, ...prev].slice(0, 20);
+    /**
+     * One connection: open it through the API client (which refreshes once on
+     * `401`), then read the body until it ends. Only the current connection may
+     * change the status or schedule a reconnect.
+     */
+    const run = async (controller: AbortController): Promise<void> => {
+      const isCurrent = (): boolean => mounted && connectionRef.current === controller;
+      let sessionExpired = false;
+      // The token this connection was opened with, once the API client has settled on one.
+      let tokenUsed: string | null = null;
+      try {
+        const response = await apiFetch(`/stream?symbols=${encodeURIComponent(query)}`, {
+          signal: controller.signal,
+          headers: { Accept: "text/event-stream" },
         });
-      });
+        tokenUsed = session.getAccessToken();
+        if (!isCurrent()) return;
+        if (!response.ok || !response.body) {
+          scheduleReconnect();
+          return;
+        }
 
-      source.addEventListener("error", () => {
-        // Only the current connection may schedule a reconnect.
-        if (sourceRef.current !== source) return;
+        retriesRef.current = 0;
+        lastMessageRef.current = Date.now();
+        openRef.current = true;
+        setReconnectAttempts(0);
+        setStatus("live");
+
+        const parser = createEventStreamParser((event) => {
+          if (!isCurrent()) return;
+          if (event.type === "session-expired") {
+            sessionExpired = true;
+            return;
+          }
+          handleEvent(event);
+        });
+        const reader = response.body.getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          parser.push(value);
+        }
+        parser.end();
+      } catch (err) {
+        if (!isCurrent()) return;
+        if (err instanceof LoggedOutError) {
+          stopLoggedOut();
+          return;
+        }
+        // A network error, a dropped connection or AuthUnavailableError.
         scheduleReconnect();
-      });
+        return;
+      }
+
+      if (!isCurrent()) return;
+      if (!sessionExpired) {
+        // The body ended without the server saying why.
+        scheduleReconnect();
+        return;
+      }
+      // Renew the token (unless someone already has) and reconnect at once,
+      // keeping the status, so no "Connection lost" banner appears.
+      openRef.current = false;
+      const renewed = await session.renew(tokenUsed);
+      if (!isCurrent()) return;
+      if (renewed === "logged-out") {
+        stopLoggedOut();
+        return;
+      }
+      if (renewed === "unavailable") {
+        scheduleReconnect();
+        return;
+      }
+      connect({ keepStatus: true });
+    };
+
+    const connect = (options: { keepStatus?: boolean } = {}): void => {
+      if (!mounted || loggedOut) return;
+      if (!options.keepStatus) setStatus(retriesRef.current > 0 ? "reconnecting" : "connecting");
+      closeConnection();
+      const controller = new AbortController();
+      connectionRef.current = controller;
+      lastMessageRef.current = Date.now();
+      void run(controller);
     };
 
     const retryNow = (): void => {
       if (!mounted) return;
+      loggedOut = false;
       clearTimer();
-      closeSource();
       connect();
     };
     retryRef.current = retryNow;
 
     // Back online: no point waiting out the backoff.
     const onOnline = (): void => {
-      if (sourceRef.current?.readyState !== EventSource.OPEN) retryNow();
+      if (!openRef.current) retryNow();
     };
 
     const checkSilence = (): void => {
-      const source = sourceRef.current;
-      if (!source || source.readyState !== EventSource.OPEN) return;
+      if (!openRef.current) return;
       if (Date.now() - lastMessageRef.current > SILENCE_LIMIT_MS) scheduleReconnect();
     };
     const onVisibility = (): void => {
       if (document.visibilityState === "visible") checkSilence();
     };
     const watchdog = window.setInterval(checkSilence, 1000);
+
+    // A logout ends the stream at once instead of at the token's expiry.
+    const offLoggedOut = session.onLoggedOut(stopLoggedOut);
 
     window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisibility);
@@ -185,12 +278,13 @@ export function usePriceStream(symbols: string[] | null): {
     return () => {
       mounted = false;
       retryRef.current = () => {};
+      offLoggedOut();
       window.clearInterval(watchdog);
       window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisibility);
       setStatus("disconnected");
       clearTimer();
-      closeSource();
+      closeConnection();
     };
   }, [query]);
 

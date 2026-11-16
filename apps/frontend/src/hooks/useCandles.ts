@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { apiFetch, LoggedOutError } from "../api";
 import { useStreamData, useStreamStatus } from "../stream/StreamProvider";
 import type { FeedEvent } from "../types";
 import { finiteOrNull, isRecord, textOrNull } from "../utils/guards";
@@ -91,7 +92,7 @@ async function fetchCandles(
 ): Promise<Response> {
   const params = new URLSearchParams({ interval });
   if (from !== null) params.set("from", new Date(from).toISOString());
-  const response = await fetch(`/quotes/${encodeURIComponent(symbol)}/candles?${params.toString()}`, { signal });
+  const response = await apiFetch(`/quotes/${encodeURIComponent(symbol)}/candles?${params.toString()}`, { signal });
   if (response.status === 404) throw new NotFound();
   if (!response.ok) throw new Error(`Candle request failed with ${response.status}`);
   const parsed = parseResponse(await response.json());
@@ -218,8 +219,10 @@ export function useCandles(symbol: string | null, interval: CandleInterval): Can
           const last = res.bars.at(-1);
           setRetryTail(last && !last.complete && last.end <= Date.now() ? (n) => n + 1 : 0);
         })
-        .catch(() => {
+        .catch((err: unknown) => {
           if (controller.signal.aborted) return;
+          // Logged out: the session has already said so; retrying every 5 s would only repeat the 401.
+          if (err instanceof LoggedOutError) return;
           setRetryTail((n) => n + 1);
         });
     },
