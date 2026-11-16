@@ -16,7 +16,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 06 | M2, M5 | 03-market-data.md | 05 | done |
 | 07 | M3, M6 | 03-market-data.md | 05 | done |
 | 08 | M4 | 03-market-data.md | 07 | done |
-| 09 | A1 | 04-auth.md | — | in progress |
+| 09 | A1 | 04-auth.md | — | done |
 | 10 | A2, A3 | 04-auth.md | 03, 09 | todo |
 | 11 | A4 | 04-auth.md | 10 | todo |
 | 12 | D1, D2, D3 | 05-dashboard.md | 04, 06 | todo |
@@ -87,9 +87,12 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 - Decided: fetch-based stream reader (Q1), refresh token in an `httpOnly` cookie (Q2).
 - Existing callers to route through the new API client: the symbol list fetch (now in `stream/useSymbolList.ts`, called by `StreamProvider`; a `401` there must also count as logged out), the tick history fetch (`fetchPage` in `hooks/useTickHistory.ts`), the CSV download, and the candles (`fetchCandles` in `hooks/useCandles.ts`; a `401` from its background refetches must also log out, not count as a failed refetch that is retried every 5 s). The CSV download is a plain `<a href download>` today (`ExportLink` in `pages/HistoryPage.tsx`); it becomes a blob fetch with the header, and must then show the server's `400` message (range over 24 hours, more than 100,000 rows) instead of a failed download.
 - The stream hook must tell `401` (logged out) from `503` (retry) from a dropped connection (U4's banner). The hook is used only through `StreamProvider`; the router is React Router 7 in declarative mode (`BrowserRouter`), so the route guard is a layout route around the shell.
+- From phase 09: `apps/user/src/plugins/internal-guard.ts` and `apps/auth/src/plugins/internal-guard.ts` are identical copies; move them into `packages/auth-guard` next to `createJwtGuard`. The API client must treat `403` (for example "Current password is incorrect", code `FORBIDDEN`) as a normal error, never as a reason to refresh or log out. A `401` from `/users/me` means the account is gone.
 - This is the largest phase. If it will not fit one session, finish A2's server side and the API client first, record exactly where you stopped under "Notes between phases", and leave the status `in progress`.
 
 ### 11 · Settings page (A4)
+- **Differs from the A4 plan since phase 09:** changing the email or password revokes *every* refresh token of the user, the caller's included (`PATCH /users/:id` revokes before it writes). The current access token keeps working until it expires, but the next refresh fails. After a successful credential change, log the user in again with the new credentials (or ask the owner whether to add a "keep this session" option to the revoke endpoint) instead of expecting the session to continue.
+- `PATCH` needs `currentPassword` when `email` or `password` is in the body: `400` when it is missing, `403` when it is wrong. A body with only `currentPassword` is `400` ("Nothing to update").
 - Deleting an account cannot clean up portfolio data until phase 14 exists; record that as an open item rather than inventing a mechanism.
 - The Preferences section stays empty until D3 and D4 exist.
 
@@ -404,3 +407,37 @@ Each session appends here when it finishes: what the next phases need to know th
   - A SIGKILLed SSE service is not restarted by `tsx watch` even after a real file change ("Process hasn't exited. Killing process..."), and killing that watcher stops the whole `pnpm dev:all`. Same root as the phase 03 shutdown note.
   - The random walk moved AAPL from about $231 to $258 in 8 minutes (phase 06's mean-reversion note), which makes every chart look like a spike.
   - Still open from earlier notes: the `Sparkline` defects, "Connection lost" on a first load, no main landmark on the narrow feed tab and its `scrollable-region-focusable`, Dockerfiles missing workspace dependencies, `tsconfig.app.tsbuildinfo` tracked in git.
+
+### After phase 09 (2026-11-16)
+- Done as planned:
+  - `ForbiddenError` (`403`, `FORBIDDEN`) in `packages/errors`.
+  - `GET`, `PATCH`, `DELETE /users/:id` check `request.authUserId === :id` before any lookup, so another user's id gives `403` whether it exists or not (no user enumeration).
+  - `GET /users/me` added; `GET /users`, `UserService.list` and `UserRepository.findAll` removed.
+  - A missing account behind a valid token is `401` ("Account no longer exists"), not `404`.
+  - `POST /users/verify-credentials` needs `X-Internal-Token`. It is compared through sha256 digests with `timingSafeEqual` and never logged.
+  - Changing email or password needs `currentPassword`.
+  - Refresh tokens are indexed per user in a Redis set `auth:user-sessions:<userId>` (hashes only, TTL of the newest token). `save` writes the token and the index in one `MULTI`; `consume` and logout remove the entry.
+- Choices the plan left open, made here:
+  - `INTERNAL_API_TOKEN` (at least 32 characters, no default) in both services; a missing one stops the service at startup. `scripts/dev.sh` generates it into `.env.local` like `JWT_PRIVATE_KEY`; the example file only documents it.
+  - A wrong internal token gets `401` with its own code `INTERNAL_AUTH_FAILED`. The auth service turns it into `502 USER_SERVICE_ERROR`, so a misconfiguration never looks like "Invalid email or password".
+  - A wrong current password is `403`, not `401`: the session is valid, and the phase 10 client must not refresh or log out on a typo. A missing one is `400`.
+  - Revocation is an auth service endpoint, `POST /internal/users/:id/sessions/revoke` (`204`), guarded by the same internal token. It sits outside `/auth/` because the reverse proxy (Q9) will forward `/auth/*` to browsers; `/internal/*` must never be routed there.
+  - The user service revokes **before** it writes, for delete and for an email or password change. If the auth service is down the request fails with `503 AUTH_SERVICE_UNAVAILABLE` and nothing has changed. The cost: a revoke followed by a failed write (for example `409` on a taken email) has logged the user out for nothing. The caller's own session is revoked too (see the phase 11 brief).
+  - The internal guard is duplicated in both apps for now (phase 10 brief).
+- Verified with curl against the built services (Postgres and Redis from compose), 32 checks in one script plus the failure paths:
+  - A's token on B: `GET`, `PATCH`, `DELETE` all `403`; an unknown uuid `403`; `GET /users` `404`; `/users/me` without a token `401`.
+  - `verify-credentials` without and with a wrong header `401 INTERNAL_AUTH_FAILED`, with the right one `200`; login through the auth service works.
+  - Name-only `PATCH` without a password `200`; only `currentPassword` `400`; password without `currentPassword` `400`; wrong one `403` with the session index untouched; right one `200`, after which the old refresh token is `401`, the index is gone and the old password no longer logs in.
+  - Refresh keeps exactly one index entry; logout removes it.
+  - Delete `204`, then the still-unexpired access token on `/users/me` `401` and the refresh token `401`.
+  - Auth service stopped: delete and password change both `503`, account and old password unchanged.
+  - Auth started with a different secret: login `502 USER_SERVICE_ERROR`. Empty secret: startup fails on `INTERNAL_API_TOKEN`.
+  - The secret does not appear in either service's log.
+- Not checked: the email-change path end to end (it shares the password branch), `scripts/dev.sh` from a fresh clone (the generation block was run by hand against the existing `.env.local`), the Dockerfiles and `infra/` (no manifest sets the auth env today).
+- Left open, small:
+  - `revokeAllForUser` is `SMEMBERS` then `DEL`, not atomic: a login landing between the two keeps a valid refresh token. A Lua script would close it.
+  - Between the revoke and the write a refresh can still issue a token with the old summary for a moment; it is only a narrow window, but the same Lua script or a per-user "revoked before" timestamp would fix it.
+  - Hashes of expired tokens stay in the index until the set's own TTL; harmless.
+  - `DELETE /users/:id` does not ask for the password; A4 confirms by typing the email.
+- Defects noticed outside the scope, not fixed:
+  - `/auth/login` and `POST /users` have no rate limit yet (A3 step 9).
