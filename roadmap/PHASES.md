@@ -85,6 +85,26 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 ### 10 · Guard and login (A2, A3)
 - The two items ship together. Do not leave the branch in a state where endpoints are protected and no login exists.
 - Decided: fetch-based stream reader (Q1), refresh token in an `httpOnly` cookie (Q2).
+- Decided by the owner (2026-11-16), before the phase started:
+  - **Rate limits** (A3.9): fixed windows in Redis (`INCR` plus `EXPIRE` on the first hit). Keys use a sha256 of the lower-cased email, never the plain address.
+    - `POST /auth/login`: 20 attempts per IP per 15 minutes, counting every attempt; 5 *failed* attempts per email per 15 minutes, from any IP. A successful login resets that email's counter.
+    - `POST /users`: 5 registrations per IP per hour.
+    - Over a limit: `429` with code `RATE_LIMITED` and a `Retry-After` header in seconds. The login page shows "Too many attempts, try again in N minutes". A blocked email gets the same answer whether or not the account exists.
+    - Lockout by email is accepted as bounded (15 minutes at most); it is listed under A3's future issues.
+  - **Stream expiry** (A2.5): just before closing at `exp`, the server sends `event: session-expired` (empty data). On that event the client refreshes and reconnects at once, with no backoff and no "Connection lost" banner. A close without that event is still a dropped connection.
+  - **Key rotation**: out of scope. Leave it as an open item; nothing rotates keys today.
+  - **`Secure` cookie flag**: on when `NODE_ENV === "production"`, with no separate flag. Q9 (reverse proxy) is unchanged.
+  - **Clock skew**: 30 seconds of tolerance in the shared guard.
+  - **CSRF header**: `X-Requested-With: fetch` is required on `/auth/refresh` and `/auth/logout`; without it the answer is `403`.
+  - **Proactive refresh**: 60 seconds before `expiresIn` runs out.
+  - **Tabs**: the Web Locks API (`navigator.locks.request("auth-refresh", …)`) makes the single-flight refresh hold across tabs. A `BroadcastChannel("auth")` shares the new access token, so a tab that waited on the lock uses it instead of refreshing again. It also carries logout: logging out in one tab logs out every tab.
+  - **Session length**: refresh tokens stay at 7 days. No "remember me".
+  - **After login or registration**: go to the validated requested URL, or `/` when there is none. No first-run screen.
+  - **Login and register pages**: a centred card on the page background with the app name above it, built from `pageStyles.ts`. The only password hint is "At least 8 characters". There is no strength meter and no show-password toggle. Below the form: "There is no password reset yet. Keep your password somewhere safe."
+  - **Splash**: during the startup refresh, a centred app name with a small spinner that appears only after 300 ms and does not animate under reduced motion. Never render the login page before that refresh has answered.
+  - **Shell**: the user's name and a "Log out" button sit at the end of the shell's top bar. At narrow widths they move into the existing nav.
+  - **Tests**: add Vitest to `apps/frontend` and unit-test three pure modules: the event-stream parser (including chunk splits inside a line and inside a multi-byte character), the single-flight refresh (parallel `401`s give one refresh call; `403` and `503` never refresh), and the redirect-target validation (rejects `//evil.com`, `https://…`, `/\evil.com` and `javascript:`). The rest is verified by hand as in earlier phases.
+  - **Splitting**: one phase, one PR. If it runs out of time, the fallback in the last bullet applies and the PR is opened as a draft; it is not merged until the login exists.
 - Existing callers to route through the new API client: the symbol list fetch (now in `stream/useSymbolList.ts`, called by `StreamProvider`; a `401` there must also count as logged out), the tick history fetch (`fetchPage` in `hooks/useTickHistory.ts`), the CSV download, and the candles (`fetchCandles` in `hooks/useCandles.ts`; a `401` from its background refetches must also log out, not count as a failed refetch that is retried every 5 s). The CSV download is a plain `<a href download>` today (`ExportLink` in `pages/HistoryPage.tsx`); it becomes a blob fetch with the header, and must then show the server's `400` message (range over 24 hours, more than 100,000 rows) instead of a failed download.
 - The stream hook must tell `401` (logged out) from `503` (retry) from a dropped connection (U4's banner). The hook is used only through `StreamProvider`; the router is React Router 7 in declarative mode (`BrowserRouter`), so the route guard is a layout route around the shell.
 - From phase 09: `apps/user/src/plugins/internal-guard.ts` and `apps/auth/src/plugins/internal-guard.ts` are identical copies; move them into `packages/auth-guard` next to `createJwtGuard`. The API client must treat `403` (for example "Current password is incorrect", code `FORBIDDEN`) as a normal error, never as a reason to refresh or log out. A `401` from `/users/me` means the account is gone.

@@ -46,16 +46,16 @@ Order: A1 first and alone. A2 and A3 must ship together; protecting the endpoint
 2. Apply the guard to `/quotes/*` and `/stream`. Leave `/health/*` open for probes.
 3. Client: replace `EventSource` in `usePriceStream` with `fetch` plus a reader over the response body, sending `Authorization: Bearer …`. Write a small parser for the event-stream format: split on blank lines, read `event:`, `data:` and `id:` fields, ignore lines starting with `:`. Decode with a streaming text decoder so a multi-byte character split across chunks is not corrupted.
 4. The hook already implements its own backoff and reconnect, so losing `EventSource`'s built-in reconnect costs nothing.
-5. Token expiry on a long-lived stream: on connect, the server schedules the connection to close when the token's `exp` passes. The client treats that close as normal, refreshes its token and reconnects. Without this, a stream opened with a valid token stays open forever, including after logout.
+5. Token expiry on a long-lived stream: on connect, the server schedules the connection to close when the token's `exp` passes. Just before closing, it sends `event: session-expired`. The client treats that close as normal, refreshes its token and reconnects at once (no backoff, no banner). Without this, a stream opened with a valid token stays open forever, including after logout.
 6. On `401` from the stream or any quote call, the client refreshes once and retries; a second `401` logs the user out.
 7. Dev proxy: add `/auth` → 3005 and `/users` → 3004 in `apps/frontend/vite.config.ts`.
 
 **Edge cases.**
 
 - The guard returns `503 JWKS_UNAVAILABLE` when it cannot reach the auth service to fetch keys. For the stream, the client must treat `503` as "retry with backoff", not "log out".
-- Key rotation: the guard refetches keys for an unknown `kid`, but the auth service publishes exactly one key (`token.service.ts:31`). Rotating the key therefore invalidates every outstanding token at once. Publish the previous key alongside the new one during a rotation window.
+- Key rotation: the guard refetches keys for an unknown `kid`, but the auth service publishes exactly one key (`token.service.ts:31`). Rotating the key therefore invalidates every outstanding token at once. Publish the previous key alongside the new one during a rotation window. *(Out of scope for phase 10: left open.)*
 - The stream handler currently writes SSE headers before any `await` (`stream.routes.ts:27`). The guard must run as a `preHandler`, before headers are sent, or a rejected request has already answered `200`.
-- Clock skew between services makes fresh tokens look not-yet-valid or just-expired. Allow a small tolerance in verification.
+- Clock skew between services makes fresh tokens look not-yet-valid or just-expired. Allow 30 seconds of tolerance in verification.
 - A refresh that lands exactly when the stream reconnects: ensure the reconnect waits for the in-flight refresh rather than sending the old token (A3's single-flight refresh).
 - `fetch` streaming through some corporate proxies is buffered. The server already sets `X-Accel-Buffering: no`; the heartbeat from S1 also helps.
 - A logged-out tab with an open stream: closing at `exp` bounds the exposure to one token lifetime. For immediate cut-off, the client aborts the fetch on logout.
@@ -81,19 +81,19 @@ Order: A1 first and alone. A2 and A3 must ship together; protecting the endpoint
 2. Frontend auth context: holds the user and the access token **in memory only**. On app start it calls `/auth/refresh`; success means logged in, `401` means show login.
 3. One API client module used by every request: attaches the access token; on `401` performs a refresh and retries once.
 4. Single-flight refresh: if several requests fail at once, they share one refresh call. This is essential because refresh tokens are single-use (`RefreshTokenRepository.consume` uses `GETDEL`); two parallel refreshes mean the second fails and the user is logged out.
-5. Proactive refresh shortly before `expiresIn` elapses, so the stream is not interrupted.
+5. Proactive refresh 60 seconds before `expiresIn` elapses, so the stream is not interrupted.
 6. Pages: `/login` and `/register` (email, name, password of at least 8 characters to match `createUserBodySchema`). After registering, log in automatically.
-7. Route guard: every route except those two requires a session; remember the requested URL and return to it after login.
+7. Route guard: every route except those two requires a session; remember the requested URL and return to it after login or registration (`/` when there is none).
 8. Logout: call `/auth/logout`, clear memory, abort the stream, redirect to login.
-9. Rate-limit `/auth/login` and `POST /users` by IP and by email, counting in Redis.
+9. Rate-limit `/auth/login` and `POST /users` by IP and by email, counting in Redis. Limits: login 20 per IP and 5 failures per email per 15 minutes; registration 5 per IP per hour; `429 RATE_LIMITED` with `Retry-After` (details in the phase 10 brief).
 
 **Edge cases.**
 
-- Two tabs: both refresh at the same moment, one wins, the other gets `401` because the token was consumed. Coordinate with a `BroadcastChannel` (one tab refreshes and shares the new access token), or on `401` wait briefly and retry using the cookie the other tab just received.
+- Two tabs: both refresh at the same moment, one wins, the other gets `401` because the token was consumed. Coordinate with the Web Locks API (one tab refreshes at a time) and a `BroadcastChannel` (that tab shares the new access token). *(Decided; the earlier "wait and retry with the cookie" option is dropped.)*
 - Logout in one tab should log out the others; broadcast it.
 - Page reload: memory is empty; the startup refresh restores the session. Show a splash state rather than flashing the login page.
 - Cookie `Path=/auth` only works if the browser sees the auth API on the same origin as the app (dev proxy, or a production reverse proxy — Q9). On a different origin the cookie becomes third-party and browsers may block it.
-- CSRF: `SameSite=Strict` covers the refresh endpoint in modern browsers. Additionally require a custom header (for example `X-Requested-With`) on `/auth/refresh` and `/auth/logout`, which a cross-site form cannot set.
+- CSRF: `SameSite=Strict` covers the refresh endpoint in modern browsers. Additionally require the header `X-Requested-With: fetch` on `/auth/refresh` and `/auth/logout`, which a cross-site form cannot set.
 - Registration with an existing email returns `409` with a message that confirms the account exists. Acceptable here; a real product would send a neutral response.
 - Login error must stay generic ("Invalid email or password"), as `verifyCredentials` already does.
 - Password managers need proper `autocomplete` attributes: `username`, `current-password`, `new-password`.
@@ -106,6 +106,7 @@ Order: A1 first and alone. A2 and A3 must ship together; protecting the endpoint
 - No email verification and no password reset. Both need an email provider, which is a third-party integration and out of scope for now; without reset, a forgotten password means a lost account. State this on the login page or add an admin reset later.
 - Refresh-token reuse detection: if a consumed token is presented again, it may have been stolen; revoking the whole token family is the standard response and needs the per-user index from A1.
 - A session list ("log out other devices") needs the same index.
+- The per-email login limit lets anyone lock a known email out for up to 15 minutes. That is accepted for now; a CAPTCHA or a per-device trust cookie would close it.
 
 **Done when.** A new user can register, land on the dashboard, reload without logging in again, stay logged in past the access-token lifetime, and log out from one tab and see the other tab follow.
 
