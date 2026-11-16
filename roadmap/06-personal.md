@@ -8,7 +8,7 @@ Per-user features. Confirmed decisions: data is stored **server-side from the st
 
 Build this once, with P1.
 
-1. New app `apps/portfolio` on port 3006, following the structure of `apps/user`: config, routes, services, repositories, `prepareSchema` at startup, health routes.
+1. New app `apps/portfolio` on port 3006, following the structure of `apps/user` (deleted in phase 12; follow `apps/sse-service`, which has the same layout): config, routes, services, repositories, `prepareSchema` at startup, health routes.
 2. Uses `packages/db` (Postgres), `packages/redis` (to read `price:latest:<symbol>`), and the shared guard from A2.
 3. Every route takes the user id from `request.authUserId`. No route accepts a user id in the path or body, which removes the ownership bug class from A1 by construction.
 4. Every table has `user_id UUID NOT NULL` and every query filters on it.
@@ -16,7 +16,7 @@ Build this once, with P1.
 
 Shared concerns:
 
-- **No cross-service foreign key.** `users` belongs to the user service. Deleting a user leaves rows here until a cleanup path exists (see A4).
+- **No cross-service foreign key.** Users belong to Keycloak since phase 12; `user_id` is the token's `sub`. Deleting a user leaves rows here until a cleanup path exists (see A4 and K4's edge cases in `08-identity.md`).
 - **Schema changes.** The project creates tables with `CREATE TABLE IF NOT EXISTS` at startup, which cannot alter an existing table safely. Money tables need real, ordered migrations; introduce a minimal migration runner before P3.
 - **Symbol validation.** Reject symbols that are not in M1's registry.
 

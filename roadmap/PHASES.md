@@ -19,13 +19,14 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 09 | A1 | 04-auth.md | — | done |
 | 10 | A2, A3 | 04-auth.md | 03, 09 | done |
 | 11 | A4 | 04-auth.md | 10 | done |
-| 12 | D1, D2, D3 | 05-dashboard.md | 04, 06 | todo |
-| 13 | D4, D5 | 05-dashboard.md | 11, 12 | todo |
-| 14 | Portfolio service, P1 | 06-personal.md | 05, 10 | todo |
-| 15 | P2 | 06-personal.md | 14 | todo |
-| 16 | Migration runner, P3 | 06-personal.md | 06, 14 | todo |
-| 17 | S1, S2 | 07-streaming.md | 10 | todo |
-| 18 | S3 steps 2–6, M4 step 3 | 07-streaming.md, 03-market-data.md | 08 | todo |
+| 12 | K1, K2, K3, K4, K5 | 08-identity.md | 11 | todo |
+| 13 | D1, D2, D3 | 05-dashboard.md | 04, 06 | todo |
+| 14 | D4, D5 | 05-dashboard.md | 12, 13 | todo |
+| 15 | Portfolio service, P1, K6 | 06-personal.md, 08-identity.md | 05, 12 | todo |
+| 16 | P2 | 06-personal.md | 15 | todo |
+| 17 | Migration runner, P3 | 06-personal.md | 06, 15 | todo |
+| 18 | S1, S2 | 07-streaming.md | 12 | todo |
+| 19 | S3 steps 2–6, M4 step 3 | 07-streaming.md, 03-market-data.md | 08 | todo |
 
 ## Phase briefs
 
@@ -63,7 +64,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 - **Ask the owner:** the plan offers two fixes for out-of-order delivery (key Kafka by symbol alone, or keep the key and ignore older ticks). Put both to the owner with a recommendation before coding; the first changes the idempotency contract.
 - The atomic update (Lua or `WATCH`) must keep two phase 01 behaviours: the idempotency marker is written with a 24-hour expiry inside the same atomic step, and sparkline members stay `<timestamp>:<price>`.
 - Phase 01 added `changeValue` (tick-to-tick) to `StreamQuote`. `DetailPanel` derives "Previous tick" from it and labels tiles "since start". After M2 these become real session values and labels (B3 step 6).
-- **Known defect, raise it when changing `StreamQuote`:** the consumer builds the stream payload from the latest-price record, so every feed row has `quantity: 0` and a buy/sell side guessed from the price change. The real size and side are on the `PriceEvent`. Ask the owner whether to fix it here; D2 (phase 12) displays quantity and needs it.
+- **Known defect, raise it when changing `StreamQuote`:** the consumer builds the stream payload from the latest-price record, so every feed row has `quantity: 0` and a buy/sell side guessed from the price change. The real size and side are on the `PriceEvent`. Ask the owner whether to fix it here; D2 (phase 13) displays quantity and needs it.
 
 ### 07 · History and export (M3, M6)
 - M3 first, then M6.
@@ -71,7 +72,7 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 - Auth does not exist yet, so the CSV download can be a plain link for now; phase 10 changes it to a blob fetch.
 
 ### 08 · Candle chart (M4)
-- Steps 1, 2, 4, 5 and 6. Step 3 (continuous aggregates) is in phase 18.
+- Steps 1, 2, 4, 5 and 6. Step 3 (continuous aggregates) is in phase 19.
 - Hand-written SVG (README Q5); no charting library.
 - Check the TimescaleDB docs for `time_bucket`, `first` and `last` before writing the query.
 - Daily bars must align with M2's session boundary (phase 06 is done): take the bucket edges from `sessionStartFor` in `packages/symbols`, not from a hard-coded UTC day, so a real exchange calendar later moves both together.
@@ -113,50 +114,74 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 ### 11 · Settings page (A4)
 - **Differs from the A4 plan since phase 09:** changing the email or password revokes *every* refresh token of the user, the caller's included (`PATCH /users/:id` revokes before it writes). The current access token keeps working until it expires, but the next refresh fails. After a successful credential change, log the user in again with the new credentials (or ask the owner whether to add a "keep this session" option to the revoke endpoint) instead of expecting the session to continue.
 - `PATCH` needs `currentPassword` when `email` or `password` is in the body: `400` when it is missing, `403` when it is wrong. A body with only `currentPassword` is `400` ("Nothing to update").
-- Deleting an account cannot clean up portfolio data until phase 14 exists; record that as an open item rather than inventing a mechanism.
+- Deleting an account cannot clean up portfolio data until phase 15 exists; record that as an open item rather than inventing a mechanism.
 - The Preferences section stays empty until D3 and D4 exist.
 - From phase 10: log in again after a credential change with `useAuth().logIn(email, password)` (`auth/AuthProvider.tsx`); it sets the new cookie and tells the other tabs. The login limits apply to it (5 failures per email in 15 minutes). After a delete, call `useAuth().logOut()`: the server has already revoked the sessions, but that call clears the cookie and logs out the other tabs. A `403` from `PATCH` comes back from `apiFetch` as a plain response. The account controls are in `components/AccountControls`, at the sidebar foot; a Settings entry goes into `navItems.ts`.
 
-### 12 · Search, feed controls, table view (D1, D2, D3)
+### 12 · Keycloak and the BFF (K1, K2, K3, K4, K5)
+- Added by the owner on 2026-11-16, after phase 11; the later phases were renumbered (old 12–18 are now 13–19). Branch: `feature/phase-12-keycloak`.
+- Decided by the owner (2026-11-16), before the phase started: Keycloak replaces the hand-written auth; `apps/auth` and `apps/user` are deleted and Settings uses application-initiated actions (Q10); the tokens live in a backend-for-frontend, `apps/bff`, never in the browser (Q11); no migration of existing accounts (Q12). Login and register pages are Keycloakify pages in the app's design, plus "Sign in with Google".
+- **Ask the owner first (Q13):** token handler (recommended: the BFF proxies API calls and the stream) or token-mediating backend (the page gets the access token). The plan is written for the token handler; K4 compares the two.
+- **Ask the owner, before K4:** whether to encrypt the session value in Redis (AES-GCM, key from env).
+- **Ask the owner, before K2:** which design is the reference. The plan assumes the phase 10 login and register pages (centred card, app name above, `pageStyles.ts`); if there is a separate mock-up, get it first.
+- **Ask the owner, before K1's realm JSON:**
+  - The name field. Keycloak's user profile has first and last name; the app has one "Name". Recommended: keep one field (Keycloak's `firstName`, labelled "Name", `lastName` removed from the profile), so the ID token's `name` is that field.
+  - Password reset. Recommended: keep it off, as today (no SMTP). The alternative is Mailpit in compose plus `resetPasswordAllowed`, which also enables email verification later.
+  - Maven. Keycloakify needs `mvn` and a JDK to build the JAR. Recommended: install them locally; the alternative is a Docker build stage.
+- **Ask the owner, before K3:** where the Google button sits (above the form with an "or" divider is the usual pattern), and whether to hide it or leave Keycloak's provider disabled when `GOOGLE_CLIENT_ID` is empty. The owner creates the Google OAuth client; the redirect URI is in the plan.
+- Code as it stands, for K5:
+  - `packages/auth-guard/src/jwt-guard.ts` only allows `ES256`; Keycloak signs with `RS256` by default. It requires `sub` and `exp` and sets `authUserId` and `authExpiresAt`; keep that contract so `stream.routes.ts` and the future portfolio service do not change. The services keep verifying tokens even behind the BFF.
+  - The guard is configured in `apps/sse-service/src/app.ts` from `AUTH_SERVICE_URL`, `JWT_ISSUER`, `JWT_AUDIENCE` (`config/index.ts`).
+  - `openid-client` and `@fastify/reply-from` are new dependencies for `apps/bff`; check their current docs. The redirect validation in `src/auth/redirect.ts` (and its tests) moves to the BFF.
+  - Frontend auth lives in `src/auth/` (`AuthProvider.tsx`, `session.ts`, `tabSync.ts`, `authApi.ts`, `credentials.ts`, `redirect.ts`, `RouteGuards.tsx`), `src/api/` (`client.ts`, `index.ts`, `account.ts`), the pages `LoginPage.tsx`, `RegisterPage.tsx`, `authForm.tsx`, `pages/settings/*`, and `components/AuthCard`, `components/Splash`, `components/AccountControls`. `RequireAuth` mounts `StreamProvider`; keep that.
+  - `scripts/dev.sh` generates `JWT_PRIVATE_KEY` (via `apps/auth/scripts/generate-keys.mjs`) and `INTERNAL_API_TOKEN`; both blocks go, and `KC_BFF_CLIENT_SECRET` is generated instead. The Vite proxy has `/auth` and `/users` entries; they become `/bff` (with `/quotes` and `/stream`) → BFF and `/realms`, `/resources` → Keycloak.
+  - `docs/openapi.yaml` and `scripts/api-docs.mjs` (`pnpm docs:api`) document and proxy the auth and user paths; update both in K5.
+- Verify as in phases 10 and 11: headless Chromium at 360×740, 768×1024, 740×360 and 1440×900, axe on every theme page, two tabs plus a second context as "another device", a reload in Firefox with strict tracking protection, and a short access-token lifespan in the realm for the stream's `session-expired` path. Google needs real credentials: if the owner has not provided them, say the K3 "Done when" was not run. For K4, check that no token appears in browser storage, in `document.cookie` or in any response body, and test back-channel logout by ending the session in Keycloak's admin console.
+- Splitting: K1–K4 do not touch the running app and may be reviewed first as a draft PR, like phase 10's two parts. K5 is not split: the branch must never have both logins half-working. One phase, one PR.
+- K6 (account events) is not in this phase; only the realm setting that saves `DELETE_ACCOUNT` events is (K1).
+
+### 13 · Search, feed controls, table view (D1, D2, D3)
 - In that order; D3's header sort shares D1's sort state.
 - "Sort by change" sorts by the day change (`changePercent`, against the previous close, phase 06). Symbols with `null` change sort last.
 - The sector filter is already in the URL (`?sector=<id>`, phase 05), built in `QuotesPage` with `SectorFilter`. Add search and sort beside it as further params, and put D1's filter, search and sort into the one `useMemo` that today only filters by sector.
 - D2 shows trade quantity: feed rows carry the real trade size (`quantity`) and side since phase 06.
-- S1's event ids do not exist until phase 17; keep the current feed row keys.
+- S1's event ids do not exist until phase 18; keep the current feed row keys.
 
-### 13 · Light theme and shortcuts (D4, D5)
+### 14 · Light theme and shortcuts (D4, D5)
 - D4 first.
 - D4 needs every colour to come from a token; grep for leftover `rgba(` and hex values before starting.
 - The candle chart (phase 08, `components/CandleChart`) already takes every colour from a token through `var(--…)` in SVG attributes, so it follows the theme. Check in the light theme: the last-price tag is `--text-inverse` on `--positive`/`--negative`, gridlines are `--border-subtle`, and the volume bars are the accents at 45% opacity.
 - Phase 04 set dark-theme values for AA: `--text-secondary` `#7d89a4` and `--negative` `#f56674`. The light theme needs its own values checked the same way; the axe script approach in the phase 04 notes covers it.
-- D5's `p` and `v` shortcuts need D2 and D3 from phase 12; the `g s` shortcut and the theme control need the Settings page from phase 11.
-- From phase 11: the Settings page has no Preferences section yet (owner decision: it comes with its first setting). D4 adds it in `pages/SettingsPage.tsx`, between Password and Danger zone, with `SettingsSection` from `pages/settings/fields.tsx`; D3's default view joins it there. `/settings` is the route and the nav entry already exists.
+- D5's `p` and `v` shortcuts need D2 and D3 from phase 13; the `g s` shortcut and the theme control need the Settings page from phase 11 (reshaped in phase 12).
+- From phase 11: the Settings page has no Preferences section yet (owner decision: it comes with its first setting). D4 adds it in `pages/SettingsPage.tsx`, between Password and Danger zone, with `SettingsSection` from `pages/settings/fields.tsx`; D3's default view joins it there. *Since phase 12 the Profile, Password and Danger zone sections are buttons that start Keycloak actions; check where `SettingsSection` ended up.* Preferences stay in the browser or a future table: Keycloak is not the place for UI state. `/settings` is the route and the nav entry already exists.
 
-### 14 · Portfolio service and watchlist (P1)
+### 15 · Portfolio service and watchlist (P1)
 - Build the shared groundwork section of `06-personal.md` first, then P1.
 - New app `apps/portfolio` on port 3006 (Q4). Add it to `scripts/dev.sh`, `.env.local.example` and the Vite proxy.
+- Since phase 12 there is no `apps/user` to copy the structure from (the plan says to): follow `apps/sse-service` instead, with its guard setup against Keycloak's keys. `user_id` is the Keycloak `sub`, a UUID, so the planned `UUID` columns stay.
+- The browser reaches the portfolio service only through the BFF: add `/portfolio/*` to the BFF's proxy routes and point the Vite proxy's `/portfolio` at the BFF, not at port 3006.
 - **Ask the owner:** the plan's "Future issues" suggests starting with a `watchlists` table if multiple named lists are likely. Ask which before creating the table.
-- Raise the account-deletion cleanup left open in phase 11: `DELETE /users/:id` (user service) ends the sessions and deletes the row, and nothing tells the portfolio service. The plan names the two options (a call from the user service, or a "user deleted" event on Kafka).
+- K6 (`08-identity.md`): decided by the owner (2026-11-16, Q14): a Keycloak event listener publishes account deletions to the Kafka topic `identity.events`, the portfolio service consumes it, and a nightly cleanup (service account with `view-users`) removes anything missed. Build P1's tables first, then K6. It needs Maven like the theme, and its JAR is mounted next to the theme's.
 
-### 15 · Price alerts (P2)
+### 16 · Price alerts (P2)
 - Evaluated in the browser (Q7). The UI must say alerts are only checked while the app is open.
 - The `snapshot` SSE event counts for alert evaluation.
 
-### 16 · Paper trading (P3)
+### 17 · Paper trading (P3)
 - Introduce the minimal migration runner first; the plan requires it before any money table.
 - Rules are fixed (Q8): $100,000 cash, market orders, whole shares, long only, no fees.
 - All money arithmetic in integer cents or a decimal type inside the portfolio service.
 - Day P&L uses M2's `previousClose` (phase 06); a position opened today is measured from its fill price instead.
 
-### 17 · Stream resilience (S1, S2)
+### 18 · Stream resilience (S1, S2)
 - S2 first is easier: S1's resume is served from S2's ring buffer.
 - S1's client watchdog replaces U4's temporary "no message for 15 s" rule (`SILENCE_LIMIT_MS` in `usePriceStream.ts`). With the ingestor down that rule reconnects every 15 s; a heartbeat ends that.
 - Feed row keys switch to event ids (D2 edge case).
 - The token-expiry close from A2 takes precedence over the heartbeat.
-- Since phase 10 `StreamProvider` is mounted by the route guard (`auth/RouteGuards.tsx`, `RequireAuth`), not in `main.tsx`: it exists only with a session, and logging out unmounts it. A resume after a logout and login is a fresh connection, not a resume.
+- Since phase 10 `StreamProvider` is mounted by the route guard (`auth/RouteGuards.tsx`, `RequireAuth`), not in `main.tsx`: it exists only with a session, and logging out unmounts it (phase 12 keeps this; the stream then runs through the BFF, which refreshes the token, so S1's resume request must pass the BFF's proxy unchanged, including `Last-Event-ID`). A resume after a logout and login is a fresh connection, not a resume.
 - The Chart page (phase 08) refetches its last two candles when `useStreamStatus().status` goes from `live` to something else and back. With S1's resume the refetch becomes unnecessary but stays harmless; keep the status transitions as they are or update `useCandles`.
 
-### 18 · Retention and compression (S3 steps 2–6, M4 step 3)
+### 19 · Retention and compression (S3 steps 2–6, M4 step 3)
 - Order is fixed: create the candle continuous aggregates (M4 step 3) first, then enable retention. The reverse deletes history for good.
 - Check the TimescaleDB docs for the current policy functions before writing them.
 - **Open decision from phase 01, ask the owner:** no Kafka topic retention is set, so the broker default applies (7 days for Redpanda, to be confirmed against its docs). That is longer than the 24-hour idempotency marker, so a replay older than a day would double-apply ticks to Redis. Propose an explicit topic retention under 24 hours.
@@ -173,7 +198,7 @@ Each session appends here when it finishes: what the next phases need to know th
 - Sparkline members are `<timestamp>:<price>`; the reader in the SSE service also accepts the old bare-price format. Helpers live in `packages/types`.
 - `StreamQuote` gained `changeValue` (tick-to-tick).
 - The marker cleanup script is `apps/consumer/scripts/cleanup-processed-markers.mjs` (`pnpm --filter @stock-platform/consumer cleanup:markers`, `--dry-run` to count). It removes only markers without an expiry.
-- Open: Kafka retention versus the 24-hour marker (phase 18 brief). Open: feed rows carry `quantity: 0` and a guessed side (phase 06 brief; fixed in phase 06).
+- Open: Kafka retention versus the 24-hour marker (phase 19 brief). Open: feed rows carry `quantity: 0` and a guessed side (phase 06 brief; fixed in phase 06).
 
 ### After phase 02 (2026-11-13)
 - U1 is complete: no component has a `style` prop, and `global.css` has no component classes left (`.mono`, `.card-surface`, `.flash-*`, `.text-muted` are gone).
@@ -272,7 +297,7 @@ Each session appends here when it finishes: what the next phases need to know th
   - `StreamQuote` carries the same day values plus `quantity`, `side` and `timestamp`.
   - Discovery entries carry the day values as `null` before the first tick, and `tickDirection` `null`.
   - The frontend `ActiveStock` and `LiveQuote` share a `DayValues` type. A quote replaces all day values at once; the client never computes any.
-- Contract change: entries in the `price:updates` Redis stream now hold the `LatestPrice` record in `payload`, not a `StreamQuote`. The SSE service maps them with `streamQuoteFromLatest`, so the record-to-quote mapping lives in one place. Entries in the old format are skipped. S1 (phase 17) resumes from these entries.
+- Contract change: entries in the `price:updates` Redis stream now hold the `LatestPrice` record in `payload`, not a `StreamQuote`. The SSE service maps them with `streamQuoteFromLatest`, so the record-to-quote mapping lives in one place. Entries in the old format are skipped. S1 (phase 18) resumes from these entries.
 - The market calendar is `sessionIdFor` / `sessionStartFor` in `packages/symbols` (one UTC day, README Q3). The session comes from the event timestamp, never the processing time.
 - Cold start: a missing or unreadable record makes the script return `needs_baseline`. The consumer then reads two things from `stock_ticks` and runs the script once more: the last price before the session (the previous close) and the session's open, high, low and volume so far. **Departure from the plan:** step 5 only asks for the previous close. Taking the session so far as well means a Redis flush, or this deploy (every record was in the old format), does not restart the day's high, low and volume at the moment of the deploy. With no earlier tick at all, the first price is the previous close (0%).
 - `stock_ticks` has a `source` column (`fake` now); older rows have `NULL`.
@@ -419,7 +444,7 @@ Each session appends here when it finishes: what the next phases need to know th
     - keyboard crosshair and its announcement, pointer crosshair, "Open chart" from the dialog and Back to the open dialog, nav `aria-current`
     - `/chart` without a symbol, `/chart/ZZZZ`, an unknown `?interval=`
     - mocked `500` with Retry, `501`, an empty series, and an all-flat series (axis 99.60–100.40, flat bodies drawn as lines, no NaN)
-  - Latency on this data (88k rows): 8–35 ms. No load test; continuous aggregates (phase 18) are the plan's answer to slow queries.
+  - Latency on this data (88k rows): 8–35 ms. No load test; continuous aggregates (phase 19) are the plan's answer to slow queries.
 - Not checked: a real phone, including the crosshair by touch (it uses pointer events, so it should work, but untested), a screen reader, Safari/Firefox, a real midnight rollover of the `1d` bar, the Dockerfiles (none changed).
 - Left open, small:
   - At 360px the 120 candles are about 2 px wide. Pan and zoom are the plan's later step.
@@ -565,7 +590,7 @@ Each session appends here when it finishes: what the next phases need to know th
   - After an email or password change the page logs in again with the new credentials (`useAuth().logIn`), as the brief suggested; no "keep this session" option on the revoke endpoint. Other browsers and devices are logged out; the other tabs of this browser follow the login broadcast.
   - The user service refuses a taken email (`409`) **before** it revokes, so a typo no longer ends every session. The unique index still decides a race; if that `409` comes after the revoke, the page logs in again with the unchanged email and the current password (it does so on every `409`; when nothing was revoked that login just replaces this browser's session).
   - **Departure from the plan, found in the code:** the auth service stores the user summary with each refresh token at login and returns that copy on every refresh, so a changed name never reached a refresh (a reload brought the old name back until the next login). The plan's "update it from the `PATCH` response rather than waiting for the next refresh" assumed the refresh would catch up. Fixed: a name-only change makes the user service call a new internal endpoint, `PUT /internal/users/:id/sessions/summary` (`{ email, name }`, internal token, `204`), which rewrites every stored summary of that user with `SET … KEEPTTL XX` (expiry kept, consumed tokens not brought back). It runs **before** the write, like the revoke: with the auth service unreachable or refusing, the rename fails (`503`/`502`) and nothing changed.
-  - No Preferences section until D3 or D4 has a setting for it (phase 13 brief updated).
+  - No Preferences section until D3 or D4 has a setting for it (phase 14 brief updated).
 - Choices made here:
   - The session has `updateUser(user)` and `onUserUpdated`; `tabSync` carries it as a `{ type: "user" }` message. It is ignored when the tab has no user or a different one. `useAuth().updateUser` is how the page uses it.
   - `api/account.ts` (`updateAccount`, `deleteAccount`) maps `400`, `403` (wrong current password), `409` (email taken) and anything else (`5xx`, network, auth unavailable) to typed errors. A `LoggedOutError` is passed through to the guard.
@@ -593,10 +618,16 @@ Each session appends here when it finishes: what the next phases need to know th
   - Screenshots at 1440, 768 and 360 and of the dialog were looked at.
 - Not checked: the `409`-after-revoke race and its re-login (needs two writes at the same moment), a password manager actually offering to save the new password, a real phone, Safari and Firefox, a screen reader.
 - Left open:
-  - Account deletion leaves the user's portfolio data (phase 14 brief).
+  - Account deletion leaves the user's portfolio data (phase 15 brief).
   - The summary rewrite is not atomic with a concurrent login, like the revoke: a login between the rewrite and the database write stores the old name until its next login.
   - A rename's summary call happens before the write, so a failed write (rare: a database error) leaves the sessions with a name that was not saved, until the next login.
   - If the re-login after a credential change fails (rate limit, outage), the page says so and the session ends at the next refresh.
 - Defects noticed outside the scope, not fixed:
   - `apps/user/src/repositories/user.repository.ts` still has an `as` cast in `rethrowUniqueViolation` (`(err as { code?: string }).code`), against the owner's no-casts rule from phase 05.
   - Still open from earlier notes: the `Sparkline` defects, SSE shutdown wedging `tsx watch`, "Connection lost" on a first load, the narrow feed tab's landmark and `scrollable-region-focusable`, Dockerfiles missing workspace dependencies, `tsconfig.app.tsbuildinfo` tracked in git, the `close` listener order in `stream.routes.ts`.
+
+### Roadmap change: Keycloak (2026-11-16)
+- Decided by the owner, outside a phase session: replace the hand-written auth from phases 09–11 with Keycloak, Keycloakify pages in the app's design and Google sign-in, with the tokens kept by a backend-for-frontend (`apps/bff`). New plan file `08-identity.md` (K1–K6) and decisions Q10–Q13 in `README.md`. A first version with `keycloak-js` tokens in the page was replaced the same day by the BFF. K6 (account events) is part of phase 15.
+- Inserted as phase 12. The old phases 12–18 are now 13–19, and every phase reference in this file was renumbered, including those in the notes above. Branches and pull requests of done phases keep their old names. Phases 15 and 18 now need 12 instead of 10.
+- Briefs updated for it: 14 (Settings sections), 15 (no `apps/user` to copy, proxy through the BFF, K6), 18 (stream through the BFF).
+- What the phase 09–11 notes describe in `apps/auth` and `apps/user` (cookie modes, rate limits, the internal token, session summaries) is history once phase 12 is merged. Their open items about those services (non-atomic revoke, the `as` cast in `user.repository.ts`) go with the code.

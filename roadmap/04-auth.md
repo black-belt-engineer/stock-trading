@@ -1,5 +1,7 @@
 # 04 · Auth
 
+> **Superseded from phase 12 (2026-11-16):** Keycloak replaces this hand-written auth; see [08-identity.md](08-identity.md) and Q10–Q12 in `README.md`. A1–A4 are done and kept as the record of what was built and why.
+
 The auth service (`apps/auth`, port 3005) and user service (`apps/user`, port 3004) exist and work, but the frontend never calls them and the market endpoints are open. Confirmed decision: **everything sits behind login**.
 
 Order: A1 first and alone. A2 and A3 must ship together; protecting the endpoints without a login UI locks everyone out.
