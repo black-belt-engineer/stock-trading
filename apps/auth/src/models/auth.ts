@@ -27,6 +27,8 @@ export const tokenResponseSchema = Type.Object({
 });
 export type TokenResponse = Static<typeof tokenResponseSchema>;
 
+export const userIdParamsSchema = Type.Object({ id: Type.String({ format: "uuid" }) });
+
 export const userSummarySchema = Type.Object({
   id: Type.String(),
   email: Type.String(),

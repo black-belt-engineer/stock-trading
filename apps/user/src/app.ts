@@ -5,10 +5,12 @@ import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { AppConfig } from "./config/index.js";
 import { UserRepository } from "./repositories/user.repository.js";
+import { createInternalGuard } from "./plugins/internal-guard.js";
 import { createJwtGuard } from "./plugins/jwt-guard.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { userRoutes } from "./routes/user.routes.js";
 import { HealthService } from "./services/health.service.js";
+import { AuthClientService } from "./services/auth-client.service.js";
 import { UserService } from "./services/user.service.js";
 
 export type UserApp = { app: FastifyInstance; userService: UserService };
@@ -32,7 +34,10 @@ export async function buildApp(config: AppConfig): Promise<UserApp> {
 
   await app.register(dbPlugin, { connectionString: config.DATABASE_URL });
 
-  const userService = new UserService(new UserRepository(app.db));
+  const userService = new UserService(
+    new UserRepository(app.db),
+    new AuthClientService(config.AUTH_SERVICE_URL, config.INTERNAL_API_TOKEN),
+  );
   const healthService = new HealthService(app.db);
 
   await app.register(healthRoutes, { healthService });
@@ -43,6 +48,7 @@ export async function buildApp(config: AppConfig): Promise<UserApp> {
       issuer: config.JWT_ISSUER,
       audience: config.JWT_AUDIENCE,
     }),
+    internalGuard: createInternalGuard(config.INTERNAL_API_TOKEN),
   });
 
   return { app, userService };

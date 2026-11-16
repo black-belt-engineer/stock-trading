@@ -52,11 +52,6 @@ export class UserRepository {
     await this.db.query(`CREATE UNIQUE INDEX IF NOT EXISTS users_email_uidx ON users (lower(email));`);
   }
 
-  async findAll(): Promise<UserRecord[]> {
-    const { rows } = await this.db.query<UserRow>(`SELECT ${COLUMNS} FROM users ORDER BY created_at`);
-    return rows.map(toRecord);
-  }
-
   async findById(id: string): Promise<UserRecord | null> {
     const { rows } = await this.db.query<UserRow>(`SELECT ${COLUMNS} FROM users WHERE id = $1`, [id]);
     return rows[0] ? toRecord(rows[0]) : null;
