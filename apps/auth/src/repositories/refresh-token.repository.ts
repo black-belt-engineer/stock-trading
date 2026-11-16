@@ -73,4 +73,19 @@ export class RefreshTokenRepository {
     const hashes = await this.redis.smembers(sessions);
     await this.redis.del(sessions, ...hashes.map(tokenKey));
   }
+
+  /**
+   * Replaces the summary stored with every live refresh token of a user (a changed name), so the
+   * next refresh returns it. `XX` skips a token consumed meanwhile, and `KEEPTTL` leaves its expiry
+   * alone. Like `revokeAllForUser` it is not atomic with a concurrent login: a token saved between
+   * SMEMBERS and SET keeps the summary it was saved with.
+   */
+  async replaceSummaryForUser(user: UserSummary): Promise<void> {
+    const hashes = await this.redis.smembers(userSessionsKey(user.id));
+    if (hashes.length === 0) return;
+    const value = JSON.stringify(user);
+    const transaction = this.redis.multi();
+    for (const hash of hashes) transaction.set(tokenKey(hash), value, "KEEPTTL", "XX");
+    await execOrThrow(transaction);
+  }
 }

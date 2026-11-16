@@ -34,6 +34,12 @@ export type IssuedTokens = Omit<TokenResponse, "refreshToken"> & { refreshToken:
 
 export const userIdParamsSchema = Type.Object({ id: Type.String({ format: "uuid" }) });
 
+/** The summary the user service sends after a name change; the id comes from the path. */
+export const sessionSummaryBodySchema = Type.Object(
+  { email: Type.String({ minLength: 1 }), name: Type.String({ minLength: 1 }) },
+  { additionalProperties: false },
+);
+
 export const userSummarySchema = Type.Object({
   id: Type.String(),
   email: Type.String(),
