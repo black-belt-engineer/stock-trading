@@ -9,9 +9,15 @@ import {
   verifyCredentialsBodySchema,
 } from "../models/user.js";
 import type { InternalGuard, JwtGuard } from "@stock-platform/auth-guard";
+import type { RegistrationRateLimiter } from "../services/registration-rate-limiter.js";
 import type { UserService } from "../services/user.service.js";
 
-export type UserRouteDeps = { userService: UserService; jwtGuard: JwtGuard; internalGuard: InternalGuard };
+export type UserRouteDeps = {
+  userService: UserService;
+  registrationLimiter: RegistrationRateLimiter;
+  jwtGuard: JwtGuard;
+  internalGuard: InternalGuard;
+};
 
 /** The caller's id from the JWT guard. Only `sub` is used for authorisation, never the email claim. */
 function callerId(authUserId: string | undefined): string {
@@ -34,7 +40,7 @@ function requireSelf(authUserId: string | undefined, targetId: string): string {
 }
 
 const userRoutesImpl: FastifyPluginAsyncTypebox<UserRouteDeps> = async (fastify, opts) => {
-  const { userService, jwtGuard, internalGuard } = opts;
+  const { userService, registrationLimiter, jwtGuard, internalGuard } = opts;
 
   fastify.get("/users/me", { preHandler: jwtGuard, schema: { response: { 200: userSchema } } }, (request) =>
     userService.getById(callerId(request.authUserId)),
@@ -48,7 +54,11 @@ const userRoutesImpl: FastifyPluginAsyncTypebox<UserRouteDeps> = async (fastify,
 
   fastify.post(
     "/users",
-    { schema: { body: createUserBodySchema, response: { 201: userSchema } } },
+    {
+      // Counted before the body is validated, so malformed attempts count too.
+      onRequest: async (request) => registrationLimiter.beforeAttempt(request.ip),
+      schema: { body: createUserBodySchema, response: { 201: userSchema } },
+    },
     async (request, reply) => reply.code(201).send(await userService.create(request.body)),
   );
 
