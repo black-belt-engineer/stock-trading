@@ -2,6 +2,7 @@ import { createServer, type Server } from "node:http";
 import cookie from "@fastify/cookie";
 import Fastify, { type FastifyInstance } from "fastify";
 import * as client from "openid-client";
+import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair, type JWK } from "jose";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Session, SessionRepository } from "../repositories/session.repository.js";
 import { LOGIN_COOKIE, authRoutes } from "./auth.routes.js";
@@ -14,6 +15,7 @@ const oidc = new client.Configuration(
     issuer: "http://localhost:5173/realms/test",
     authorization_endpoint: "http://localhost:5173/realms/test/auth",
     token_endpoint: "http://127.0.0.1:1/token",
+    jwks_uri: "http://127.0.0.1:1/certs",
   },
   "stock-bff",
   "secret",
@@ -23,8 +25,8 @@ client.allowInsecureRequests(oidc);
 
 /** Counts what the callback creates; the grant never reaches it in these tests. */
 function fakeSessions() {
-  const state = { created: 0, stored: new Map<string, Session>(), fail: false, deleted: [] as string[] };
-  const repo: Pick<SessionRepository, "create" | "delete" | "get"> = {
+  const state = { created: 0, stored: new Map<string, Session>(), fail: false, deleted: [] as string[], bySid: [] as string[], bySub: [] as string[] };
+  const repo: Pick<SessionRepository, "create" | "delete" | "deleteBySid" | "deleteBySub" | "get"> = {
     get: async (id) => {
       if (state.fail) throw new Error("redis down");
       return state.stored.get(id);
@@ -36,6 +38,14 @@ function fakeSessions() {
     delete: async (id) => {
       state.deleted.push(id);
       state.stored.delete(id);
+    },
+    deleteBySid: async (sid) => {
+      if (state.fail) throw new Error("redis down");
+      state.bySid.push(sid);
+    },
+    deleteBySub: async (sub) => {
+      if (state.fail) throw new Error("redis down");
+      state.bySub.push(sub);
     },
   };
   const tokens = {
@@ -229,6 +239,7 @@ describe("POST /bff/logout", () => {
         authorization_endpoint: "http://localhost:5173/realms/test/auth",
         end_session_endpoint: "http://localhost:5173/realms/test/logout",
         revocation_endpoint: `http://127.0.0.1:${port}/revoke`,
+        jwks_uri: `http://127.0.0.1:${port}/certs`,
         token_endpoint: `http://127.0.0.1:${port}/token`,
       },
       "stock-bff",
@@ -294,5 +305,72 @@ describe("POST /bff/logout", () => {
     const res = await app.inject({ method: "POST", url: "/bff/logout", headers });
     expect(res.statusCode).toBe(503);
     expect(res.cookies.find((c) => c.name === "session")).toBeUndefined();
+  });
+});
+
+describe("POST /bff/backchannel-logout", () => {
+  const EVENTS = { "http://schemas.openid.net/event/backchannel-logout": {} };
+
+  async function buildWithKeys() {
+    const pair = await generateKeyPair("RS256");
+    const jwk: JWK = { ...(await exportJWK(pair.publicKey)), kid: "k1", alg: "RS256", use: "sig" };
+    const app = Fastify();
+    await app.register(cookie, { secret: SECRET });
+    const sessions = fakeSessions();
+    await app.register(authRoutes, {
+      oidc,
+      publicOrigin: ORIGIN,
+      production: false,
+      sessions: sessions.repo,
+      tokens: sessions.tokens,
+      logoutKeys: createLocalJWKSet({ keys: [jwk] }),
+    });
+    const token = (claims: Record<string, unknown>, key: CryptoKey = pair.privateKey) =>
+      new SignJWT({ events: EVENTS, ...claims })
+        .setProtectedHeader({ alg: "RS256", kid: "k1" })
+        .setIssuer("http://localhost:5173/realms/test")
+        .setAudience("stock-bff")
+        .setIssuedAt()
+        .setJti("j")
+        .sign(key);
+    const post = (body: string) =>
+      app.inject({ method: "POST", url: "/bff/backchannel-logout", headers: { "content-type": "application/x-www-form-urlencoded" }, payload: body });
+    return { app, sessions, token, post };
+  }
+
+  it("deletes by sid, with no cookie and no CSRF header", async () => {
+    const { sessions, token, post } = await buildWithKeys();
+    const res = await post(new URLSearchParams({ logout_token: await token({ sid: "s1", sub: "u1" }) }).toString());
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(sessions.state.bySid).toEqual(["s1"]);
+    expect(sessions.state.bySub).toEqual([]);
+  });
+
+  it("deletes all of a user's sessions when there is only a sub", async () => {
+    const { sessions, token, post } = await buildWithKeys();
+    const res = await post(new URLSearchParams({ logout_token: await token({ sub: "u1" }) }).toString());
+    expect(res.statusCode).toBe(200);
+    expect(sessions.state.bySub).toEqual(["u1"]);
+  });
+
+  it("answers 400 and deletes nothing for a missing, forged or malformed token", async () => {
+    const { sessions, token, post } = await buildWithKeys();
+    const other = (await generateKeyPair("RS256")).privateKey;
+    const forged = await token({ sid: "s1" }, other);
+    for (const body of ["", "other=1", `logout_token=${forged}`, "logout_token=garbage"]) {
+      const res = await post(body);
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toMatchObject({ code: "INVALID_LOGOUT_TOKEN" });
+    }
+    expect(sessions.state.bySid).toEqual([]);
+    expect(sessions.state.bySub).toEqual([]);
+  });
+
+  it("answers 503 when the session store fails", async () => {
+    const { sessions, token, post } = await buildWithKeys();
+    sessions.state.fail = true;
+    const res = await post(new URLSearchParams({ logout_token: await token({ sid: "s1" }) }).toString());
+    expect(res.statusCode).toBe(503);
   });
 });
