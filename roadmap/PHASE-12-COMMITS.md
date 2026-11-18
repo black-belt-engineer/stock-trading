@@ -46,7 +46,7 @@ Status: `todo` or `done`. The K1–K4 commits leave the running app unchanged. K
 | 8 | K2 | `feat(theme): add the shared Template and message overrides` | Card, app name, message banner, English copy | done |
 | 9 | K2 | `feat(theme): add the login page` | Email, password, "Log in", link to register | done |
 | 10 | K2 | `feat(theme): add the register page` | Email, name, password, confirm password | done |
-| 11 | K2 | `feat(theme): add the action and broker pages` | `login-update-profile`, `login-update-password`, `delete-account-confirm`, `idp-review-user-profile`, `login-idp-link-confirm` | todo |
+| 11 | K2 | `feat(theme): add the action and broker pages` | `login-update-profile`, `login-update-password`, `delete-account-confirm`, `idp-review-user-profile`, `login-idp-link-confirm` | done |
 | 12 | K2 | `test(theme): add Storybook error states for every page` | Wrong password, locked out, email taken, password too short, passwords not matching | todo |
 | 13 | K2 | `chore(infra): build the theme JAR, mount it and set loginTheme` | `build-keycloak-theme`, compose mount into `/opt/keycloak/providers`, realm `loginTheme`, `mvn` check in `dev.sh` | todo |
 | 14 | K3 | `feat(infra): add the google identity provider to the realm` | Secrets from env, the chosen behaviour without credentials, `.env.local.example` docs | todo |
@@ -146,3 +146,9 @@ Still open. Ask before the commit named:
 - The password hint "At least 8 characters" is in `AfterField`; an effect sets `aria-describedby` on the input, because the stock field cannot. Field errors are `aria-live` spans with `aria-invalid` on the input, not linked by `aria-describedby`. Check with axe in commit 12/13.
 - The password reveal button is hidden (`st-reveal`), as phase 10 had none. Copy keys added: `registerTitle`, `haveAccountText`, `passwordHint`.
 - Not verified: the field order and the "Name" label in the real realm. The Storybook mock profile (username, first and last name) differs from the realm (email, name only); check the compose Keycloak in commit 13, and mock the realm's attributes in commit 12's stories if possible.
+
+### After commit 11 (2026-11-18)
+- Five pages in `src/login/pages/`, wired in `KcPage.tsx`: `LoginUpdateProfile` and `IdpReviewUserProfile` (both thin wrappers over `ProfileForm.tsx`: the realm's profile fields, submit, and a cancel button when `isAppInitiatedAction`), `LoginUpdatePassword` (own markup, hint "At least 8 characters", `aria-invalid`/`aria-describedby` on both fields, the "log out other sessions" box kept, cancel for app-initiated actions), `DeleteAccountConfirm` (warning, danger button, cancel when `triggered_from_aia`), `LoginIdpLinkConfirm` (link account as the primary button, review profile as the secondary one).
+- New classes in `theme.css`: `st-button-secondary`, `st-button-danger`, `st-text`, `st-list`, `st-check`. Each page has a Default story; error states are commit 12.
+- The copy comes from Keycloak's English bundle, with no overrides yet. The `irreversibleAction` and `confirmLinkIdpContinue` texts were not reviewed in a browser.
+- Only `tsc` and `pnpm build` ran. Storybook was not opened, so none of the five pages has been looked at or checked with axe yet (commit 12/13).

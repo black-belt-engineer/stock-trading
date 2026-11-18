@@ -220,3 +220,48 @@
 .st-reveal {
   display: none;
 }
+
+/* Secondary and danger buttons, the delete-account text and the log-out-others box. */
+.st-button-secondary {
+  border-color: var(--border-default);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.st-button-secondary:hover {
+  border-color: var(--border-strong);
+}
+
+.st-button-danger {
+  border-color: var(--negative);
+  background: color-mix(in srgb, var(--negative) 15%, var(--bg-surface));
+  color: var(--text-primary);
+}
+
+.st-text {
+  margin: 0;
+}
+
+.st-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: var(--text-secondary);
+}
+
+.st-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.st-check input:focus-visible {
+  outline: 2px solid var(--accent-brand);
+  outline-offset: 2px;
+}
+
+.st-button-secondary:focus-visible,
+.st-button-danger:focus-visible {
+  outline: 2px solid var(--accent-brand);
+  outline-offset: 2px;
+}
