@@ -103,6 +103,9 @@ services:
       KC_HOSTNAME_ADMIN: http://localhost:8180
       # Health endpoints on the management port 9000 (not published; used by the healthcheck).
       KC_HEALTH_ENABLED: "true"
+    volumes:
+      # Realm as code; imported only when the realm does not exist (scripts/dev.sh --reset-realm).
+      - ./infra/keycloak:/opt/keycloak/data/import:ro
     extra_hosts:
       # Lets Keycloak reach the BFF on the host for back-channel logout (Linux needs this entry).
       - "host.docker.internal:host-gateway"
