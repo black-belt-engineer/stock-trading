@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { createKcPageStory } from "../KcPageStory";
+import { createKcPageStory, bannerError } from "../KcPageStory";
 
 const { KcPageStory } = createKcPageStory({ pageId: "delete-account-confirm.ftl" });
 
@@ -14,4 +14,14 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   render: () => <KcPageStory />
+};
+
+export const Failed: Story = {
+  render: () => (
+    <KcPageStory
+      kcContext={{
+        message: bannerError("Could not delete the account. Try again.")
+      }}
+    />
+  )
 };

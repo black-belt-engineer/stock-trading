@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { createKcPageStory } from "../KcPageStory";
+import { createKcPageStory, fieldErrors } from "../KcPageStory";
 
 const { KcPageStory } = createKcPageStory({ pageId: "register.ftl" });
 
@@ -14,4 +14,35 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   render: () => <KcPageStory />
+};
+
+export const EmailTaken: Story = {
+  render: () => (
+    <KcPageStory
+      kcContext={{
+        messagesPerField: fieldErrors({ email: "That email can't be used. Try logging in instead." }),
+        profile: { attributesByName: { email: { value: "ada@example.com" }, firstName: { value: "Ada" } } }
+      }}
+    />
+  )
+};
+
+export const PasswordTooShort: Story = {
+  render: () => (
+    <KcPageStory
+      kcContext={{
+        messagesPerField: fieldErrors({ password: "Invalid password: minimum length 8." })
+      }}
+    />
+  )
+};
+
+export const PasswordsDoNotMatch: Story = {
+  render: () => (
+    <KcPageStory
+      kcContext={{
+        messagesPerField: fieldErrors({ "password-confirm": "Password confirmation doesn't match." })
+      }}
+    />
+  )
 };

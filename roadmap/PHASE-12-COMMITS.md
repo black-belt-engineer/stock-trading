@@ -47,7 +47,7 @@ Status: `todo` or `done`. The K1–K4 commits leave the running app unchanged. K
 | 9 | K2 | `feat(theme): add the login page` | Email, password, "Log in", link to register | done |
 | 10 | K2 | `feat(theme): add the register page` | Email, name, password, confirm password | done |
 | 11 | K2 | `feat(theme): add the action and broker pages` | `login-update-profile`, `login-update-password`, `delete-account-confirm`, `idp-review-user-profile`, `login-idp-link-confirm` | done |
-| 12 | K2 | `test(theme): add Storybook error states for every page` | Wrong password, locked out, email taken, password too short, passwords not matching | todo |
+| 12 | K2 | `test(theme): add Storybook error states for every page` | Wrong password, locked out, email taken, password too short, passwords not matching | done |
 | 13 | K2 | `chore(infra): build the theme JAR, mount it and set loginTheme` | `build-keycloak-theme`, compose mount into `/opt/keycloak/providers`, realm `loginTheme`, `mvn` check in `dev.sh` | todo |
 | 14 | K3 | `feat(infra): add the google identity provider to the realm` | Secrets from env, the chosen behaviour without credentials, `.env.local.example` docs | todo |
 | 15 | K3 | `feat(theme): add "Continue with Google" from kcContext.social.providers` | Login and register pages | todo |
@@ -152,3 +152,10 @@ Still open. Ask before the commit named:
 - New classes in `theme.css`: `st-button-secondary`, `st-button-danger`, `st-text`, `st-list`, `st-check`. Each page has a Default story; error states are commit 12.
 - The copy comes from Keycloak's English bundle, with no overrides yet. The `irreversibleAction` and `confirmLinkIdpContinue` texts were not reviewed in a browser.
 - Only `tsc` and `pnpm build` ran. Storybook was not opened, so none of the five pages has been looked at or checked with axe yet (commit 12/13).
+
+### After commit 12 (2026-11-18)
+- `KcPageStory.tsx` now has `fieldErrors({ field: "text" })` (a `messagesPerField` for a failed submit) and `bannerError("text")` (a `message`), used in each story's `kcContext`. Its mock realm now matches ours: `registrationEmailAsUsername: true`, and on `register`, `login-update-profile` and `idp-review-user-profile` the profile has only `email` and `firstName` ("Name"), as the realm does. This also covers the open check from commit 10 (Name label); the real-realm field order is still for commit 13.
+- Error stories: login (`WrongPassword`, `LockedOut`), register (`EmailTaken`, `PasswordTooShort`, `PasswordsDoNotMatch`), update-password (`PasswordTooShort`, `PasswordsDoNotMatch`), update-profile and idp-review (`EmailTaken`, `NameMissing`), delete-account-confirm and idp-link-confirm (`Failed`, a banner).
+- The error texts in the stories are written by hand. "Invalid password: minimum length 8." and "Password confirmation doesn't match." are what Keycloak's English bundle says; compare them with the real realm in commit 13. Locked-out shows the banner text from `i18n.ts`; the real lock may come back as the same "Invalid email or password" (Keycloak hides the lock when `permanentLockout` is off and the user exists): check in commit 13.
+- Seen in headless Chrome at 400 px: login (wrong password, locked out), register (email taken), update-password (mismatch). The other stories only built. axe was not run.
+- On the register page Keycloak puts password and confirm between Email and Name.
