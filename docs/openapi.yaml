@@ -1,383 +1,248 @@
 openapi: 3.1.0
 info:
   title: Stock Trading Platform API
-  version: 1.0.0
+  version: 2.0.0
   description: |
-    HTTP API of the backend services in `apps/`:
+    HTTP API of the platform. A browser talks to one origin, the backend-for-frontend (BFF), which
+    keeps the Keycloak tokens and forwards data requests to the services in `apps/`:
 
-    | Service       | Port | Paths                                              |
-    |---------------|------|----------------------------------------------------|
-    | auth          | 3005 | `/auth/*`, `/.well-known/jwks.json`, `/internal/*` |
-    | user          | 3004 | `/users*`                                          |
-    | sse-service   | 3003 | `/quotes/*`, `/stream`                             |
-    | consumer      | 3002 | health only                                        |
-    | ingestor      | 3001 | health only                                        |
+    | Service       | Port | Paths                                                        |
+    |---------------|------|--------------------------------------------------------------|
+    | bff           | 3005 | `/bff/*`, and `/quotes/*` and `/stream` forwarded to sse-service |
+    | sse-service   | 3003 | `/quotes/*`, `/stream` (behind the BFF)                      |
+    | consumer      | 3002 | health only                                                  |
+    | ingestor      | 3001 | health only                                                  |
+
+    Keycloak (port 8180, realm `stock-platform`) owns accounts, login, registration and Google
+    sign-in. Its pages are not described here; the BFF sends the browser to them from `/bff/login`.
 
     Every service also exposes `/health`, `/health/live` and `/health/ready`.
 
-    **Authentication.** The auth service issues ES256 access tokens. The user and sse services check
-    them locally against `/.well-known/jwks.json`. Send them as `Authorization: Bearer <token>`.
-    Service-to-service endpoints take the shared secret in `X-Internal-Token` instead.
+    **Authentication.** The browser never sees a token. `/bff/login` starts the Keycloak login, and
+    `/bff/callback` stores the tokens in a Redis session and sets the `session` cookie (`HttpOnly`,
+    `SameSite=Strict`, holding only a session id). For `/quotes/*` and `/stream` the BFF refreshes
+    the access token when it is within 30 seconds of expiry, then forwards the request with
+    `Authorization: Bearer <access token>`. The cookie and any `Authorization` header the browser
+    sent are dropped. The services still verify the token themselves, against Keycloak's keys.
+    Calling a service directly (the other servers below) needs that bearer token, which only the
+    BFF holds: use the BFF server.
 
-    **Refresh tokens.** A browser sends `X-Requested-With: fetch` on login and gets the refresh token
-    as an `httpOnly` cookie (`refresh_token`, `Path=/auth`, `SameSite=Strict`), never in the body.
-    Other clients leave the header off at login and get the token in the body. `/auth/refresh` and
-    `/auth/logout` require `X-Requested-With: fetch` from every client (CSRF protection).
+    **CSRF.** Every request that is not a read (`GET`, `HEAD`, `OPTIONS`) to the BFF needs
+    `X-Requested-With: fetch`, or it is a `403 CSRF_REJECTED`. The exception is
+    `/bff/backchannel-logout`, which Keycloak calls with a signed token instead.
 
-    **Errors.** Every error body is `{ "error": "<message>", "code": "<CODE>" }`.
+    **Errors.** Every error body from the BFF and the services is `{ "error": "<message>", "code": "<CODE>" }`.
+    A missing or expired session is `401 UNAUTHENTICATED` on every path behind the BFF.
 
     **Servers.** The first server is the docs server started by `pnpm docs:api`: it proxies
-    each path to its service the same way the Vite dev proxy does, so "Try it out" works without CORS.
-    Health paths exist on every service, so pick that service's direct server to call them.
+    each path to the BFF (or the service, for health) the same way the Vite dev proxy does, so
+    "Try it out" works without CORS. Log in to the app (`http://localhost:5173`) in the same browser first:
+    the login redirects back to the app's own origin, and cookies are not separated by port, so the
+    `session` cookie it sets reaches the docs server too.
 servers:
   - url: /
     description: Docs server proxy (pnpm docs:api)
   - url: http://localhost:3005
-    description: auth
-  - url: http://localhost:3004
-    description: user
+    description: bff
   - url: http://localhost:3003
-    description: sse-service
+    description: sse-service (needs a bearer token; use the BFF instead)
   - url: http://localhost:3002
     description: consumer
   - url: http://localhost:3001
     description: ingestor
 
 tags:
-  - name: Auth
-    description: Login, token refresh and logout (auth service).
-  - name: Users
-    description: Registration and account management (user service).
+  - name: Session
+    description: Login, session check and logout (BFF). Keycloak does the actual authentication.
   - name: Quotes
-    description: Latest quotes, tick history and candles (sse-service). All need a bearer token.
+    description: Latest quotes, tick history and candles (sse-service, through the BFF). All need a session.
   - name: Stream
-    description: Server-sent price events (sse-service).
-  - name: Internal
-    description: Service-to-service endpoints. Never exposed through the public proxy.
+    description: Server-sent price events (sse-service, through the BFF).
   - name: Health
     description: Probes, present on every service.
 
 paths:
-  /auth/login:
-    post:
-      tags: [Auth]
-      operationId: login
-      summary: Log in with email and password
+  /bff/login:
+    get:
+      tags: [Session]
+      operationId: bffLogin
+      summary: Start a login (redirects to Keycloak)
       description: |
-        Rate limited per IP and per email. With `X-Requested-With: fetch` (cookie mode) the refresh
-        token is set as the `refresh_token` cookie and left out of the body; a refresh cookie already
-        present is revoked first. Without the header (body mode) it is returned in the body.
+        Sets the signed `login` cookie (`HttpOnly`, `SameSite=Lax`, `Path=/bff/callback`, 10 minutes)
+        and redirects to Keycloak's authorisation endpoint with a fresh `state`, `nonce` and PKCE
+        challenge. Browsers only: the reply is a redirect to a login page.
+
+        `returnTo` must be a same-origin path; anything else (another host, `//host`, `/bff/*`)
+        silently becomes `/`. The other parameters are allow-lists, and any other value is a
+        `400 VALIDATION_ERROR`.
       parameters:
-        - $ref: "#/components/parameters/XRequestedWithOptional"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LoginBody"
+        - name: returnTo
+          in: query
+          description: Where to land after login. A same-origin path, `/` when missing or not accepted.
+          schema:
+            type: string
+          example: /history/AAPL
+        - name: prompt
+          in: query
+          description: "`create` opens Keycloak's registration page."
+          schema:
+            type: string
+            enum: [create]
+        - name: idp
+          in: query
+          description: "`google` skips Keycloak's login page and goes to Google (`kc_idp_hint`)."
+          schema:
+            type: string
+            enum: [google]
+        - name: action
+          in: query
+          description: A Keycloak application-initiated action, sent as `kc_action`. The Settings page uses these.
+          schema:
+            type: string
+            enum: [UPDATE_PROFILE, UPDATE_PASSWORD, delete_account]
       responses:
-        "200":
-          description: Logged in.
+        "302":
+          description: Redirect to Keycloak.
           headers:
-            Set-Cookie:
-              $ref: "#/components/headers/RefreshCookie"
-          content:
-            application/json:
+            Location:
               schema:
-                $ref: "#/components/schemas/TokenResponse"
+                type: string
+            Set-Cookie:
+              description: "`login=<signed state>; Path=/bff/callback; HttpOnly; SameSite=Lax` (and `Secure` in production)."
+              schema:
+                type: string
         "400":
           $ref: "#/components/responses/ValidationError"
-        "401":
-          description: Invalid email or password.
+
+  /bff/callback:
+    get:
+      tags: [Session]
+      operationId: bffCallback
+      summary: Finish a login (Keycloak redirects here)
+      description: |
+        Not called by clients. Checks the `login` cookie and `state`, exchanges the code (with the
+        PKCE verifier and `nonce`) for tokens, keeps them in a new Redis session, sets the `session`
+        cookie and redirects to the `returnTo` chosen at `/bff/login`. The `login` cookie is single
+        use and is cleared on every answer. After an account action the stored name and email follow
+        the new ID token.
+
+        If Keycloak sends `error` (the user cancelled an action, for example) the redirect goes to
+        `returnTo` and the session is left as it was.
+      parameters:
+        - name: state
+          in: query
+          schema:
+            type: string
+        - name: code
+          in: query
+          schema:
+            type: string
+        - name: error
+          in: query
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to `returnTo`.
+          headers:
+            Set-Cookie:
+              description: "`session=<id>; Path=/; HttpOnly; SameSite=Strict` (`__Host-session` and `Secure` in production). The value is a random session id, never a token."
+              schema:
+                type: string
+        "400":
+          description: "`LOGIN_EXPIRED` (no valid `login` cookie), `STATE_MISMATCH`, or `LOGIN_REJECTED` (Keycloak refused the code, for example a replayed one)."
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "429":
-          $ref: "#/components/responses/RateLimited"
-        "502":
-          $ref: "#/components/responses/UpstreamError"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
-  /auth/refresh:
-    post:
-      tags: [Auth]
-      operationId: refresh
-      summary: Exchange a refresh token for new tokens
+  /bff/me:
+    get:
+      tags: [Session]
+      operationId: bffMe
+      summary: The signed-in user
       description: |
-        The refresh token is rotated. It is read from the body when given (body mode, the new token
-        comes back in the body), otherwise from the `refresh_token` cookie (cookie mode, the new
-        token is set as the cookie). A refused cookie is cleared.
-      parameters:
-        - $ref: "#/components/parameters/XRequestedWith"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RefreshBody"
+        The frontend's startup check. A session whose access token is about to expire is refreshed
+        first. No token is ever in the body.
+      security:
+        - sessionCookie: []
       responses:
         "200":
-          description: New tokens.
-          headers:
-            Set-Cookie:
-              $ref: "#/components/headers/RefreshCookie"
+          description: The user.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/TokenResponse"
-        "400":
-          $ref: "#/components/responses/ValidationError"
+                $ref: "#/components/schemas/Me"
         "401":
-          description: No refresh token, or it is invalid or expired.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-        "403":
-          $ref: "#/components/responses/MissingBrowserHeader"
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
-  /auth/logout:
+  /bff/logout:
     post:
-      tags: [Auth]
-      operationId: logout
-      summary: Revoke a refresh token
+      tags: [Session]
+      operationId: bffLogout
+      summary: Log out
       description: |
-        Revokes the token from the body, or from the cookie when the body has none. In cookie mode
-        the cookie is cleared. Succeeds even when there is no token.
+        Deletes the session, clears the cookie and revokes the refresh token (best effort: a
+        Keycloak failure is only logged). The page must then navigate to `endSessionUrl` so
+        Keycloak ends its own session too. `endSessionUrl` is `null` when there was no session to
+        read; go to `/` then. Needs no Keycloak connection.
+      security:
+        - sessionCookie: []
       parameters:
         - $ref: "#/components/parameters/XRequestedWith"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RefreshBody"
       responses:
-        "204":
+        "200":
           description: Logged out.
-        "400":
-          $ref: "#/components/responses/ValidationError"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogoutResponse"
         "403":
-          $ref: "#/components/responses/MissingBrowserHeader"
-
-  /.well-known/jwks.json:
-    get:
-      tags: [Auth]
-      operationId: getJwks
-      summary: Public keys for verifying access tokens
-      description: Cached for 5 minutes (`Cache-Control: public, max-age=300`).
-      responses:
-        "200":
-          description: The JSON Web Key Set.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Jwks"
-
-  /internal/users/{id}/sessions/revoke:
-    post:
-      tags: [Internal]
-      operationId: revokeUserSessions
-      summary: Revoke every session of a user
-      description: Called by the user service before it deletes an account or changes its email or password.
-      security:
-        - internalToken: []
-      parameters:
-        - $ref: "#/components/parameters/UserId"
-      responses:
-        "204":
-          description: Sessions revoked.
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/InternalAuthFailed"
-
-  /internal/users/{id}/sessions/summary:
-    put:
-      tags: [Internal]
-      operationId: updateUserSessionSummary
-      summary: Rewrite the user summary stored with each session
-      description: Called by the user service before a name change, so refreshes stop returning the old name.
-      security:
-        - internalToken: []
-      parameters:
-        - $ref: "#/components/parameters/UserId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SessionSummaryBody"
-      responses:
-        "204":
-          description: Summaries updated.
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/InternalAuthFailed"
-
-  /users:
-    post:
-      tags: [Users]
-      operationId: register
-      summary: Register a new user
-      description: Rate limited to 5 attempts per IP per hour; every attempt counts, including malformed ones.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateUserBody"
-      responses:
-        "201":
-          description: User created.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/User"
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "409":
-          $ref: "#/components/responses/EmailTaken"
-        "429":
-          $ref: "#/components/responses/RateLimited"
+          $ref: "#/components/responses/CsrfRejected"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
-  /users/me:
-    get:
-      tags: [Users]
-      operationId: getMe
-      summary: The caller's own account
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: The account.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/User"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "503":
-          $ref: "#/components/responses/JwksUnavailable"
-
-  /users/{id}:
-    parameters:
-      - $ref: "#/components/parameters/UserId"
-    get:
-      tags: [Users]
-      operationId: getUser
-      summary: Get an account by id (own account only)
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: The account.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/User"
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/NotSelf"
-        "503":
-          $ref: "#/components/responses/JwksUnavailable"
-    patch:
-      tags: [Users]
-      operationId: updateUser
-      summary: Update the caller's account
+  /bff/backchannel-logout:
+    post:
+      tags: [Session]
+      operationId: bffBackchannelLogout
+      summary: Keycloak's back-channel logout (server to server)
       description: |
-        Changing `email` or `password` needs `currentPassword` and ends every session of the user,
-        including the caller's, so the client logs in again. A name change alone keeps the sessions
-        and updates the summary the auth service returns on refresh.
-      security:
-        - bearerAuth: []
+        Called by Keycloak when a session ends elsewhere (admin console, password change). Not for
+        browsers: it needs no cookie and no `X-Requested-With`, because the signed logout token is the
+        proof. The token's signature (Keycloak's RS256 key), `iss`, `aud` (`stock-bff`), `iat`,
+        `jti` and `events` claim are checked, and it must not have a `nonce`. A `sid` deletes that
+        one session; a `sub` alone deletes every session of the user. Deleting nothing is still `200`.
+        Reachable only on the compose network side of Keycloak; the realm's client has the URL.
       requestBody:
         required: true
         content:
-          application/json:
+          application/x-www-form-urlencoded:
             schema:
-              $ref: "#/components/schemas/UpdateUserBody"
+              type: object
+              required: [logout_token]
+              properties:
+                logout_token:
+                  type: string
       responses:
         "200":
-          description: The updated account.
+          description: Done.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                type: object
         "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          description: Not the caller's own account, or `currentPassword` is incorrect.
+          description: The token is missing or not valid (`INVALID_LOGOUT_TOKEN`).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "409":
-          $ref: "#/components/responses/EmailTaken"
-        "502":
-          $ref: "#/components/responses/UpstreamError"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
-    delete:
-      tags: [Users]
-      operationId: deleteUser
-      summary: Delete the caller's account
-      description: Every session of the user is revoked before the account is deleted.
-      security:
-        - bearerAuth: []
-      responses:
-        "204":
-          description: Account deleted.
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          $ref: "#/components/responses/Unauthorized"
-        "403":
-          $ref: "#/components/responses/NotSelf"
-        "502":
-          $ref: "#/components/responses/UpstreamError"
-        "503":
-          $ref: "#/components/responses/ServiceUnavailable"
-
-  /users/verify-credentials:
-    post:
-      tags: [Internal]
-      operationId: verifyCredentials
-      summary: Check an email and password
-      description: Called by the auth service at login. The same 401 is returned for an unknown email and a wrong password.
-      security:
-        - internalToken: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LoginBody"
-      responses:
-        "200":
-          description: Credentials are valid.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/User"
-        "400":
-          $ref: "#/components/responses/ValidationError"
-        "401":
-          description: Invalid email or password, or a bad internal token (`INTERNAL_AUTH_FAILED`).
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
 
   /quotes/discovery/active-stocks:
     get:
@@ -385,7 +250,7 @@ paths:
       operationId: getActiveStocks
       summary: Every registered symbol with its latest quote and sparkline
       security:
-        - bearerAuth: []
+        - sessionCookie: []
       responses:
         "200":
           description: The discovery list.
@@ -395,8 +260,10 @@ paths:
                 $ref: "#/components/schemas/ActiveStocksResponse"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "502":
+          $ref: "#/components/responses/BadGateway"
         "503":
-          $ref: "#/components/responses/JwksUnavailable"
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /quotes/{symbol}/snapshot:
     get:
@@ -404,7 +271,7 @@ paths:
       operationId: getSnapshot
       summary: Latest quote of one symbol
       security:
-        - bearerAuth: []
+        - sessionCookie: []
       parameters:
         - $ref: "#/components/parameters/Symbol"
       responses:
@@ -424,8 +291,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "502":
+          $ref: "#/components/responses/BadGateway"
         "503":
-          $ref: "#/components/responses/JwksUnavailable"
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /quotes/{symbol}/ticks:
     get:
@@ -436,7 +305,7 @@ paths:
         `from` defaults to 15 minutes before `to`, `to` defaults to now and is clamped to now.
         The range may not exceed 24 hours. Page on with `nextCursor` and the same `from` and `to`.
       security:
-        - bearerAuth: []
+        - sessionCookie: []
       parameters:
         - $ref: "#/components/parameters/Symbol"
         - $ref: "#/components/parameters/From"
@@ -468,8 +337,10 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/UnknownSymbol"
+        "502":
+          $ref: "#/components/responses/BadGateway"
         "503":
-          $ref: "#/components/responses/JwksUnavailable"
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /quotes/{symbol}/ticks.csv:
     get:
@@ -480,7 +351,7 @@ paths:
         Same range rules as `/quotes/{symbol}/ticks`. At most 100,000 rows; a larger range is a 400.
         Columns: `time,symbol,price,size,side`.
       security:
-        - bearerAuth: []
+        - sessionCookie: []
       parameters:
         - $ref: "#/components/parameters/Symbol"
         - $ref: "#/components/parameters/From"
@@ -506,8 +377,10 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/UnknownSymbol"
+        "502":
+          $ref: "#/components/responses/BadGateway"
         "503":
-          $ref: "#/components/responses/JwksUnavailable"
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /quotes/{symbol}/candles:
     get:
@@ -518,7 +391,7 @@ paths:
         Without `from` the window is the latest 120 bars. At most 500 bars per request. `to` is
         exclusive and clamped to now. A `1d` bar is one market session of the symbol's exchange.
       security:
-        - bearerAuth: []
+        - sessionCookie: []
       parameters:
         - $ref: "#/components/parameters/Symbol"
         - name: interval
@@ -546,8 +419,10 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/UnknownSymbol"
+        "502":
+          $ref: "#/components/responses/BadGateway"
         "503":
-          $ref: "#/components/responses/JwksUnavailable"
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /stream:
     get:
@@ -555,18 +430,19 @@ paths:
       operationId: streamPrices
       summary: Live price events (Server-Sent Events)
       description: |
-        Opens a `text/event-stream`. Events:
+        Opens a `text/event-stream`. Through the BFF the stream is not buffered and has no idle
+        timeout. Events:
 
         - `snapshot`: one per requested symbol that has a quote, sent first. Data: `StreamQuote`.
           Current state, not a trade.
         - `price`: one per trade. Data: `StreamQuote`.
         - `session-expired`: sent when the access token expires, then the stream closes. Empty data.
-          Refresh the token and reconnect.
+          Reconnect: the BFF refreshes the token on the new request.
 
         The symbol list and the token are checked before any SSE header is sent, so a rejected
         request gets a normal JSON error.
       security:
-        - bearerAuth: []
+        - sessionCookie: []
       parameters:
         - name: symbols
           in: query
@@ -596,8 +472,10 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/UnknownSymbol"
+        "502":
+          $ref: "#/components/responses/BadGateway"
         "503":
-          $ref: "#/components/responses/JwksUnavailable"
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /health:
     get:
@@ -635,7 +513,7 @@ paths:
       tags: [Health]
       operationId: getReadiness
       summary: Readiness probe
-      description: "Checks the service's dependencies: Redis (auth, sse-service), Postgres (user), both (consumer), none (ingestor)."
+      description: "Checks the service's dependencies: Redis (bff, sse-service), Postgres and Redis (consumer), none (ingestor)."
       responses:
         "200":
           description: Ready.
@@ -652,16 +530,15 @@ paths:
 
 components:
   securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: ES256 access token from `/auth/login` or `/auth/refresh`.
-    internalToken:
+    sessionCookie:
       type: apiKey
-      in: header
-      name: X-Internal-Token
-      description: Shared secret between the auth and user services (`INTERNAL_API_TOKEN`).
+      in: cookie
+      name: session
+      description: |
+        The BFF's session cookie (`__Host-session` in production), set by `/bff/callback`. It holds
+        a random session id; the tokens stay in Redis. Browsers send it on their own. In "Try it out"
+        log in to the app in the same browser first. The BFF adds the bearer token itself when
+        it forwards to a service.
 
   parameters:
     XRequestedWith:
@@ -672,21 +549,6 @@ components:
       schema:
         type: string
         enum: [fetch]
-    XRequestedWithOptional:
-      name: X-Requested-With
-      in: header
-      required: false
-      description: "`fetch` selects cookie mode (browsers). Leave it off to get the refresh token in the body."
-      schema:
-        type: string
-        enum: [fetch]
-    UserId:
-      name: id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
     Symbol:
       name: symbol
       in: path
@@ -712,16 +574,6 @@ components:
         type: string
         format: date-time
 
-  headers:
-    RefreshCookie:
-      description: Cookie mode only. `refresh_token=<token>; Path=/auth; HttpOnly; SameSite=Strict` (and `Secure` in production).
-      schema:
-        type: string
-    RetryAfter:
-      description: Seconds until the next attempt is allowed.
-      schema:
-        type: integer
-
   responses:
     ValidationError:
       description: The request is malformed (`VALIDATION_ERROR`).
@@ -743,58 +595,25 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     Unauthorized:
-      description: Missing, invalid or expired bearer token, or the account no longer exists (`UNAUTHORIZED`).
+      description: No session cookie, or the session is unknown, expired or refused by Keycloak (`UNAUTHENTICATED`).
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
-    NotSelf:
-      description: The id is not the caller's own account (`FORBIDDEN`).
+    CsrfRejected:
+      description: "`X-Requested-With: fetch` is missing on a request that is not a read (`CSRF_REJECTED`)."
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
-    MissingBrowserHeader:
-      description: "`X-Requested-With: fetch` is missing (`FORBIDDEN`)."
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-    InternalAuthFailed:
-      description: Missing or invalid internal token (`INTERNAL_AUTH_FAILED`).
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-    EmailTaken:
-      description: A user with this email already exists (`CONFLICT`).
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-    RateLimited:
-      description: Too many attempts (`RATE_LIMITED`).
-      headers:
-        Retry-After:
-          $ref: "#/components/headers/RetryAfter"
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-    UpstreamError:
-      description: Another service answered with an error or an unexpected body (`USER_SERVICE_ERROR` and similar).
+    BadGateway:
+      description: The service behind the BFF could not be reached (`UPSTREAM_UNAVAILABLE`).
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
     ServiceUnavailable:
-      description: A dependency is down (`RATE_LIMIT_UNAVAILABLE`, `USER_SERVICE_UNAVAILABLE`, `JWKS_UNAVAILABLE` and similar).
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Error"
-    JwksUnavailable:
-      description: The token could not be verified because the auth service's keys could not be fetched (`JWKS_UNAVAILABLE`).
+      description: The session store, or Keycloak when a token must be refreshed, is down (`SERVICE_UNAVAILABLE`). A token that has not expired yet keeps working while Keycloak is down.
       content:
         application/json:
           schema:
@@ -813,173 +632,44 @@ components:
           description: Machine-readable code.
           examples:
             - VALIDATION_ERROR
+            - UNAUTHENTICATED
+            - CSRF_REJECTED
+            - LOGIN_EXPIRED
+            - STATE_MISMATCH
+            - LOGIN_REJECTED
+            - INVALID_LOGOUT_TOKEN
+            - UPSTREAM_UNAVAILABLE
+            - SERVICE_UNAVAILABLE
             - UNAUTHORIZED
-            - FORBIDDEN
             - NOT_FOUND
-            - CONFLICT
-            - RATE_LIMITED
-            - INTERNAL_AUTH_FAILED
             - JWKS_UNAVAILABLE
-            - RATE_LIMIT_UNAVAILABLE
-            - USER_SERVICE_UNAVAILABLE
-            - USER_SERVICE_ERROR
             - INTERNAL_ERROR
 
-    LoginBody:
+    Me:
       type: object
-      additionalProperties: false
-      required: [email, password]
+      required: [user]
       properties:
-        email:
-          type: string
-          minLength: 1
-        password:
-          type: string
-          minLength: 1
-          format: password
-
-    RefreshBody:
-      type: object
-      additionalProperties: false
-      description: Leave `refreshToken` out to use the `refresh_token` cookie (browsers). Send `{}` then.
-      properties:
-        refreshToken:
-          type: string
-          minLength: 1
-
-    UserSummary:
-      type: object
-      required: [id, email, name]
-      properties:
-        id:
-          type: string
-        email:
-          type: string
-        name:
-          type: string
-
-    TokenResponse:
-      type: object
-      required: [accessToken, tokenType, expiresIn, user]
-      properties:
-        accessToken:
-          type: string
-        refreshToken:
-          type: string
-          description: Body mode only. In cookie mode it is set as the `refresh_token` cookie instead.
-        tokenType:
-          type: string
-          const: Bearer
-        expiresIn:
-          type: integer
-          description: Access token lifetime in seconds.
         user:
-          $ref: "#/components/schemas/UserSummary"
+          type: object
+          required: [id, name, email]
+          properties:
+            id:
+              type: string
+              format: uuid
+              description: The Keycloak user id (`sub`).
+            name:
+              type: string
+            email:
+              type: string
+              format: email
 
-    Jwks:
+    LogoutResponse:
       type: object
-      required: [keys]
+      required: [endSessionUrl]
       properties:
-        keys:
-          type: array
-          items:
-            type: object
-            description: An EC P-256 public key.
-            properties:
-              kty:
-                type: string
-                example: EC
-              crv:
-                type: string
-                example: P-256
-              x:
-                type: string
-              y:
-                type: string
-              kid:
-                type: string
-                description: The key's JWK thumbprint.
-              alg:
-                type: string
-                example: ES256
-              use:
-                type: string
-                example: sig
-
-    SessionSummaryBody:
-      type: object
-      additionalProperties: false
-      required: [email, name]
-      properties:
-        email:
-          type: string
-          minLength: 1
-        name:
-          type: string
-          minLength: 1
-
-    User:
-      type: object
-      required: [id, email, name, createdAt, updatedAt]
-      properties:
-        id:
-          type: string
-          format: uuid
-        email:
-          type: string
-        name:
-          type: string
-        createdAt:
-          type: string
-          description: ISO-8601 date-time.
-        updatedAt:
-          type: string
-          description: ISO-8601 date-time.
-
-    CreateUserBody:
-      type: object
-      additionalProperties: false
-      required: [email, name, password]
-      properties:
-        email:
-          type: string
-          format: email
-          maxLength: 254
-        name:
-          type: string
-          minLength: 1
-          maxLength: 100
-        password:
-          type: string
-          format: password
-          minLength: 8
-          maxLength: 128
-
-    UpdateUserBody:
-      type: object
-      additionalProperties: false
-      minProperties: 1
-      description: At least one of `email`, `name` or `password`.
-      properties:
-        email:
-          type: string
-          format: email
-          maxLength: 254
-        name:
-          type: string
-          minLength: 1
-          maxLength: 100
-        password:
-          type: string
-          format: password
-          minLength: 8
-          maxLength: 128
-        currentPassword:
-          type: string
-          format: password
-          minLength: 1
-          maxLength: 128
-          description: Required when `email` or `password` changes.
+        endSessionUrl:
+          type: [string, "null"]
+          description: Keycloak's end-session URL (with `id_token_hint` and the post-logout redirect). Navigate there. `null` when there was no session.
 
     Sector:
       type: string
@@ -1315,7 +1005,7 @@ components:
               type: boolean
 
     BasicHealth:
-      title: auth, user
+      title: bff
       type: object
       required: [status]
       properties:

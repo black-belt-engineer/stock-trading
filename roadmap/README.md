@@ -116,7 +116,7 @@ Confirmed by the project owner on 2026-11-13: the recommended approach for every
 | Q10 | Who owns identity? *(2026-11-16)* | Keycloak. `apps/auth` and `apps/user` are deleted; Settings uses Keycloak's application-initiated actions | Keep `apps/user` as a profile service over the Keycloak Admin API |
 | Q11 | Where do Keycloak tokens live? *(2026-11-16, revised the same day)* | In a backend-for-frontend, `apps/bff` (port 3005): a confidential client that keeps the tokens in Redis and gives the browser only an `httpOnly` session cookie | `keycloak-js` in the page with tokens in memory (first choice, dropped: an XSS could read the refresh token) |
 | Q12 | Existing accounts? *(2026-11-16)* | Start fresh; the `users` table is dropped | Import users and password hashes into Keycloak |
-| Q13 | What kind of BFF? *(proposed, confirm in phase 12)* | Token handler: API calls and the stream go through the BFF, which adds the bearer token | Token-mediating: the BFF hands the access token to the page, which calls the services itself |
+| Q13 | What kind of BFF? *(confirmed 2026-11-18, ADR-002)* | Token handler: API calls and the stream go through the BFF, which adds the bearer token | Token-mediating: the BFF hands the access token to the page, which calls the services itself |
 | Q14 | How does an account deletion in Keycloak reach the portfolio service? *(2026-11-16)* | A Keycloak event listener publishes `user.deleted` to the Kafka topic `identity.events`; a nightly cleanup with a `view-users` service account removes anything missed | A webhook extension; polling saved events; the nightly cleanup alone |
 
 Work these decisions add that is not a feature of its own:

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Serves docs/openapi.yaml in Swagger UI: `pnpm docs:api` → http://localhost:8080
 //
-// API paths are proxied to the services like the Vite dev proxy does, so "Try it out" works from
-// the same origin without CORS. Ports follow the services' defaults; override with
-// AUTH_URL, USER_URL, SSE_URL and DOCS_PORT.
+// API paths are proxied to the BFF like the Vite dev proxy does, so "Try it out" works from the
+// same origin without CORS. The BFF's `session` cookie is set when you log in to the app on
+// http://localhost:5173; cookies are not separated by port, so this page sends it too. The port
+// follows the BFF's default; override with BFF_URL and DOCS_PORT.
 import { readFile } from "node:fs/promises";
 import { createServer, request as httpRequest } from "node:http";
 import { dirname, join } from "node:path";
@@ -14,18 +15,13 @@ const SPEC_PATH = join(ROOT, "docs", "openapi.yaml");
 const PORT = Number(process.env.DOCS_PORT ?? 8080);
 const SWAGGER_UI = "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14";
 
-const AUTH = process.env.AUTH_URL ?? "http://localhost:3005";
-const USER = process.env.USER_URL ?? "http://localhost:3004";
-const SSE = process.env.SSE_URL ?? "http://localhost:3003";
+const BFF = process.env.BFF_URL ?? "http://localhost:3005";
 
-/** Path prefix → upstream. First match wins. */
+/** Path prefix → upstream. First match wins. The BFF adds the bearer token and forwards to the services. */
 const ROUTES = [
-  ["/auth/", AUTH],
-  ["/.well-known/", AUTH],
-  ["/internal/", AUTH],
-  ["/users", USER],
-  ["/quotes/", SSE],
-  ["/stream", SSE],
+  ["/bff/", BFF],
+  ["/quotes/", BFF],
+  ["/stream", BFF],
 ];
 
 const PAGE = `<!doctype html>
@@ -45,8 +41,13 @@ const PAGE = `<!doctype html>
       dom_id: "#swagger-ui",
       deepLinking: true,
       persistAuthorization: true,
-      // Lets the refresh cookie set by /auth/login be sent back on /auth/refresh and /auth/logout.
+      // Sends the BFF's session cookie, which /bff/callback sets, on every request.
       withCredentials: true,
+      // The BFF wants this on every request that is not a read.
+      requestInterceptor: (req) => {
+        req.headers["X-Requested-With"] = "fetch";
+        return req;
+      },
     });
   </script>
 </body>
@@ -112,5 +113,6 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Swagger UI: http://localhost:${PORT}`);
-  console.log(`Proxying /auth, /.well-known, /internal → ${AUTH}; /users → ${USER}; /quotes, /stream → ${SSE}`);
+  console.log(`Proxying /bff, /quotes, /stream → ${BFF}`);
+  console.log(`Log in to the app on http://localhost:5173 first in the same browser: the session cookie is shared across ports`);
 });

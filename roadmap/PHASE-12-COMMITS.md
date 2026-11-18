@@ -66,7 +66,7 @@ Status: `todo` or `done`. The K1–K4 commits leave the running app unchanged. K
 | 28 | K5 | `feat(frontend): use keycloak actions on the settings page` | Buttons for `UPDATE_PROFILE`, `UPDATE_PASSWORD`, `delete_account`; the callback refreshes name and email | done |
 | 29 | K5 | `refactor(frontend): delete the hand-written auth code` | `session.ts`, `authApi.ts`, `credentials.ts`, token parts of `tabSync`, old pages, `AuthCard`, `api/account.ts` | done |
 | 30 | K5 | `chore: delete apps/auth and apps/user` | Internal guard, rate limiters, `JWT_PRIVATE_KEY`, `INTERNAL_API_TOKEN`, `dev.sh` blocks, drop the `users` table | done |
-| 31 | K5 | `docs: document the /bff routes and add the ADR for Q10–Q13` | `openapi.yaml`, `api-docs.mjs`, ADR, phase 12 notes in `PHASES.md` and its status set to `done`. Then run K5's "Done when" | todo |
+| 31 | K5 | `docs: document the /bff routes and add the ADR for Q10–Q13` | `openapi.yaml`, `api-docs.mjs`, ADR, phase 12 notes in `PHASES.md` and its status set to `done`. Then run K5's "Done when" | done |
 
 K6 (the Kafka event listener) is phase 15, not part of this file.
 
@@ -282,3 +282,9 @@ Still open. Ask before the commit named:
 - **The running Keycloak still has the old back-channel URL (3007).** Run `scripts/dev.sh --reset-realm` (or change the client's `backchannel.logout.url` in the admin console), or logout from Keycloak will not reach the BFF. An old `.env.local` keeps its unused `JWT_PRIVATE_KEY`, `INTERNAL_API_TOKEN` etc.; they are harmless and can be deleted by hand.
 - Left for commit 31: `docs/openapi.yaml` and `scripts/api-docs.mjs` still list the auth and user services (ports 3004/3005, `AUTH_URL`); `roadmap/` text about them is history.
 - Tested: `pnpm install` and `pnpm build` (16 tasks pass); `bash -n scripts/dev.sh`; the built BFF with `.env.local` on 3005: `/health/ready` 200, `/bff/me` 401, `/bff/login` 302 to Keycloak. **Not tested:** `scripts/dev.sh` end to end (it stops at the Maven check), a login through the browser after the port change, and the back-channel logout on 3005 (needs the realm reset).
+
+### After commit 31 (2026-11-18)
+- `docs/openapi.yaml` is version 2.0.0: the `/bff/*` routes, a `sessionCookie` security scheme in place of the bearer one, the CSRF rule, and `401 UNAUTHENTICATED`, `403 CSRF_REJECTED`, `502 UPSTREAM_UNAVAILABLE`, `503 SERVICE_UNAVAILABLE` for the proxied paths. The auth, user and internal paths, their schemas and responses are gone. Parsed with PyYAML and every `$ref` resolves; not opened in Swagger UI.
+- `scripts/api-docs.mjs` proxies `/bff`, `/quotes` and `/stream` to `BFF_URL` (default 3005) and adds `X-Requested-With: fetch` in Swagger UI's request interceptor. "Try it out" needs the `session` cookie: log in to the app on 5173 in the same browser (cookies are not separated by port).
+- `docs/adr/ADR-002-keycloak-and-bff.md` covers Q10–Q13 and what each gave up. The status table of `PHASES.md` shows phase 12 `done`; its note is "After phase 12". Q13 in `README.md` is marked confirmed.
+- K5 "Done when" was run only in part, as the phase note says: the checks that need the theme JAR, Google, a real browser pass of the whole list, and the realm reset were not run.

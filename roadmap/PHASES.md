@@ -19,7 +19,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 09 | A1 | 04-auth.md | — | done |
 | 10 | A2, A3 | 04-auth.md | 03, 09 | done |
 | 11 | A4 | 04-auth.md | 10 | done |
-| 12 | K1, K2, K3, K4, K5 | 08-identity.md | 11 | todo |
+| 12 | K1, K2, K3, K4, K5 | 08-identity.md | 11 | done |
 | 13 | D1, D2, D3 | 05-dashboard.md | 04, 06 | todo |
 | 14 | D4, D5 | 05-dashboard.md | 12, 13 | todo |
 | 15 | Portfolio service, P1, K6 | 06-personal.md, 08-identity.md | 05, 12 | todo |
@@ -625,6 +625,23 @@ Each session appends here when it finishes: what the next phases need to know th
 - Defects noticed outside the scope, not fixed:
   - `apps/user/src/repositories/user.repository.ts` still has an `as` cast in `rethrowUniqueViolation` (`(err as { code?: string }).code`), against the owner's no-casts rule from phase 05.
   - Still open from earlier notes: the `Sparkline` defects, SSE shutdown wedging `tsx watch`, "Connection lost" on a first load, the narrow feed tab's landmark and `scrollable-region-focusable`, Dockerfiles missing workspace dependencies, `tsconfig.app.tsbuildinfo` tracked in git, the `close` listener order in `stream.routes.ts`.
+
+### After phase 12 (2026-11-18)
+- Done as one commit per session on `master` (31 commits, `PHASE-12-COMMITS.md`), not on `feature/phase-12-keycloak`. The detail of each commit is in that file's "Notes between commits"; the decisions are in ADR-002 (`docs/adr/ADR-002-keycloak-and-bff.md`).
+- Decided by the owner during the phase: one "Name" field (`firstName`); no password reset (no SMTP); the BFF on 3007 until `apps/auth` went, then 3005; the phase 10 pages as the theme's design; the theme JAR built with a local JDK and Maven; Google provider disabled and its button hidden without credentials, the button above the form with an "or" divider; Q13 confirmed as a token handler; the Redis session value encrypted with AES-256-GCM.
+- What exists: `apps/bff` (`/bff/login`, `/bff/callback`, `/bff/me`, `/bff/logout`, `/bff/backchannel-logout`, and `/quotes/*` and `/stream` proxied with the bearer token), `apps/keycloak-theme` (Keycloakify), `packages/design-tokens`, the realm and compose service under `infra/keycloak`, and the auth guard accepting RS256 with `JWKS_URL`. `apps/auth`, `apps/user`, the frontend's token code and the `users` table are gone.
+- Verified: `pnpm build`; BFF (66) and frontend (38) Vitest suites; the BFF and SSE service against the compose Keycloak and Redis (`/bff/me`, `/quotes/AAPL/snapshot` and `/stream` without a cookie are `401`, a non-read without `X-Requested-With` is `403`, the login redirect, a bad logout token is `400`, the docs server's proxy). Earlier commits ran a registration, the stream with a Keycloak RS256 token, a reload, logout across two tabs, a 40 s access-token lifespan with the stream reconnecting, and back-channel logout from the admin console. Settings actions were run with curl.
+- **Not run:**
+  - The theme JAR inside Keycloak: Maven is not installed here, so the login pages shown were Keycloak's default theme. The open checks (field order on register, lockout message, error texts, axe, the Google button on the register page, the four viewport sizes) wait for that.
+  - Google sign-in, in full (no credentials), including `google-name` and linking an existing password account.
+  - `scripts/dev.sh` end to end (it stops at the Maven check), and the realm reset it does: the running Keycloak still has the old back-channel URL (3007); run `scripts/dev.sh --reset-realm`.
+  - A browser pass of the whole "Done when" in one go, `UPDATE_PASSWORD`, cancelling an action, Firefox with strict tracking protection, the `__Host-session` cookie in production, and a back-channel logout reaching an open tab.
+- Left open:
+  - After `delete_account` Keycloak shows its own info page and does not send the browser back; the BFF session lasts until its access token expires (up to 10 minutes). Fix with a themed `info.ftl` and/or phase 15's K6 listener.
+  - The refresh is single-flight per process; Keycloak's refresh-token rotation must stay off until a Redis lock replaces the in-process map.
+  - `docs/openapi.yaml` lists only the SSE service's routes behind the BFF; add `/portfolio/*` when phase 15 adds it.
+  - The BFF and SSE service do not run in compose yet; Keycloak reaches the BFF at `host.docker.internal:3005` for back-channel logout.
+- For later phases: `user_id` is the Keycloak `sub` (a UUID). The frontend's data calls are plain `fetch` with the cookie. New services the browser calls need a route in `apps/bff/src/routes/proxy.routes.ts`, and the Vite proxy and the docs server already send `/bff` there.
 
 ### Roadmap change: Keycloak (2026-11-16)
 - Decided by the owner, outside a phase session: replace the hand-written auth from phases 09–11 with Keycloak, Keycloakify pages in the app's design and Google sign-in, with the tokens kept by a backend-for-frontend (`apps/bff`). New plan file `08-identity.md` (K1–K6) and decisions Q10–Q13 in `README.md`. A first version with `keycloak-js` tokens in the page was replaced the same day by the BFF. K6 (account events) is part of phase 15.
