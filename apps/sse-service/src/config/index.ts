@@ -4,8 +4,8 @@ import { parseEnv } from "@stock-platform/env";
 const schema = Type.Object({
   REDIS_URL: Type.String({ minLength: 1 }),
   DATABASE_URL: Type.String({ minLength: 1 }),
-  /** The guard fetches the public keys from `<AUTH_SERVICE_URL>/.well-known/jwks.json`. */
-  AUTH_SERVICE_URL: Type.String({ default: "http://localhost:3005" }),
+  /** Where the guard fetches the public keys. Default: the auth service; K5 points it at Keycloak's certs URL. */
+  JWKS_URL: Type.String({ default: "http://localhost:3005/.well-known/jwks.json" }),
   JWT_ISSUER: Type.String({ default: "stock-auth" }),
   JWT_AUDIENCE: Type.String({ default: "stock-platform" }),
   PORT: Type.Integer({ minimum: 1, default: 3003 }),

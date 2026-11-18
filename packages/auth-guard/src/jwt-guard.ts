@@ -31,7 +31,9 @@ function isTokenError(err: unknown): boolean {
 }
 
 /**
- * Stateless guard: verifies the access token locally against the auth service's public keys.
+ * Stateless guard: verifies the access token locally against a JWKS: the auth service's (ES256) or Keycloak's (RS256).
+ * Both algorithms are accepted; a key still has to match the token's `kid`, so one JWKS never
+ * validates a token signed by the other issuer.
  * The JWKS is fetched once and cached by jose; it is refetched only for an unknown `kid`.
  *
  * Use it as a `preHandler` (or `onRequest`), so a rejected request is answered before a handler
@@ -49,7 +51,7 @@ export function createJwtGuard(options: JwtGuardOptions): JwtGuard {
 
     try {
       const { payload } = await jwtVerify(token, jwks, {
-        algorithms: ["ES256"],
+        algorithms: ["ES256", "RS256"],
         issuer: options.issuer,
         audience: options.audience,
         clockTolerance: CLOCK_TOLERANCE_SECONDS,

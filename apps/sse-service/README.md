@@ -2,7 +2,7 @@
 
 The market API: realtime quotes over HTTP Server-Sent Events (from Redis) and
 tick history (from the Postgres `stock_ticks` table the consumer writes).
-Needs `REDIS_URL` and `DATABASE_URL`, and `AUTH_SERVICE_URL`, `JWT_ISSUER` and
+Needs `REDIS_URL` and `DATABASE_URL`, and `JWKS_URL`, `JWT_ISSUER` and
 `JWT_AUDIENCE` for the JWT guard (defaults match `apps/auth`).
 
 ## Authentication

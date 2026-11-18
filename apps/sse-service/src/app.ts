@@ -60,7 +60,7 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   const healthService = new HealthService(app.redis);
 
   const jwtGuard = createJwtGuard({
-    jwksUrl: new URL("/.well-known/jwks.json", config.AUTH_SERVICE_URL),
+    jwksUrl: new URL(config.JWKS_URL),
     issuer: config.JWT_ISSUER,
     audience: config.JWT_AUDIENCE,
   });
