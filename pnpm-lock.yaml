@@ -234,6 +234,9 @@ importers:
 
   apps/keycloak-theme:
     dependencies:
+      '@stock-platform/design-tokens':
+        specifier: workspace:*
+        version: link:../../packages/design-tokens
       keycloakify:
         specifier: ^11.16.4
         version: 11.16.4

@@ -1,0 +1,138 @@
+/*
+ * The login theme's styles: the phase 10 login and register look, as plain CSS
+ * on the shared tokens. No Patternfly, no CDN: the fonts are bundled into the JAR.
+ */
+@import "@stock-platform/design-tokens/tokens.css";
+@import "@stock-platform/design-tokens/fonts.css";
+
+.st-html,
+.st-body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.st-page {
+  box-sizing: border-box;
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 32px 16px;
+}
+
+.st-brand {
+  color: var(--accent-brand);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.st-card {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 384px;
+  padding: 24px 20px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-surface);
+  box-shadow: var(--card-shadow);
+  text-align: left;
+}
+
+.st-title {
+  margin: 0 0 20px;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.st-required,
+.st-note {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.st-required {
+  margin: -12px 0 20px;
+}
+
+.st-note {
+  max-width: 384px;
+  margin: 0;
+  text-align: center;
+}
+
+.st-attempted {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.st-message {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+/* The text stays primary: the tint and border carry the type, not the colour alone. */
+.st-message-error {
+  border-color: var(--negative);
+  background: color-mix(in srgb, var(--negative) 15%, var(--bg-surface));
+}
+
+.st-message-warning {
+  border-color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 15%, var(--bg-surface));
+}
+
+.st-message-success {
+  border-color: var(--positive);
+  background: color-mix(in srgb, var(--positive) 15%, var(--bg-surface));
+}
+
+.st-info {
+  margin-top: 20px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.st-card a,
+.st-link-button {
+  border-radius: 2px;
+  color: var(--accent-brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.st-card a:hover,
+.st-link-button:hover {
+  text-decoration-thickness: 2px;
+}
+
+.st-link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+.st-card a:focus-visible,
+.st-link-button:focus-visible {
+  outline: 2px solid var(--accent-brand);
+  outline-offset: 2px;
+}

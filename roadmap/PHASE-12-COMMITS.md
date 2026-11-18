@@ -43,7 +43,7 @@ Status: `todo` or `done`. The K1–K4 commits leave the running app unchanged. K
 | 5 | K1 | `chore(frontend): proxy /realms and /resources to keycloak` | Vite proxy. Done when: `http://localhost:5173/realms/stock-platform/.well-known/openid-configuration` shows the 5173 issuer | done |
 | 6 | K2 | `refactor: move the design tokens and fonts into packages/design-tokens` | The frontend imports them; no visual change | done |
 | 7 | K2 | `chore: scaffold apps/keycloak-theme with Keycloakify` | Vite, React, Storybook, turbo wiring (the monorepo guide of the current Keycloakify major) | done |
-| 8 | K2 | `feat(theme): add the shared Template and message overrides` | Card, app name, message banner, English copy | todo |
+| 8 | K2 | `feat(theme): add the shared Template and message overrides` | Card, app name, message banner, English copy | done |
 | 9 | K2 | `feat(theme): add the login page` | Email, password, "Log in", link to register | todo |
 | 10 | K2 | `feat(theme): add the register page` | Email, name, password, confirm password | todo |
 | 11 | K2 | `feat(theme): add the action and broker pages` | `login-update-profile`, `login-update-password`, `delete-account-confirm`, `idp-review-user-profile`, `login-idp-link-confirm` | todo |
@@ -77,6 +77,7 @@ Made by the owner during phase 12:
 - **2026-11-18, name field:** one "Name" field: Keycloak's `firstName` labelled "Name", `lastName` removed from the user profile.
 - **2026-11-18, password reset:** off, as before (no SMTP). The login page keeps "There is no password reset yet. Keep your password somewhere safe."
 - **2026-11-18, BFF port:** the BFF uses port **3007** until K5. The realm's back-channel URL is `http://host.docker.internal:3007/bff/backchannel-logout`, and commit 16's config defaults to 3007. When `apps/auth` is deleted (commit 30), move the BFF, the realm URL and the Vite proxy to 3005.
+- **2026-11-18, theme design reference:** the phase 10 pages (`AuthCard`, `pageStyles.ts`), no separate mock-up.
 - **2026-11-18, workflow:** work on `master`, one commit per session, the owner commits (this file's rules).
 
 Still open. Ask before the commit named:
@@ -85,7 +86,6 @@ Still open. Ask before the commit named:
 |---|---|---|
 | Q13: token handler or token-mediating backend | 16 | Token handler |
 | Encrypt the session value in Redis (AES-GCM, key from env) | 18 | Owner's call; cheap to add |
-| Design reference for the theme: the phase 10 pages or a separate mock-up | 8 | The phase 10 pages |
 | Maven and a JDK installed locally, or a Docker build stage | 13 | Local install |
 | Google button position, and hide it or disable the provider without credentials | 14 | Above the form with an "or" divider; hide when unconfigured |
 
@@ -128,3 +128,9 @@ Still open. Ask before the commit named:
 - The theme does not import `@stock-platform/design-tokens` yet; commit 8 adds the dependency and the two CSS imports.
 - Storybook builds with no stories yet; stories arrive with the pages (commit 9+), using `createKcPageStory` from `src/login/KcPageStory.tsx`.
 - The theme is not formatted with the starter's Prettier config (4 spaces); it follows the repo's 2-space style.
+
+### After commit 8 (2026-11-18)
+- `src/login/Template.tsx` is our own layout (card, `STREAMTICK` brand above, reset note below, message banner with `role="alert"` for errors and `status` otherwise). It keeps Keycloakify's `useInitialize` for the session-polling scripts. `KcPage` passes `doUseDefaultCss={false}`, so Patternfly is never loaded: only `src/login/theme.css` styles the pages (plain CSS on the shared tokens, `st-*` classes). Pages in commits 9–11 add their own `st-*` field and button classes there; the ones they render through `DefaultPage` fall back to the `classes` map in `KcPage.tsx` (still empty).
+- The brand text comes from the realm `displayName` ("Streamtick"), shown upper-case by CSS; the frontend's `STREAMTICK` is literal.
+- Message overrides are in `i18n.ts` (`withCustomTranslations`, English only). The custom key `noPasswordResetNote` is the footer note. Wrong email, wrong password and unknown user all say "Invalid email or password". The lockout and email-taken texts are first drafts: check them in the Storybook error states (commit 12).
+- Not seen in a browser: no stories exist yet, so only `tsc` and `vite build` ran. First visual check is commit 9.

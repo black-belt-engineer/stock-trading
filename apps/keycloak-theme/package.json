@@ -14,6 +14,7 @@
     "lint": "node -e \"process.exit(0)\""
   },
   "dependencies": {
+    "@stock-platform/design-tokens": "workspace:*",
     "keycloakify": "^11.16.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
