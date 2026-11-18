@@ -2,7 +2,7 @@ import cookie from "@fastify/cookie";
 import Fastify, { type FastifyInstance } from "fastify";
 import * as client from "openid-client";
 import { describe, expect, it } from "vitest";
-import type { SessionRepository } from "../repositories/session.repository.js";
+import type { Session, SessionRepository } from "../repositories/session.repository.js";
 import { LOGIN_COOKIE, authRoutes } from "./auth.routes.js";
 
 const ORIGIN = "http://localhost:5173";
@@ -22,13 +22,17 @@ client.allowInsecureRequests(oidc);
 
 /** Counts what the callback creates; the grant never reaches it in these tests. */
 function fakeSessions() {
-  const state = { created: 0 };
+  const state = { created: 0, stored: new Map<string, Session>(), fail: false };
   const repo: Pick<SessionRepository, "create" | "delete"> = {
     create: async () => {
       state.created += 1;
       return "id";
     },
     delete: async () => undefined,
+    get: async (id) => {
+      if (state.fail) throw new Error("redis down");
+      return state.stored.get(id);
+    },
   };
   return { repo, state };
 }
@@ -119,5 +123,49 @@ describe("GET /bff/callback", () => {
     });
     expect(res.statusCode).toBe(503);
     expect(sessions.state.created).toBe(0);
+  });
+});
+
+describe("GET /bff/me", () => {
+  const session: Session = {
+    sub: "user-1",
+    sid: "sid-1",
+    name: "Ada",
+    email: "ada@example.com",
+    accessToken: "access-secret",
+    accessExpiresAt: 0,
+    refreshToken: "refresh-secret",
+    refreshExpiresAt: 0,
+    idToken: "id-secret",
+  };
+
+  it("answers 401 without a session cookie", async () => {
+    const { app } = await build();
+    const res = await app.inject({ method: "GET", url: "/bff/me" });
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ code: "UNAUTHENTICATED" });
+  });
+
+  it("answers 401 for an unknown session id", async () => {
+    const { app } = await build();
+    const res = await app.inject({ method: "GET", url: "/bff/me", headers: { cookie: "session=nope" } });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("returns the user and no tokens", async () => {
+    const { app, sessions } = await build();
+    sessions.state.stored.set("abc", session);
+    const res = await app.inject({ method: "GET", url: "/bff/me", headers: { cookie: "session=abc" } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ user: { id: "user-1", name: "Ada", email: "ada@example.com" } });
+    expect(res.body).not.toContain("secret");
+    expect(res.headers["cache-control"]).toBe("no-store");
+  });
+
+  it("answers 503 when the session store fails", async () => {
+    const { app, sessions } = await build();
+    sessions.state.fail = true;
+    const res = await app.inject({ method: "GET", url: "/bff/me", headers: { cookie: "session=abc" } });
+    expect(res.statusCode).toBe(503);
   });
 });

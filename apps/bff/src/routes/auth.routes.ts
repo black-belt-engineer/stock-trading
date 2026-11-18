@@ -25,8 +25,8 @@ export type AuthRouteDeps = {
   /** The app's public origin: `returnTo` is checked against it and the callback URL is built from it. */
   publicOrigin: string;
   production: boolean;
-  /** Only what the callback needs. */
-  sessions: Pick<SessionRepository, "create" | "delete">;
+  /** Only what the routes need. */
+  sessions: Pick<SessionRepository, "create" | "delete" | "get">;
 };
 
 const LoginQuery = Type.Object({
@@ -118,6 +118,31 @@ const authRoutesImpl: FastifyPluginAsyncTypebox<AuthRouteDeps> = async (fastify,
       }
       throw error;
     }
+  });
+
+  // The frontend's startup check. Only the user's identity is returned, never a token.
+  // Redis is the only dependency for now, so a Redis error is the 503. Keycloak enters
+  // when the token refresh arrives (commit 22).
+  fastify.get("/bff/me", async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+
+    const id = request.cookies[sessionCookie];
+    if (id === undefined) {
+      return reply.code(401).send({ error: "Not signed in", code: "UNAUTHENTICATED" });
+    }
+
+    let session;
+    try {
+      session = await sessions.get(id);
+    } catch (error) {
+      request.log.error({ err: error }, "Session store unavailable");
+      return reply.code(503).send({ error: "Sign-in is unavailable, try again", code: "SERVICE_UNAVAILABLE" });
+    }
+    if (session === undefined) {
+      return reply.code(401).send({ error: "Not signed in", code: "UNAUTHENTICATED" });
+    }
+
+    return { user: { id: session.sub, name: session.name, email: session.email } };
   });
 };
 

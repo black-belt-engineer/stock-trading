@@ -56,7 +56,7 @@ Status: `todo` or `done`. The K1–K4 commits leave the running app unchanged. K
 | 18 | K4 | `feat(bff): add the Redis session store` | `bff:session:*`, `bff:user-sessions:<sub>`, `bff:sid:<sid>`, encryption if chosen | done |
 | 19 | K4 | `feat(bff): add GET /bff/login and the login cookie` | `returnTo` validation copied from `redirect.ts` with its tests, `prompt`, `idp`, `action` allow-list | done |
 | 20 | K4 | `feat(bff): add GET /bff/callback` | `state` and `nonce`, code exchange, new session id, `error` and cancelled action | done |
-| 21 | K4 | `feat(bff): add GET /bff/me` | `401` without a session, `503` when Keycloak is down | todo |
+| 21 | K4 | `feat(bff): add GET /bff/me` | `401` without a session, `503` when Keycloak is down | done |
 | 22 | K4 | `feat(bff): add single-flight token refresh` | Refresh within 30 s of expiry, one per session at a time | todo |
 | 23 | K4 | `feat(bff): proxy /quotes and /stream with the bearer token` | Unbuffered stream, timeouts off, `X-Requested-With` on non-GET | todo |
 | 24 | K4 | `feat(bff): add POST /bff/logout` | Delete the session, revoke the refresh token, return the end-session URL | todo |
@@ -210,3 +210,8 @@ Still open. Ask before the commit named:
 - Tested for real against the compose Keycloak and Redis (Vite was not running, so the form post went to 8180 and the callback URL was replayed against the BFF on 3007): register with `prompt=create` then callback gives `302 /settings`, the `session` cookie and the three Redis keys; the same code again is `400`; a second login over SSO replaces the session and deletes the old Redis entry; `error=access_denied` redirects to `returnTo` with no session cookie. Vitest: state mismatch, forged and missing cookie, Keycloak error, hostile `returnTo`, token endpoint down (`503`), and `sessionFromTokens`.
 - Not tested: through 5173 in a browser, `kc_action_status` after a real account action (commit 28), and the `Secure` / `__Host-` cookie in production.
 - A Keycloak `error` that is not a cancelled action (such as `login_required`) also goes back to `returnTo`. If the page needs a session, the frontend then goes to `/bff/login` again; watch for a loop in commit 27.
+
+### After commit 21 (2026-11-18)
+- `GET /bff/me` is in `routes/auth.routes.ts`: `{ user: { id, name, email } }` from the session (`sub`, `name`, `email`), `401 UNAUTHENTICATED` for no cookie or a missing, expired or unreadable session, `503 SERVICE_UNAVAILABLE` when the session store (Redis) throws. `Cache-Control: no-store`. No tokens in the body. `AuthRouteDeps.sessions` now also takes `get`.
+- **Keycloak is not contacted yet**, so the 503 today means Redis is down. Commit 22 should make `/bff/me` go through the refresh helper once it exists, so a session with an expired access token is refreshed there, and a Keycloak outage during that refresh gives the 503. A still-valid access token must keep working while Keycloak is down.
+- Tested: `pnpm build`; vitest (401 without cookie, 401 unknown id, 200 with no tokens in the body, 503 on a store error). Not tested against the real Redis and Keycloak by hand, or through 5173.
