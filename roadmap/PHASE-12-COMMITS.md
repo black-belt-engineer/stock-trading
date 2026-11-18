@@ -44,7 +44,7 @@ Status: `todo` or `done`. The K1–K4 commits leave the running app unchanged. K
 | 6 | K2 | `refactor: move the design tokens and fonts into packages/design-tokens` | The frontend imports them; no visual change | done |
 | 7 | K2 | `chore: scaffold apps/keycloak-theme with Keycloakify` | Vite, React, Storybook, turbo wiring (the monorepo guide of the current Keycloakify major) | done |
 | 8 | K2 | `feat(theme): add the shared Template and message overrides` | Card, app name, message banner, English copy | done |
-| 9 | K2 | `feat(theme): add the login page` | Email, password, "Log in", link to register | todo |
+| 9 | K2 | `feat(theme): add the login page` | Email, password, "Log in", link to register | done |
 | 10 | K2 | `feat(theme): add the register page` | Email, name, password, confirm password | todo |
 | 11 | K2 | `feat(theme): add the action and broker pages` | `login-update-profile`, `login-update-password`, `delete-account-confirm`, `idp-review-user-profile`, `login-idp-link-confirm` | todo |
 | 12 | K2 | `test(theme): add Storybook error states for every page` | Wrong password, locked out, email taken, password too short, passwords not matching | todo |
@@ -134,3 +134,8 @@ Still open. Ask before the commit named:
 - The brand text comes from the realm `displayName` ("Streamtick"), shown upper-case by CSS; the frontend's `STREAMTICK` is literal.
 - Message overrides are in `i18n.ts` (`withCustomTranslations`, English only). The custom key `noPasswordResetNote` is the footer note. Wrong email, wrong password and unknown user all say "Invalid email or password". The lockout and email-taken texts are first drafts: check them in the Storybook error states (commit 12).
 - Not seen in a browser: no stories exist yet, so only `tsc` and `vite build` ran. First visual check is commit 9.
+
+### After commit 9 (2026-11-18)
+- `src/login/pages/Login.tsx` is our own page, wired in `KcPage.tsx`. One error for both fields (`role="alert"`, `aria-invalid` and `aria-describedby` on both inputs); the banner is hidden while it shows. No remember-me, reset link or passkeys. Commit 15 adds the Google button through the Template's `socialProvidersNode`; the page does not pass one yet.
+- Shared form classes are in `theme.css` (`st-form`, `st-field`, `st-label`, `st-hint`, `st-input`, `st-error`, `st-button`). Commit 10 reuses them. Copy keys `loginAccountTitle`, `noAccount` and `createOneLink` ("Create one") are in `i18n.ts`; `doRegister` stays "Create account" for the register button.
+- `src/login/pages/Login.stories.tsx` has a Default story (error states: commit 12). Checked in a headless Chrome screenshot of the built Storybook at 360×740: card, focus ring and note look like phase 10. The label there reads "Username or email" because the mock realm lacks `registrationEmailAsUsername`; the real realm shows "Email". Not tested: axe, the page in the compose Keycloak (commit 13).

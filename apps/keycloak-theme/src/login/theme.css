@@ -136,3 +136,82 @@
   outline: 2px solid var(--accent-brand);
   outline-offset: 2px;
 }
+
+/* Forms: the phase 10 field, label and button, shared by the login and register pages. */
+.st-form {
+  display: grid;
+  gap: 16px;
+}
+
+.st-field {
+  display: grid;
+  gap: 6px;
+}
+
+.st-label {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.st-hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.st-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font: inherit;
+  transition: border-color 150ms;
+}
+
+.st-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.st-input:hover {
+  border-color: var(--border-strong);
+}
+
+.st-input[aria-invalid="true"] {
+  border-color: var(--negative);
+}
+
+.st-error {
+  margin: 0;
+  color: var(--negative);
+  font-size: 13px;
+}
+
+.st-button {
+  display: inline-flex;
+  width: 100%;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent-brand);
+  border-radius: 6px;
+  background: var(--accent-brand-dim);
+  color: var(--accent-brand);
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 150ms;
+}
+
+.st-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.st-input:focus-visible,
+.st-button:focus-visible {
+  outline: 2px solid var(--accent-brand);
+  outline-offset: 2px;
+}

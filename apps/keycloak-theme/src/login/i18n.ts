@@ -30,6 +30,9 @@ const { useI18n, ofTypeI18n } = i18nBuilder
       usernameExistsMessage: "That email can't be used. Try logging in instead.",
       alreadyLoggedIn: "You are already logged in.",
       backToApplication: "Back to Streamtick",
+      loginAccountTitle: "Log in",
+      noAccount: "No account yet?",
+      createOneLink: "Create one",
       doLogIn: "Log in",
       doRegister: "Create account"
     }
