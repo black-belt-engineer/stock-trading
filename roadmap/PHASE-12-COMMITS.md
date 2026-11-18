@@ -58,7 +58,7 @@ Status: `todo` or `done`. The K1–K4 commits leave the running app unchanged. K
 | 20 | K4 | `feat(bff): add GET /bff/callback` | `state` and `nonce`, code exchange, new session id, `error` and cancelled action | done |
 | 21 | K4 | `feat(bff): add GET /bff/me` | `401` without a session, `503` when Keycloak is down | done |
 | 22 | K4 | `feat(bff): add single-flight token refresh` | Refresh within 30 s of expiry, one per session at a time | done |
-| 23 | K4 | `feat(bff): proxy /quotes and /stream with the bearer token` | Unbuffered stream, timeouts off, `X-Requested-With` on non-GET | todo |
+| 23 | K4 | `feat(bff): proxy /quotes and /stream with the bearer token` | Unbuffered stream, timeouts off, `X-Requested-With` on non-GET | done |
 | 24 | K4 | `feat(bff): add POST /bff/logout` | Delete the session, revoke the refresh token, return the end-session URL | todo |
 | 25 | K4 | `feat(bff): add POST /bff/backchannel-logout` | Verify the logout token, delete by `sid` or `sub`. Then run K4's "Done when" | todo |
 | 26 | K5 | `feat(auth-guard): accept RS256 and a configurable JWKS URL` | SSE service `AUTH_SERVICE_URL` → `JWKS_URL`; both algorithms, so the old login keeps working | todo |
@@ -223,3 +223,10 @@ Still open. Ask before the commit named:
 - `/bff/me` now goes through `getSession`; `AuthRouteDeps` takes `tokens` and `sessions` no longer needs `get`. `buildApp` builds the refresher.
 - Tested: vitest with a real local HTTP token endpoint (no refresh with more than 30 s left, refresh within it, three concurrent callers make one request, `invalid_grant` deletes, expired refresh token deletes without a call, Keycloak down with a valid and with an expired token). `pnpm build` passes. **Not tested** against the compose Keycloak and Redis by hand, or through 5173; a rotation-on Keycloak is not supported (see 08-identity.md).
 - Small gap: a caller that reads the session just as another refresh finishes can start a second refresh with the old refresh token. Harmless with rotation off; the Redis lock for scaling would close it.
+
+### After commit 23 (2026-11-18)
+- `routes/proxy.routes.ts` (`proxyRoutes`, deps `upstream`, `production`, `tokens`) forwards `GET/HEAD/POST/PUT/PATCH/DELETE` on `/quotes/*` and `/stream` to `SSE_SERVICE_URL` (new config, default `http://localhost:3003`) with `@fastify/reply-from` (undici, `headersTimeout` and `bodyTimeout` 0). Per request: no cookie `401`; `tokens.getSession` throws `503`; unknown session `401`; then `Authorization: Bearer <accessToken>` replaces whatever the browser sent, `cookie` is dropped, `x-forwarded-for` is set. Upstream unreachable is `502 UPSTREAM_UNAVAILABLE`. Add `/portfolio/*` later with a route of its own and its own upstream.
+- The plugin is **encapsulated** (not `fp`) because it adds a catch-all content-type parser that passes bodies through raw; keep it away from `/bff/*`.
+- `services/csrf.ts`: `requireCsrfHeader` (a `preHandler`, `403 CSRF_REJECTED` unless the method is GET/HEAD/OPTIONS or `X-Requested-With: fetch`). Commit 24 uses it on `POST /bff/logout`; commit 25 must not (Keycloak cannot send it).
+- Tested: vitest with real local HTTP upstreams (bearer set, cookie and forged `Authorization` stripped, query kept, 401/503/403/502, POST body forwarded, SSE first event arrives while the upstream response is still open, the browser side ends with the upstream, the upstream closes when the browser leaves). By hand against compose Keycloak and Redis: a freshly registered user's session; `/quotes/...` reached a stub on 3003 with a real RS256 Keycloak bearer and no cookie; `/stream` passed an event; 401 and 403 as above.
+- **Not tested:** the real SSE service (its guard only takes the old HS256 token until commit 26), `session-expired` at the token's `exp` with the real service, a token refresh during a stream, and anything through 5173. The Vite proxy still sends `/quotes` and `/stream` straight to 3003 until commit 27.

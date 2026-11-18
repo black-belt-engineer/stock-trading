@@ -8,6 +8,7 @@ import type { AppConfig } from "./config/index.js";
 import { SessionRepository } from "./repositories/session.repository.js";
 import { authRoutes } from "./routes/auth.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
+import { proxyRoutes } from "./routes/proxy.routes.js";
 import { HealthService } from "./services/health.service.js";
 import { discoverOidc } from "./services/oidc.service.js";
 import { SessionCrypto } from "./services/session-crypto.js";
@@ -46,12 +47,18 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   await app.register(redisPlugin, { url: config.REDIS_URL });
   // Built before the routes, so a bad key stops the start.
   const sessions = new SessionRepository(app.redis, new SessionCrypto(config.SESSION_ENCRYPTION_KEY));
+  const tokens = new TokenRefresher(oidc, sessions);
   await app.register(authRoutes, {
     oidc,
     publicOrigin: config.PUBLIC_ORIGIN,
     production: config.NODE_ENV === "production",
     sessions,
-    tokens: new TokenRefresher(oidc, sessions),
+    tokens,
+  });
+  await app.register(proxyRoutes, {
+    upstream: config.SSE_SERVICE_URL,
+    production: config.NODE_ENV === "production",
+    tokens,
   });
   await app.register(healthRoutes, { healthService: new HealthService(app.redis) });
 

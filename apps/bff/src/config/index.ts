@@ -21,6 +21,8 @@ const schema = Type.Object({
    * Generated into `.env.local` by `scripts/dev.sh`. Changing it logs everybody out.
    */
   SESSION_ENCRYPTION_KEY: Type.String({ minLength: 43 }),
+  /** The SSE service: `/quotes/*` and `/stream` are proxied to it with the bearer token. */
+  SSE_SERVICE_URL: Type.String({ default: "http://localhost:3003" }),
   /** The app's public origin: the callback and the post-logout redirect are built from it. */
   PUBLIC_ORIGIN: Type.String({ default: "http://localhost:5173" }),
   /** 3007 until `apps/auth` is deleted (commit 30), then 3005. */
