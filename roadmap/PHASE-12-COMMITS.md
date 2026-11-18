@@ -40,7 +40,7 @@ Status: `todo` or `done`. The K1–K4 commits leave the running app unchanged. K
 | 2 | K1 | `chore(scripts): create the keycloak database and the client secret in dev.sh` | DB if missing, `KC_BFF_CLIENT_SECRET`, wait for readiness, `--reset-realm`, printed URL, `.env.local.example` | done |
 | 3 | K1 | `feat(infra): add the stock-platform realm` | Realm settings, password policy, brute force, token lifetimes, one-field user profile, import mount | done |
 | 4 | K1 | `feat(infra): add the stock-bff client to the realm` | Confidential client, standard flow only, PKCE S256, redirect, post-logout and back-channel URLs, audience mapper (`stock-platform`), `delete_account` action and role in the default roles, saved events including `DELETE_ACCOUNT` | done |
-| 5 | K1 | `chore(frontend): proxy /realms and /resources to keycloak` | Vite proxy. Done when: `http://localhost:5173/realms/stock-platform/.well-known/openid-configuration` shows the 5173 issuer | todo |
+| 5 | K1 | `chore(frontend): proxy /realms and /resources to keycloak` | Vite proxy. Done when: `http://localhost:5173/realms/stock-platform/.well-known/openid-configuration` shows the 5173 issuer | done |
 | 6 | K2 | `refactor: move the design tokens and fonts into packages/design-tokens` | The frontend imports them; no visual change | todo |
 | 7 | K2 | `chore: scaffold apps/keycloak-theme with Keycloakify` | Vite, React, Storybook, turbo wiring (the monorepo guide of the current Keycloakify major) | todo |
 | 8 | K2 | `feat(theme): add the shared Template and message overrides` | Card, app name, message banner, English copy | todo |
@@ -110,3 +110,8 @@ Still open. Ask before the commit named:
 - The login form's `action` points at `localhost:5173` (from `KC_HOSTNAME`); for curl tests before commit 5, rewrite it to 8180.
 - Not tested: the `delete_account` action and a saved `DELETE_ACCOUNT` event (they need the confirm page; commit 28 tests them). `LOGIN` events were seen saved.
 - `08-identity.md` still says 3005 for the BFF; it is the final port, so it was left as is. The temporary 3007 lives in the decision above.
+
+### After commit 5 (2026-11-18)
+- `/realms` and `/resources` go to `VITE_KEYCLOAK_URL` (default `http://localhost:8180`) with `changeOrigin: false`. Keep it off: with `KC_HOSTNAME_BACKCHANNEL_DYNAMIC` Keycloak builds the token, JWKS and other back-channel URLs from the `Host` header. Through 5173 the discovery document then lists 5173 for every endpoint, while on 8180 the token and JWKS URLs stay 8180 for the BFF. Both were checked.
+- The curl workaround from commit 4 (rewriting the form `action` to 8180) is no longer needed. A full code flow with PKCE through 5173 works: the login page, its `/resources` CSS, the form post with Keycloak's cookies (path `/realms/stock-platform/`), and the 302 to `http://localhost:5173/bff/callback`. That route 404s until commit 20.
+- No app route starts with `/realms` or `/resources`. Keep it that way, because the proxy catches any path with those prefixes.

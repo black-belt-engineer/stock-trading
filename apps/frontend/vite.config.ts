@@ -5,6 +5,13 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const target = env.VITE_SSE_URL ?? "http://localhost:3003";
+  // Keycloak's pages, its form posts and its cookies stay on the app's origin (K1).
+  // changeOrigin stays off: with KC_HOSTNAME_BACKCHANNEL_DYNAMIC Keycloak builds the
+  // token and JWKS URLs from the Host header, so the browser keeps seeing localhost:5173.
+  const keycloak = {
+    target: env.VITE_KEYCLOAK_URL ?? "http://localhost:8180",
+    changeOrigin: false,
+  };
 
   return {
     plugins: [react(), tailwindcss()],
@@ -41,6 +48,8 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           xfwd: true,
         },
+        "/realms": keycloak,
+        "/resources": keycloak,
       },
     },
   };
