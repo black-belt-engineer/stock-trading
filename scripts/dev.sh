@@ -164,6 +164,31 @@ if $RESET_REALM; then
     || die "Keycloak did not become ready after the reimport (check: docker logs stock-keycloak)"
 fi
 
+# The realm file ships the Google provider disabled (JSON cannot switch it on by condition).
+# Enable it only when both credentials are in .env.local; without them it stays off and the
+# login pages show no Google button. Runs on every start, so removing the credentials works too.
+env_value() { grep -E "^[[:space:]]*$1=" "$ENV_FILE" | tail -n1 | cut -d= -f2-; }
+google_enabled=false
+if [[ -n "$(env_value GOOGLE_CLIENT_ID)" && -n "$(env_value GOOGLE_CLIENT_SECRET)" ]]; then
+  google_enabled=true
+fi
+kc_admin_user="$(env_value KC_BOOTSTRAP_ADMIN_USERNAME)"
+kc_admin_password="$(env_value KC_BOOTSTRAP_ADMIN_PASSWORD)"
+docker exec stock-keycloak /opt/keycloak/bin/kcadm.sh config credentials \
+  --server http://localhost:8080 --realm master \
+  --user "${kc_admin_user:-admin}" --password "${kc_admin_password:-admin}" >/dev/null \
+  || die "could not log in to Keycloak as the bootstrap admin"
+if docker exec stock-keycloak /opt/keycloak/bin/kcadm.sh update identity-provider/instances/google \
+  -r "$KEYCLOAK_REALM" -s "enabled=$google_enabled" 2>/dev/null; then
+  if $google_enabled; then
+    log "Google sign-in enabled"
+  else
+    log "Google sign-in disabled (set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in $ENV_FILE to enable it)"
+  fi
+else
+  log "No google identity provider in the realm yet; run with --reset-realm to import it"
+fi
+
 # --- 5. Build shared packages (apps import them from dist/) -----------------
 log "Building workspace"
 pnpm build

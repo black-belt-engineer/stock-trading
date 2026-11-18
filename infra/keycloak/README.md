@@ -50,3 +50,16 @@ The BFF (`apps/bff`, K4) is the only client. The browser never sees a token.
 | Audience mapper | custom audience `stock-platform`, access token only | The services keep `JWT_AUDIENCE=stock-platform`. The access token's `aud` is `["stock-platform", "account"]`; the ID token's stays `stock-bff`. |
 
 The user profile is a JSON string inside `components`, because Keycloak stores it that way. To change it, edit it in the admin console (Realm settings → User profile → JSON editor) to validate it, then copy the result back here as a single escaped string.
+
+### Identity provider `google`
+
+| Setting | Value | Why |
+|---|---|---|
+| `enabled` | `false` in the file | JSON cannot switch a provider on by condition, so `scripts/dev.sh` sets it on every start: `true` when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are both in `.env.local`, otherwise `false`. A disabled provider is absent from `kcContext.social.providers`, so the theme shows no button (owner decision, 2026-11-18). |
+| `clientId`, `clientSecret` | `${GOOGLE_CLIENT_ID}`, `${GOOGLE_CLIENT_SECRET}` | From `.env.local` through compose, resolved at import. Empty values import fine. Changing them needs `--reset-realm`. |
+| Redirect URI at Google | `http://localhost:5173/realms/stock-platform/broker/google/endpoint` | Follows `KC_HOSTNAME`, not port 8180. |
+| `trustEmail` | `true` | Google verifies emails, and there is no SMTP to verify them again. |
+| `syncMode` | `IMPORT` | Name and email are copied at the first login only. |
+| `defaultScope` | `openid email profile` | |
+| `firstBrokerLoginFlowAlias` | `first broker login` | Keycloak's default flow. An existing email with a password leads to `login-idp-link-confirm`, then the password. |
+| Mapper `google-name` | claim `name` into `firstName` | The user profile has one "Name" field; Google's own import would fill it with the given name only. |

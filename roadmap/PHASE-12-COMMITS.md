@@ -49,7 +49,7 @@ Status: `todo` or `done`. The K1–K4 commits leave the running app unchanged. K
 | 11 | K2 | `feat(theme): add the action and broker pages` | `login-update-profile`, `login-update-password`, `delete-account-confirm`, `idp-review-user-profile`, `login-idp-link-confirm` | done |
 | 12 | K2 | `test(theme): add Storybook error states for every page` | Wrong password, locked out, email taken, password too short, passwords not matching | done |
 | 13 | K2 | `chore(infra): build the theme JAR, mount it and set loginTheme` | `build-keycloak-theme`, compose mount into `/opt/keycloak/providers`, realm `loginTheme`, `mvn` check in `dev.sh` | done |
-| 14 | K3 | `feat(infra): add the google identity provider to the realm` | Secrets from env, the chosen behaviour without credentials, `.env.local.example` docs | todo |
+| 14 | K3 | `feat(infra): add the google identity provider to the realm` | Secrets from env, the chosen behaviour without credentials, `.env.local.example` docs | done |
 | 15 | K3 | `feat(theme): add "Continue with Google" from kcContext.social.providers` | Login and register pages | todo |
 | 16 | K4 | `chore(bff): scaffold apps/bff` | Fastify, config with separate issuer and internal Keycloak URLs, health, logger | todo |
 | 17 | K4 | `feat(bff): add OIDC discovery with openid-client` | Discovery against the internal URL | todo |
@@ -79,6 +79,7 @@ Made by the owner during phase 12:
 - **2026-11-18, BFF port:** the BFF uses port **3007** until K5. The realm's back-channel URL is `http://host.docker.internal:3007/bff/backchannel-logout`, and commit 16's config defaults to 3007. When `apps/auth` is deleted (commit 30), move the BFF, the realm URL and the Vite proxy to 3005.
 - **2026-11-18, theme design reference:** the phase 10 pages (`AuthCard`, `pageStyles.ts`), no separate mock-up.
 - **2026-11-18, theme JAR build:** local JDK and Maven (no Docker build stage); `scripts/dev.sh` fails early without them.
+- **2026-11-18, Google without credentials:** the provider stays disabled and the button is hidden. **Button position:** above the form with an "or" divider (commit 15).
 - **2026-11-18, workflow:** work on `master`, one commit per session, the owner commits (this file's rules).
 
 Still open. Ask before the commit named:
@@ -87,7 +88,6 @@ Still open. Ask before the commit named:
 |---|---|---|
 | Q13: token handler or token-mediating backend | 16 | Token handler |
 | Encrypt the session value in Redis (AES-GCM, key from env) | 18 | Owner's call; cheap to add |
-| Google button position, and hide it or disable the provider without credentials | 14 | Above the form with an "or" divider; hide when unconfigured |
 
 ## Notes between commits
 
@@ -164,3 +164,9 @@ Still open. Ask before the commit named:
 - Written but **not run**: Maven is not installed here (no sudo, and a download of it was blocked), so the JAR build, the mount and the theme in the real Keycloak are untested. First check for the owner: install Maven, run `scripts/dev.sh --reset-realm --setup-only`, then open the login page on 5173 and check it, including the open items from commits 10–12 (field order, lockout message, error texts, axe).
 - `scripts/dev.sh` builds the theme before starting Keycloak, takes the first `*.jar` in `apps/keycloak-theme/dist_keycloak`, and exports its sha256 as `THEME_JAR_SHA`; compose passes it to the container so a changed JAR recreates it. Compose mounts the folder, not the file, to avoid Docker creating a directory when the build is missing. If the JAR name is not what Keycloakify writes, fix the glob.
 - `loginTheme` is in the realm JSON, so an existing realm needs `--reset-realm` to get it.
+
+### After commit 14 (2026-11-18)
+- The realm file has `identityProviders` (`google`, `enabled: false`, `${GOOGLE_CLIENT_ID}` / `${GOOGLE_CLIENT_SECRET}`) and an `identityProviderMappers` entry `google-name` (claim `name` into `firstName`). Compose passes both variables (empty when unset). `scripts/dev.sh` sets `enabled` through `kcadm` on every start (true only with both credentials), after the optional realm reset. Reasons are in `infra/keycloak/README.md`.
+- Tested against the running Keycloak by hand (Maven is still missing, so `dev.sh` itself did not run; its new block is only syntax-checked): the realm reimports with the provider and mapper; disabled, the auth page has no `broker/google` link; enabled, it has one; disabled again, it is gone. A broker login with fake credentials returned 400. Keycloak starts with empty credentials.
+- Not tested (needs real Google credentials): the consent flow, that `google-name` really overrides the given name Google's own import sets, `trustEmail`, and linking to an existing password account (`login-idp-link-confirm`).
+- Commit 15: the theme reads `kcContext.social.providers`; a disabled provider is not in that list. The button's `href` is the provider's `loginUrl`.
