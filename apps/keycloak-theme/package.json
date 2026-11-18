@@ -1,0 +1,30 @@
+{
+  "name": "@stock-platform/keycloak-theme",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build-keycloak-theme": "pnpm run build && keycloakify build",
+    "storybook": "storybook dev -p 6006",
+    "lint": "node -e \"process.exit(0)\""
+  },
+  "dependencies": {
+    "keycloakify": "^11.16.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@storybook/react-vite": "^10.6.5",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.4.1",
+    "storybook": "^10.6.5",
+    "typescript": "^5.8.3",
+    "vite": "^6.0.11"
+  }
+}

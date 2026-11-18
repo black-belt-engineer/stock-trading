@@ -7,6 +7,8 @@
   "packageManager": "pnpm@9.15.9",
   "scripts": {
     "build": "turbo run build",
+    "build-keycloak-theme": "turbo run build-keycloak-theme --filter=@stock-platform/keycloak-theme",
+    "theme:storybook": "pnpm --filter @stock-platform/keycloak-theme run storybook",
     "dev": "turbo run dev",
     "dev:all": "bash scripts/dev.sh",
     "dev:setup": "bash scripts/dev.sh --setup-only",

@@ -5,6 +5,10 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "build-keycloak-theme": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "dist_keycloak/**"]
+    },
     "dev": {
       "cache": false,
       "persistent": true
