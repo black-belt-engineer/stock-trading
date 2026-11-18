@@ -3,9 +3,11 @@ import { createLogger } from "@stock-platform/logger";
 import { redisPlugin } from "@stock-platform/redis";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { AppConfig } from "./config/index.js";
+import { SessionRepository } from "./repositories/session.repository.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { HealthService } from "./services/health.service.js";
 import { discoverOidc } from "./services/oidc.service.js";
+import { SessionCrypto } from "./services/session-crypto.js";
 
 export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   const log = createLogger("bff", { level: config.LOG_LEVEL, environment: config.NODE_ENV });
@@ -32,6 +34,8 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   log.info({ issuer: oidc.serverMetadata().issuer }, "OIDC discovery done");
 
   await app.register(redisPlugin, { url: config.REDIS_URL });
+  // Built here so a bad key stops the start; the routes of commits 19 to 25 will take it.
+  new SessionRepository(app.redis, new SessionCrypto(config.SESSION_ENCRYPTION_KEY));
   await app.register(healthRoutes, { healthService: new HealthService(app.redis) });
 
   return app;

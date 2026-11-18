@@ -16,6 +16,11 @@ const schema = Type.Object({
   KC_BFF_CLIENT_ID: Type.String({ minLength: 1, default: "stock-bff" }),
   /** Generated into `.env.local` by `scripts/dev.sh` and imported into the realm. */
   KC_BFF_CLIENT_SECRET: Type.String({ minLength: 1 }),
+  /**
+   * AES-256-GCM key for the session value in Redis: 32 random bytes, base64url (43 characters).
+   * Generated into `.env.local` by `scripts/dev.sh`. Changing it logs everybody out.
+   */
+  SESSION_ENCRYPTION_KEY: Type.String({ minLength: 43 }),
   /** The app's public origin: the callback and the post-logout redirect are built from it. */
   PUBLIC_ORIGIN: Type.String({ default: "http://localhost:5173" }),
   /** 3007 until `apps/auth` is deleted (commit 30), then 3005. */

@@ -53,7 +53,7 @@ Status: `todo` or `done`. The K1–K4 commits leave the running app unchanged. K
 | 15 | K3 | `feat(theme): add "Continue with Google" from kcContext.social.providers` | Login and register pages | done |
 | 16 | K4 | `chore(bff): scaffold apps/bff` | Fastify, config with separate issuer and internal Keycloak URLs, health, logger | done |
 | 17 | K4 | `feat(bff): add OIDC discovery with openid-client` | Discovery against the internal URL | done |
-| 18 | K4 | `feat(bff): add the Redis session store` | `bff:session:*`, `bff:user-sessions:<sub>`, `bff:sid:<sid>`, encryption if chosen | todo |
+| 18 | K4 | `feat(bff): add the Redis session store` | `bff:session:*`, `bff:user-sessions:<sub>`, `bff:sid:<sid>`, encryption if chosen | done |
 | 19 | K4 | `feat(bff): add GET /bff/login and the login cookie` | `returnTo` validation copied from `redirect.ts` with its tests, `prompt`, `idp`, `action` allow-list | todo |
 | 20 | K4 | `feat(bff): add GET /bff/callback` | `state` and `nonce`, code exchange, new session id, `error` and cancelled action | todo |
 | 21 | K4 | `feat(bff): add GET /bff/me` | `401` without a session, `503` when Keycloak is down | todo |
@@ -81,13 +81,13 @@ Made by the owner during phase 12:
 - **2026-11-18, theme JAR build:** local JDK and Maven (no Docker build stage); `scripts/dev.sh` fails early without them.
 - **2026-11-18, Google without credentials:** the provider stays disabled and the button is hidden. **Button position:** above the form with an "or" divider (commit 15).
 - **2026-11-18, Q13:** token handler. The BFF keeps the tokens in the Redis session and adds the bearer token when it proxies; the browser only has the session cookie.
+- **2026-11-18, session encryption:** the session value in Redis is encrypted with AES-256-GCM, key from `SESSION_ENCRYPTION_KEY` (commit 18).
 - **2026-11-18, workflow:** work on `master`, one commit per session, the owner commits (this file's rules).
 
 Still open. Ask before the commit named:
 
 | Question | Before commit | Recommended |
 |---|---|---|
-| Encrypt the session value in Redis (AES-GCM, key from env) | 18 | Owner's call; cheap to add |
 
 ## Notes between commits
 
@@ -187,3 +187,9 @@ Still open. Ask before the commit named:
 - `allowInsecureRequests(config)` is called only when the internal URL is `http:`. The BFF now fails to start when Keycloak is down or the issuer differs (fatal error at boot).
 - Tested against the running compose Keycloak: starts and logs the issuer; a wrong `KEYCLOAK_ISSUER_URL` and an unreachable internal URL both stop the start with a clear error. The code exchange itself is untested (commit 20).
 
+### After commit 18 (2026-11-18)
+- `apps/bff/src/repositories/session.repository.ts`: `SessionRepository(redis, crypto)` with `create(session) → id`, `get(id)`, `save(id, session)`, `delete(id)`, `deleteBySid(sid)`, `deleteBySub(sub)`. `get` returns `undefined` for a missing, expired, undecryptable or malformed value (callers answer 401); a Redis error rejects (callers answer 503). `create` always makes a new id; the callback (commit 20) must not reuse the old one. The TTL follows `refreshExpiresAt`.
+- `services/session-crypto.ts`: AES-256-GCM, stored as base64url of `iv | tag | ciphertext`, the Redis key is the AAD, so a value copied to another key does not decrypt. `SESSION_ENCRYPTION_KEY` (32 bytes base64url) is required in config, generated into `.env.local` by `dev.sh`, documented in `.env.local.example`. Changing it logs everybody out.
+- The repository is built in `buildApp` but not yet passed to routes: commit 19 should keep it in a variable and hand it to the routes.
+- One session per Keycloak `sid` (`bff:sid:<sid>` holds one id). `delete` of an unreadable session leaves its two index keys until their TTL.
+- Tested against the local Redis with a script (not committed): roundtrip, value not readable in Redis, TTL 7 d, user set TTL, foreign-key and wrong-key values rejected, `deleteBySid`, `deleteBySub`. Not tested: `dev.sh` generating the key (syntax only), no unit tests in the repo (the BFF has no test setup yet).
