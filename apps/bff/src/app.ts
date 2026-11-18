@@ -43,12 +43,13 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   // Signs the `login` cookie. The key is derived from the session key, so no second secret is needed.
   await app.register(cookie, { secret: deriveCookieSecret(config.SESSION_ENCRYPTION_KEY) });
   await app.register(redisPlugin, { url: config.REDIS_URL });
-  // Built here so a bad key stops the start; the routes of commits 19 to 25 will take it.
-  new SessionRepository(app.redis, new SessionCrypto(config.SESSION_ENCRYPTION_KEY));
+  // Built before the routes, so a bad key stops the start.
+  const sessions = new SessionRepository(app.redis, new SessionCrypto(config.SESSION_ENCRYPTION_KEY));
   await app.register(authRoutes, {
     oidc,
     publicOrigin: config.PUBLIC_ORIGIN,
     production: config.NODE_ENV === "production",
+    sessions,
   });
   await app.register(healthRoutes, { healthService: new HealthService(app.redis) });
 
