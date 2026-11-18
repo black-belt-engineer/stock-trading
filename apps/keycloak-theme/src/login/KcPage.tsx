@@ -5,6 +5,7 @@ import { useI18n } from "./i18n";
 import DefaultPage from "keycloakify/login/DefaultPage";
 import Template from "./Template";
 import Login from "./pages/Login";
+import Register from "./pages/Register";
 const UserProfileFormFields = lazy(
     () => import("keycloakify/login/UserProfileFormFields")
 );
@@ -30,6 +31,18 @@ export default function KcPage(props: { kcContext: KcContext }) {
                                 doUseDefaultCss={false}
                             />
                         );
+                    case "register.ftl":
+                        return (
+                            <Register
+                                kcContext={kcContext}
+                                i18n={i18n}
+                                classes={classes}
+                                Template={Template}
+                                doUseDefaultCss={false}
+                                UserProfileFormFields={UserProfileFormFields}
+                                doMakeUserConfirmPassword={doMakeUserConfirmPassword}
+                            />
+                        );
                     default:
                         return (
                             <DefaultPage
@@ -48,4 +61,11 @@ export default function KcPage(props: { kcContext: KcContext }) {
     );
 }
 
-const classes = {} satisfies { [key in ClassKey]?: string };
+// The stock field components take their look from these (Patternfly is not loaded).
+const classes = {
+    kcFormGroupClass: "st-field",
+    kcLabelClass: "st-label",
+    kcInputClass: "st-input",
+    kcInputErrorMessageClass: "st-error",
+    kcFormPasswordVisibilityButtonClass: "st-reveal"
+} satisfies { [key in ClassKey]?: string };

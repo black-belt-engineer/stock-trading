@@ -32,6 +32,9 @@ const { useI18n, ofTypeI18n } = i18nBuilder
       backToApplication: "Back to Streamtick",
       loginAccountTitle: "Log in",
       noAccount: "No account yet?",
+      registerTitle: "Create an account",
+      haveAccountText: "Already have an account?",
+      passwordHint: "At least 8 characters",
       createOneLink: "Create one",
       doLogIn: "Log in",
       doRegister: "Create account"

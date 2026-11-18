@@ -45,7 +45,7 @@ Status: `todo` or `done`. The K1–K4 commits leave the running app unchanged. K
 | 7 | K2 | `chore: scaffold apps/keycloak-theme with Keycloakify` | Vite, React, Storybook, turbo wiring (the monorepo guide of the current Keycloakify major) | done |
 | 8 | K2 | `feat(theme): add the shared Template and message overrides` | Card, app name, message banner, English copy | done |
 | 9 | K2 | `feat(theme): add the login page` | Email, password, "Log in", link to register | done |
-| 10 | K2 | `feat(theme): add the register page` | Email, name, password, confirm password | todo |
+| 10 | K2 | `feat(theme): add the register page` | Email, name, password, confirm password | done |
 | 11 | K2 | `feat(theme): add the action and broker pages` | `login-update-profile`, `login-update-password`, `delete-account-confirm`, `idp-review-user-profile`, `login-idp-link-confirm` | todo |
 | 12 | K2 | `test(theme): add Storybook error states for every page` | Wrong password, locked out, email taken, password too short, passwords not matching | todo |
 | 13 | K2 | `chore(infra): build the theme JAR, mount it and set loginTheme` | `build-keycloak-theme`, compose mount into `/opt/keycloak/providers`, realm `loginTheme`, `mvn` check in `dev.sh` | todo |
@@ -139,3 +139,10 @@ Still open. Ask before the commit named:
 - `src/login/pages/Login.tsx` is our own page, wired in `KcPage.tsx`. One error for both fields (`role="alert"`, `aria-invalid` and `aria-describedby` on both inputs); the banner is hidden while it shows. No remember-me, reset link or passkeys. Commit 15 adds the Google button through the Template's `socialProvidersNode`; the page does not pass one yet.
 - Shared form classes are in `theme.css` (`st-form`, `st-field`, `st-label`, `st-hint`, `st-input`, `st-error`, `st-button`). Commit 10 reuses them. Copy keys `loginAccountTitle`, `noAccount` and `createOneLink` ("Create one") are in `i18n.ts`; `doRegister` stays "Create account" for the register button.
 - `src/login/pages/Login.stories.tsx` has a Default story (error states: commit 12). Checked in a headless Chrome screenshot of the built Storybook at 360×740: card, focus ring and note look like phase 10. The label there reads "Username or email" because the mock realm lacks `registrationEmailAsUsername`; the real realm shows "Email". Not tested: axe, the page in the compose Keycloak (commit 13).
+
+### After commit 10 (2026-11-18)
+- `pages/Register.tsx` wraps Keycloakify's stock `UserProfileFormFields` (the fields, validation and errors come from the realm's user profile) and styles it through the `classes` map in `KcPage.tsx` (`st-field`, `st-label`, `st-input`, `st-error`). Commits 11 (`login-update-profile`, `idp-review-user-profile`) get the same look from that map. Do not eject the field component unless something needs it.
+- The stock fields show `*` after required labels, so the page also shows the "* Required fields" line. Phase 10 had neither. Left as is (accessible, and every field is required); drop it if the owner wants the phase 10 look exactly.
+- The password hint "At least 8 characters" is in `AfterField`; an effect sets `aria-describedby` on the input, because the stock field cannot. Field errors are `aria-live` spans with `aria-invalid` on the input, not linked by `aria-describedby`. Check with axe in commit 12/13.
+- The password reveal button is hidden (`st-reveal`), as phase 10 had none. Copy keys added: `registerTitle`, `haveAccountText`, `passwordHint`.
+- Not verified: the field order and the "Name" label in the real realm. The Storybook mock profile (username, first and last name) differs from the realm (email, name only); check the compose Keycloak in commit 13, and mock the realm's attributes in commit 12's stories if possible.

@@ -215,3 +215,8 @@
   outline: 2px solid var(--accent-brand);
   outline-offset: 2px;
 }
+
+/* The password reveal button of the stock fields: phase 10 had none. */
+.st-reveal {
+  display: none;
+}
