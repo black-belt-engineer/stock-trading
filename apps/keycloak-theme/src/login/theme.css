@@ -265,3 +265,37 @@
   outline: 2px solid var(--accent-brand);
   outline-offset: 2px;
 }
+
+/* Provider buttons above the form, with an "or" divider below them. */
+.st-social {
+  margin-bottom: 20px;
+}
+
+.st-social-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-social .st-button {
+  text-decoration: none;
+}
+
+.st-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.st-divider::before,
+.st-divider::after {
+  flex: 1;
+  height: 1px;
+  background: var(--border-default);
+  content: "";
+}

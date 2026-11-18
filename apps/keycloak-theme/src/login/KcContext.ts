@@ -9,6 +9,15 @@ export type KcContextExtension = {
     // See: https://docs.keycloakify.dev/faq-and-help/some-values-you-need-are-missing-from-in-kccontext
 };
 
-export type KcContextExtensionPerPage = {};
+// Keycloak puts `social` in every page's attributes, but Keycloakify types it on the
+// login pages only. The register page shows the provider buttons too.
+export type KcContextExtensionPerPage = {
+    "register.ftl": {
+        social?: {
+            displayInfo: boolean;
+            providers?: { loginUrl: string; alias: string; providerId: string; displayName: string }[];
+        };
+    };
+};
 
 export type KcContext = ExtendKcContext<KcContextExtension, KcContextExtensionPerPage>;

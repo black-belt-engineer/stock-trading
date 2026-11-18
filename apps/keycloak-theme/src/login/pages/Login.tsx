@@ -4,6 +4,7 @@ import { kcSanitize } from "keycloakify/lib/kcSanitize";
 import type { PageProps } from "keycloakify/login/pages/PageProps";
 import type { KcContext } from "../KcContext";
 import type { I18n } from "../i18n";
+import SocialProviders, { getSocialProviders } from "../SocialProviders";
 
 /**
  * The login page: email, password, "Log in", and a link to register. No
@@ -36,6 +37,7 @@ export default function Login(props: PageProps<Extract<KcContext, { pageId: "log
         </span>
       }
     >
+      <SocialProviders providers={getSocialProviders(kcContext)} i18n={i18n} />
       {realm.password && (
         <form
           id="kc-form-login"

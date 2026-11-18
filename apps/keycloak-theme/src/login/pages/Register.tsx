@@ -6,6 +6,7 @@ import { getKcClsx } from "keycloakify/login/lib/kcClsx";
 import type { PageProps } from "keycloakify/login/pages/PageProps";
 import type { KcContext } from "../KcContext";
 import type { I18n } from "../i18n";
+import SocialProviders, { getSocialProviders } from "../SocialProviders";
 
 type RegisterProps = PageProps<Extract<KcContext, { pageId: "register.ftl" }>, I18n> & {
   UserProfileFormFields: LazyOrNot<(props: UserProfileFormFieldsProps) => React.ReactElement<any, any>>;
@@ -49,6 +50,7 @@ export default function Register(props: RegisterProps): JSX.Element {
         </span>
       }
     >
+      <SocialProviders providers={getSocialProviders(kcContext)} i18n={i18n} />
       <form id="kc-register-form" className="st-form" action={url.registrationAction} method="post">
         <UserProfileFormFields
           kcContext={kcContext}

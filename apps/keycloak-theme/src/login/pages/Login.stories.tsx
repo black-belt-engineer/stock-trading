@@ -37,3 +37,9 @@ export const LockedOut: Story = {
     />
   )
 };
+
+const google = { loginUrl: "#", alias: "google", providerId: "google", displayName: "Google" };
+
+export const WithGoogle: Story = {
+  render: () => <KcPageStory kcContext={{ social: { displayInfo: true, providers: [google] } }} />
+};

@@ -170,3 +170,8 @@ Still open. Ask before the commit named:
 - Tested against the running Keycloak by hand (Maven is still missing, so `dev.sh` itself did not run; its new block is only syntax-checked): the realm reimports with the provider and mapper; disabled, the auth page has no `broker/google` link; enabled, it has one; disabled again, it is gone. A broker login with fake credentials returned 400. Keycloak starts with empty credentials.
 - Not tested (needs real Google credentials): the consent flow, that `google-name` really overrides the given name Google's own import sets, `trustEmail`, and linking to an existing password account (`login-idp-link-confirm`).
 - Commit 15: the theme reads `kcContext.social.providers`; a disabled provider is not in that list. The button's `href` is the provider's `loginUrl`.
+
+### After commit 15 (2026-11-18)
+- `src/login/SocialProviders.tsx` renders one `st-button st-button-secondary` link per entry of `kcContext.social.providers` ("Continue with {displayName}", `href` = `loginUrl`), then an "or" divider. It sits above the form on `Login` and `Register` (not through the Template's `socialProvidersNode`, which renders below). With no providers (Google disabled) it renders nothing. Copy keys `continueWith`, `orDivider`.
+- Keycloakify types `social` on the login pages only, so `KcContext.ts` declares it for `register.ftl` and `getSocialProviders` reads it with type guards. **Not verified:** that Keycloak really passes `social` to `register.ftl`; if the register page shows no button with Google enabled, that is why. Check in the compose Keycloak once Maven is installed (commit 13 note).
+- Stories `WithGoogle` on login and register. Only `tsc`, `pnpm build` and the Storybook build ran; the stories were not looked at in a browser.

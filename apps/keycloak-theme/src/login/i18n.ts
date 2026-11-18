@@ -36,6 +36,8 @@ const { useI18n, ofTypeI18n } = i18nBuilder
       haveAccountText: "Already have an account?",
       passwordHint: "At least 8 characters",
       createOneLink: "Create one",
+      continueWith: "Continue with {0}",
+      orDivider: "or",
       doLogIn: "Log in",
       doRegister: "Create account"
     }

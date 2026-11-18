@@ -11,7 +11,9 @@ const kcContextExtension: KcContextExtension = {
         ...kcEnvDefaults
     }
 };
-const kcContextExtensionPerPage: KcContextExtensionPerPage = {};
+const kcContextExtensionPerPage: KcContextExtensionPerPage = {
+    "register.ftl": {}
+};
 
 // The real realm logs in with the email and has one "Name" field instead of
 // username, first name and last name, so the mock profile is cut down to match it.
