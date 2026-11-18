@@ -39,3 +39,16 @@ export function bffLoginUrl(returnTo: string, options: { register?: boolean } = 
   const query = params.toString();
   return query === "" ? "/bff/login" : `/bff/login?${query}`;
 }
+
+/** The account actions Keycloak runs for the settings page; the BFF accepts the same three. */
+export type AccountAction = "UPDATE_PROFILE" | "UPDATE_PASSWORD" | "delete_account";
+
+/**
+ * The BFF's login URL for a Keycloak account action: Keycloak shows the action's page
+ * (after a login if there is none), then the BFF's callback refreshes the stored name and
+ * email and sends the browser to `returnTo`.
+ */
+export function bffActionUrl(action: AccountAction, returnTo: string): string {
+  const params = new URLSearchParams({ action, returnTo });
+  return `/bff/login?${params.toString()}`;
+}

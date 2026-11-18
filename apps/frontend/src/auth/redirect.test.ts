@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bffLoginUrl, safeRedirectTarget } from "./redirect";
+import { bffActionUrl, bffLoginUrl, safeRedirectTarget } from "./redirect";
 
 const ORIGIN = "http://localhost:5173";
 const target = (raw: string | null): string => safeRedirectTarget(raw, ORIGIN);
@@ -60,5 +60,12 @@ describe("bffLoginUrl", () => {
   it("round-trips through URLSearchParams", () => {
     const url = new URL(bffLoginUrl("/chart/MSFT?interval=1h#x"), ORIGIN);
     expect(url.searchParams.get("returnTo")).toBe("/chart/MSFT?interval=1h#x");
+  });
+});
+
+describe("bffActionUrl", () => {
+  it("names the action and the page to come back to", () => {
+    expect(bffActionUrl("UPDATE_PROFILE", "/settings")).toBe("/bff/login?action=UPDATE_PROFILE&returnTo=%2Fsettings");
+    expect(bffActionUrl("delete_account", "/")).toBe("/bff/login?action=delete_account&returnTo=%2F");
   });
 });
