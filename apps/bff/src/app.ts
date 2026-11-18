@@ -5,6 +5,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import type { AppConfig } from "./config/index.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { HealthService } from "./services/health.service.js";
+import { discoverOidc } from "./services/oidc.service.js";
 
 export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   const log = createLogger("bff", { level: config.LOG_LEVEL, environment: config.NODE_ENV });
@@ -21,6 +22,14 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
     log.error({ err: error }, "Unhandled error");
     return reply.code(500).send({ error: "Internal Server Error", code: "INTERNAL_ERROR" });
   });
+
+  const oidc = await discoverOidc({
+    issuerUrl: config.KEYCLOAK_ISSUER_URL,
+    internalUrl: config.KEYCLOAK_INTERNAL_URL,
+    clientId: config.KC_BFF_CLIENT_ID,
+    clientSecret: config.KC_BFF_CLIENT_SECRET,
+  });
+  log.info({ issuer: oidc.serverMetadata().issuer }, "OIDC discovery done");
 
   await app.register(redisPlugin, { url: config.REDIS_URL });
   await app.register(healthRoutes, { healthService: new HealthService(app.redis) });

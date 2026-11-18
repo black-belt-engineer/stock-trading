@@ -52,7 +52,7 @@ Status: `todo` or `done`. The K1–K4 commits leave the running app unchanged. K
 | 14 | K3 | `feat(infra): add the google identity provider to the realm` | Secrets from env, the chosen behaviour without credentials, `.env.local.example` docs | done |
 | 15 | K3 | `feat(theme): add "Continue with Google" from kcContext.social.providers` | Login and register pages | done |
 | 16 | K4 | `chore(bff): scaffold apps/bff` | Fastify, config with separate issuer and internal Keycloak URLs, health, logger | done |
-| 17 | K4 | `feat(bff): add OIDC discovery with openid-client` | Discovery against the internal URL | todo |
+| 17 | K4 | `feat(bff): add OIDC discovery with openid-client` | Discovery against the internal URL | done |
 | 18 | K4 | `feat(bff): add the Redis session store` | `bff:session:*`, `bff:user-sessions:<sub>`, `bff:sid:<sid>`, encryption if chosen | todo |
 | 19 | K4 | `feat(bff): add GET /bff/login and the login cookie` | `returnTo` validation copied from `redirect.ts` with its tests, `prompt`, `idp`, `action` allow-list | todo |
 | 20 | K4 | `feat(bff): add GET /bff/callback` | `state` and `nonce`, code exchange, new session id, `error` and cancelled action | todo |
@@ -180,3 +180,10 @@ Still open. Ask before the commit named:
 - `apps/bff` is `@stock-platform/bff`: Fastify, same layout as the other services (`config/`, `routes/`, `services/`, `server.ts`, `app.ts`). Only `/health`, `/health/live` and `/health/ready` (Redis ping) exist. Default port 3007. No cookie, proxy or OIDC packages yet: each later commit adds what it needs (`openid-client` in 17, `@fastify/cookie` in 19, a proxy in 23).
 - Config: `KEYCLOAK_ISSUER_URL` (public, default `http://localhost:5173/realms/stock-platform`, for browser redirects and the `iss` check) and `KEYCLOAK_INTERNAL_URL` (default `http://localhost:8180/realms/stock-platform`, for discovery, token, JWKS, revoke), `KC_BFF_CLIENT_ID` (default `stock-bff`), `KC_BFF_CLIENT_SECRET` (required, already in `.env.local`), `PUBLIC_ORIGIN`, `REDIS_URL`. `dev.sh`, compose and the Vite proxy do not start or route to the BFF yet (K5 wires them).
 - Tested: `pnpm build`; started `dist/index.js` against the local Redis on another port: `/health/ready` returned 200 with `redis: true`, `/health/live` ok, SIGTERM shut it down cleanly. Not tested: Redis down (503 path is the copied auth code).
+
+### After commit 17 (2026-11-18)
+- `apps/bff/src/services/oidc.service.ts` has `discoverOidc(settings)`, called in `buildApp`; it returns an `openid-client` `Configuration` (v6.8.9, `ClientSecretPost` from `KC_BFF_CLIENT_SECRET`). It is only logged for now: commit 18+ should pass it to the routes (decorate the app or pass it as a plugin option).
+- **`client.discovery()` is not used.** Asking the internal URL (8180) returns `issuer` 5173 (`KC_HOSTNAME`), and `discovery()` rejects an issuer that differs from the URL it fetched. So the document is fetched by hand from `KEYCLOAK_INTERNAL_URL`, its `issuer` is checked against `KEYCLOAK_ISSUER_URL`, and `new client.Configuration(metadata, id, secret)` is built from it. Token, JWKS and introspection endpoints in it are on 8180; authorization and end-session endpoints are on 5173 (for browser redirects).
+- `allowInsecureRequests(config)` is called only when the internal URL is `http:`. The BFF now fails to start when Keycloak is down or the issuer differs (fatal error at boot).
+- Tested against the running compose Keycloak: starts and logs the issuer; a wrong `KEYCLOAK_ISSUER_URL` and an unreachable internal URL both stop the start with a clear error. The code exchange itself is untested (commit 20).
+
