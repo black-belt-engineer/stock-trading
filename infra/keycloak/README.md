@@ -20,6 +20,7 @@ That deletes the realm, which also deletes its users and sessions, and reimports
 
 | Setting | Value | Why |
 |---|---|---|
+| `loginTheme` | `stock-platform` | The Keycloakify theme in `apps/keycloak-theme`. `pnpm build-keycloak-theme` writes the JAR to `dist_keycloak/`, compose mounts that folder at `/opt/keycloak/providers`, and Keycloak loads it at start-up. Needs a JDK and Maven; `scripts/dev.sh` checks for both and rebuilds the JAR on every run. |
 | `registrationEmailAsUsername`, `loginWithEmailAllowed` | `true` | The email is the login, as in the hand-written auth. |
 | `rememberMe` | `false` | Sessions last 7 days anyway (the old refresh TTL). |
 | `resetPasswordAllowed`, `verifyEmail` | `false` | There is no SMTP yet (owner decision, 2026-11-18). Turn them on together with Mailpit. |

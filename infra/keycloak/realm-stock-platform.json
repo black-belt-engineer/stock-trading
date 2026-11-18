@@ -2,6 +2,7 @@
   "realm": "stock-platform",
   "displayName": "Streamtick",
   "enabled": true,
+  "loginTheme": "stock-platform",
   "sslRequired": "external",
 
   "registrationAllowed": true,

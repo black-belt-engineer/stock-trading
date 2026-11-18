@@ -54,6 +54,10 @@ if ! command -v pnpm >/dev/null; then
   corepack enable
 fi
 
+# The Keycloak login theme is packaged as a JAR by Keycloakify, which needs a JDK and Maven.
+command -v java >/dev/null || die "java not found (need a JDK >= 17 to build the Keycloak theme)"
+command -v mvn >/dev/null || die "mvn not found (install Maven to build the Keycloak theme, e.g. sudo apt install maven)"
+
 command -v docker >/dev/null || die "docker not found"
 docker info >/dev/null 2>&1 || die "docker daemon not reachable (is it running? are you in the docker group?)"
 docker compose version >/dev/null 2>&1 || die "docker compose v2 plugin not found"
@@ -128,6 +132,15 @@ if ! docker exec stock-postgres psql -U stockuser -d stockdb -tAc \
   log "Creating the keycloak database"
   docker exec stock-postgres psql -U stockuser -d stockdb -qc "CREATE DATABASE keycloak" >/dev/null
 fi
+
+# Keycloak loads the theme JAR from /opt/keycloak/providers at start-up. A changed JAR changes
+# THEME_JAR_SHA, which compose passes to the container, so the container is recreated.
+log "Building the Keycloak theme JAR"
+pnpm build-keycloak-theme
+THEME_JAR="$(ls apps/keycloak-theme/dist_keycloak/*.jar 2>/dev/null | head -n1 || true)"
+[[ -n "$THEME_JAR" ]] || die "the theme build produced no JAR in apps/keycloak-theme/dist_keycloak"
+export THEME_JAR_SHA
+THEME_JAR_SHA="$(sha256sum "$THEME_JAR" | cut -d' ' -f1)"
 
 # Keycloak takes 20-40 s to start; the compose healthcheck polls /health/ready on port 9000.
 log "Starting Keycloak (waiting until it is ready)"

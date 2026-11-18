@@ -103,9 +103,14 @@ services:
       KC_HOSTNAME_ADMIN: http://localhost:8180
       # Health endpoints on the management port 9000 (not published; used by the healthcheck).
       KC_HEALTH_ENABLED: "true"
+      # Only here to recreate the container when the theme JAR changes (scripts/dev.sh sets it).
+      THEME_JAR_SHA: ${THEME_JAR_SHA:-}
     volumes:
       # Realm as code; imported only when the realm does not exist (scripts/dev.sh --reset-realm).
       - ./infra/keycloak:/opt/keycloak/data/import:ro
+      # The login theme JAR from `pnpm build-keycloak-theme`. The folder is mounted, not the
+      # file, so a missing build does not make Docker create a directory in its place.
+      - ./apps/keycloak-theme/dist_keycloak:/opt/keycloak/providers:ro
     extra_hosts:
       # Lets Keycloak reach the BFF on the host for back-channel logout (Linux needs this entry).
       - "host.docker.internal:host-gateway"
