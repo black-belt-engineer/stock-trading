@@ -45,8 +45,17 @@ export async function discoverOidc(settings: OidcSettings): Promise<client.Confi
     );
   }
 
+  // Keycloak lists the revocation endpoint on the public address, but the BFF calls it server to
+  // server, so it goes to the internal one.
+  const internalBase = settings.internalUrl.replace(/\/+$/, "");
+  const revocation = metadata.revocation_endpoint;
+  const reachable: client.ServerMetadata =
+    typeof revocation === "string" && revocation.startsWith(`${settings.issuerUrl}/`)
+      ? { ...metadata, revocation_endpoint: internalBase + revocation.slice(settings.issuerUrl.length) }
+      : metadata;
+
   const config = new client.Configuration(
-    metadata,
+    reachable,
     settings.clientId,
     settings.clientSecret,
   );

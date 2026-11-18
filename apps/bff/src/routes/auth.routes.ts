@@ -14,6 +14,8 @@ import {
   encodeLoginState,
   startLogin,
 } from "../services/login.service.js";
+import { buildLogoutUrl, revokeRefreshToken } from "../services/logout.service.js";
+import { requireCsrfHeader } from "../services/csrf.js";
 import { safeReturnTo } from "../services/return-to.js";
 import { sessionCookieName } from "../services/session-cookie.js";
 import type { TokenRefresher } from "../services/token-refresh.service.js";
@@ -27,7 +29,7 @@ export type AuthRouteDeps = {
   publicOrigin: string;
   production: boolean;
   /** Only what the routes need. */
-  sessions: Pick<SessionRepository, "create" | "delete">;
+  sessions: Pick<SessionRepository, "create" | "delete" | "get">;
   /** Reads a session and refreshes its access token when it is about to expire. */
   tokens: Pick<TokenRefresher, "getSession">;
 };
@@ -146,6 +148,40 @@ const authRoutesImpl: FastifyPluginAsyncTypebox<AuthRouteDeps> = async (fastify,
     }
 
     return { user: { id: session.sub, name: session.name, email: session.email } };
+  });
+
+  // Ends the BFF session, revokes the refresh token, and answers with Keycloak's end-session URL.
+  // The page navigates there, so the SSO session ends too; without it the next login would
+  // succeed silently. The token is revoked on a best effort: the session is deleted first, and a
+  // Keycloak failure is only logged. `endSessionUrl` is null when there was no session to read.
+  fastify.post("/bff/logout", { preHandler: requireCsrfHeader }, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+
+    const id = request.cookies[sessionCookie];
+    if (id === undefined) {
+      return { endSessionUrl: null };
+    }
+
+    let session;
+    try {
+      // Read directly, not refreshed: a logout must not need Keycloak to be up.
+      session = await sessions.get(id);
+      await sessions.delete(id);
+    } catch (error) {
+      request.log.error({ err: error }, "Session store unavailable");
+      return reply.code(503).send({ error: "Sign-out is unavailable, try again", code: "SERVICE_UNAVAILABLE" });
+    }
+
+    reply.clearCookie(sessionCookie, { path: "/", httpOnly: true, sameSite: "strict", secure: production });
+    if (session === undefined) {
+      return { endSessionUrl: null };
+    }
+
+    const failure = await revokeRefreshToken(oidc, session);
+    if (failure) {
+      request.log.warn({ err: failure }, "Refresh token revocation failed");
+    }
+    return { endSessionUrl: buildLogoutUrl(oidc, session, `${publicOrigin}/`) };
   });
 };
 
