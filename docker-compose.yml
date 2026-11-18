@@ -71,6 +71,54 @@ services:
     networks:
       - stock-net
 
+  # Identity provider (roadmap/08-identity.md, K1). Dev mode only: production needs `start`
+  # with an optimised build and TLS behind the reverse proxy (README Q9).
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    container_name: stock-keycloak
+    restart: unless-stopped
+    command: ["start-dev", "--import-realm"]
+    ports:
+      - "8180:8080"
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}
+      # Own database in the shared Postgres container; never stockdb. scripts/dev.sh creates it.
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: stockuser
+      KC_DB_PASSWORD: stockpass
+      # Public URL: the issuer and every redirect point at the app's origin (Vite proxy),
+      # however Keycloak is reached.
+      KC_HOSTNAME: http://localhost:5173
+      # Back-channel URLs (token, certs) follow the request, so the BFF and the services
+      # can call http://localhost:8180 directly while the issuer stays the public URL.
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      # The Vite proxy only forwards /realms and /resources, so the admin console stays on 8180.
+      KC_HOSTNAME_ADMIN: http://localhost:8180
+      # Health endpoints on the management port 9000 (not published; used by the healthcheck).
+      KC_HEALTH_ENABLED: "true"
+    extra_hosts:
+      # Lets Keycloak reach the BFF on the host for back-channel logout (Linux needs this entry).
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - stock-net
+    healthcheck:
+      test: >
+        exec 3<>/dev/tcp/127.0.0.1/9000 &&
+        printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+        grep -q '"UP"' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
 networks:
   stock-net:
     name: stock-net
