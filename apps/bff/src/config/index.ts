@@ -25,8 +25,7 @@ const schema = Type.Object({
   SSE_SERVICE_URL: Type.String({ default: "http://localhost:3003" }),
   /** The app's public origin: the callback and the post-logout redirect are built from it. */
   PUBLIC_ORIGIN: Type.String({ default: "http://localhost:5173" }),
-  /** 3007 until `apps/auth` is deleted (commit 30), then 3005. */
-  PORT: Type.Integer({ minimum: 1, default: 3007 }),
+  PORT: Type.Integer({ minimum: 1, default: 3005 }),
   LOG_LEVEL: Type.String({ default: "info" }),
   NODE_ENV: Type.String({ default: "development" }),
 });

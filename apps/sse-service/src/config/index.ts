@@ -4,9 +4,10 @@ import { parseEnv } from "@stock-platform/env";
 const schema = Type.Object({
   REDIS_URL: Type.String({ minLength: 1 }),
   DATABASE_URL: Type.String({ minLength: 1 }),
-  /** Where the guard fetches the public keys. Default: the auth service; K5 points it at Keycloak's certs URL. */
-  JWKS_URL: Type.String({ default: "http://localhost:3005/.well-known/jwks.json" }),
-  JWT_ISSUER: Type.String({ default: "stock-auth" }),
+  /** Where the guard fetches the public keys: Keycloak's certs URL, on its internal address. */
+  JWKS_URL: Type.String({ default: "http://localhost:8180/realms/stock-platform/protocol/openid-connect/certs" }),
+  /** Keycloak's issuer, the `KC_HOSTNAME` URL (what is in the token's `iss`). */
+  JWT_ISSUER: Type.String({ default: "http://localhost:5173/realms/stock-platform" }),
   JWT_AUDIENCE: Type.String({ default: "stock-platform" }),
   PORT: Type.Integer({ minimum: 1, default: 3003 }),
   LOG_LEVEL: Type.String({ default: "info" }),

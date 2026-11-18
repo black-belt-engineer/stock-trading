@@ -65,7 +65,7 @@ Status: `todo` or `done`. The K1–K4 commits leave the running app unchanged. K
 | 27 | K5 | `feat(frontend): switch authentication to the BFF` | `apiFetch` → `fetch`, `AuthProvider` on `/bff/me`, guard → `/bff/login`, logout through the BFF, Vite proxy and `dev.sh` env, `/login` and `/register` as redirects | done |
 | 28 | K5 | `feat(frontend): use keycloak actions on the settings page` | Buttons for `UPDATE_PROFILE`, `UPDATE_PASSWORD`, `delete_account`; the callback refreshes name and email | done |
 | 29 | K5 | `refactor(frontend): delete the hand-written auth code` | `session.ts`, `authApi.ts`, `credentials.ts`, token parts of `tabSync`, old pages, `AuthCard`, `api/account.ts` | done |
-| 30 | K5 | `chore: delete apps/auth and apps/user` | Internal guard, rate limiters, `JWT_PRIVATE_KEY`, `INTERNAL_API_TOKEN`, `dev.sh` blocks, drop the `users` table | todo |
+| 30 | K5 | `chore: delete apps/auth and apps/user` | Internal guard, rate limiters, `JWT_PRIVATE_KEY`, `INTERNAL_API_TOKEN`, `dev.sh` blocks, drop the `users` table | done |
 | 31 | K5 | `docs: document the /bff routes and add the ADR for Q10–Q13` | `openapi.yaml`, `api-docs.mjs`, ADR, phase 12 notes in `PHASES.md` and its status set to `done`. Then run K5's "Done when" | todo |
 
 K6 (the Kafka event listener) is phase 15, not part of this file.
@@ -275,3 +275,10 @@ Still open. Ask before the commit named:
 ### After commit 29 (2026-11-18)
 - Deleted from the frontend: `auth/session.ts`, `authApi.ts`, `credentials.ts`, `tabSync.ts` (+ test; the whole file, since nothing in it was left but the token parts), `components/AuthCard`, `api/account.ts`, `pages/settings/validation.ts` (+ test). `pages/settings/fields.tsx` keeps only `SettingsSection`; `SettingsField`, `SaveButton`, `SectionMessage` and their helpers went. `pageStyles.ts` lost the unused `inputClass` and `linkClass`.
 - Tested: `pnpm build` and the frontend Vitest suites (3 files, 38 tests; the removed tests were the deleted modules'). A grep finds no remaining reference. Not run in a browser: nothing but unused code was removed, and no remaining file imports the deleted ones (the build would fail otherwise).
+
+### After commit 30 (2026-11-18)
+- `apps/auth` and `apps/user` are deleted, with `createInternalGuard` / `INTERNAL_TOKEN_HEADER` in `packages/auth-guard` (only `createJwtGuard` is left). The rate limiters, `JWT_PRIVATE_KEY`, `INTERNAL_API_TOKEN`, `USER_SERVICE_URL`, `AUTH_SERVICE_URL`, `TRUST_PROXY`, the token TTL variables and their `dev.sh` blocks and `.env.local.example` sections went with them. `pnpm-lock.yaml` is updated.
+- The BFF is on port **3005** now (config default, Vite proxy default, the realm's back-channel URL, `infra/keycloak/README.md`, the `dev.sh` banner). The SSE service defaults `JWKS_URL` and `JWT_ISSUER` to Keycloak's values. The `users` table: `dev.sh` runs `DROP TABLE IF EXISTS users` on every start (it was also dropped by hand here); nothing else used it.
+- **The running Keycloak still has the old back-channel URL (3007).** Run `scripts/dev.sh --reset-realm` (or change the client's `backchannel.logout.url` in the admin console), or logout from Keycloak will not reach the BFF. An old `.env.local` keeps its unused `JWT_PRIVATE_KEY`, `INTERNAL_API_TOKEN` etc.; they are harmless and can be deleted by hand.
+- Left for commit 31: `docs/openapi.yaml` and `scripts/api-docs.mjs` still list the auth and user services (ports 3004/3005, `AUTH_URL`); `roadmap/` text about them is history.
+- Tested: `pnpm install` and `pnpm build` (16 tasks pass); `bash -n scripts/dev.sh`; the built BFF with `.env.local` on 3005: `/health/ready` 200, `/bff/me` 401, `/bff/login` 302 to Keycloak. **Not tested:** `scripts/dev.sh` end to end (it stops at the Maven check), a login through the browser after the port change, and the back-channel logout on 3005 (needs the realm reset).

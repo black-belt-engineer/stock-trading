@@ -133,7 +133,7 @@
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "http://localhost:5173/*",
-        "backchannel.logout.url": "http://host.docker.internal:3007/bff/backchannel-logout",
+        "backchannel.logout.url": "http://host.docker.internal:3005/bff/backchannel-logout",
         "backchannel.logout.session.required": "true",
         "backchannel.logout.revoke.offline.tokens": "false",
         "oauth2.device.authorization.grant.enabled": "false",

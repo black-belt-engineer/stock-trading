@@ -32,8 +32,8 @@ function preloadFonts(): Plugin {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   // Everything the app calls goes through the BFF, which holds the session and adds the
-  // bearer token; nothing reaches the SSE service directly. 3007 until apps/auth is deleted.
-  const bffTarget = env.VITE_BFF_URL ?? "http://localhost:3007";
+  // bearer token; nothing reaches the SSE service directly.
+  const bffTarget = env.VITE_BFF_URL ?? "http://localhost:3005";
   // Keycloak's pages, its form posts and its cookies stay on the app's origin (K1).
   // changeOrigin stays off: with KC_HOSTNAME_BACKCHANNEL_DYNAMIC Keycloak builds the
   // token and JWKS URLs from the Host header, so the browser keeps seeing localhost:5173.

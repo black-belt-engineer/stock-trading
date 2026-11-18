@@ -3,12 +3,12 @@
 The market API: realtime quotes over HTTP Server-Sent Events (from Redis) and
 tick history (from the Postgres `stock_ticks` table the consumer writes).
 Needs `REDIS_URL` and `DATABASE_URL`, and `JWKS_URL`, `JWT_ISSUER` and
-`JWT_AUDIENCE` for the JWT guard (defaults match `apps/auth`).
+`JWT_AUDIENCE` for the JWT guard (defaults match the local Keycloak).
 
 ## Authentication
 
 Every endpoint except `/health/*` needs `Authorization: Bearer <access token>`.
-The guard (`packages/auth-guard`) verifies the token against the auth service's
+The guard (`packages/auth-guard`) verifies the token against Keycloak's
 JWKS, with 30 seconds of clock tolerance. A missing, invalid or expired token is
 `401`; `503 JWKS_UNAVAILABLE` means the keys could not be fetched, so a client
 should retry with backoff rather than log out.

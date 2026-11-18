@@ -46,7 +46,7 @@ The BFF (`apps/bff`, K4) is the only client. The browser never sees a token.
 | `redirectUris` | `http://localhost:5173/bff/callback` | Exact, no wildcard. |
 | `post.logout.redirect.uris` | `http://localhost:5173/*` | Any page of the app after logout. |
 | `frontchannelLogout` | `false` | Back-channel logout only. |
-| `backchannel.logout.url` | `http://host.docker.internal:3007/bff/backchannel-logout`, session required | Keycloak calls the BFF on the host when a session ends (admin console, another client, expiry). The logout token carries `sid`. **Port 3007 is temporary** (owner decision, 2026-11-18): 3005 is still `apps/auth` until K5, then the BFF moves to 3005. Once the BFF runs in compose, the host becomes `bff`. |
+| `backchannel.logout.url` | `http://host.docker.internal:3005/bff/backchannel-logout`, session required | Keycloak calls the BFF on the host when a session ends (admin console, another client, expiry). The logout token carries `sid`. The BFF has port 3005 since `apps/auth` was deleted. Once the BFF runs in compose, the host becomes `bff`. |
 | Audience mapper | custom audience `stock-platform`, access token only | The services keep `JWT_AUDIENCE=stock-platform`. The access token's `aud` is `["stock-platform", "account"]`; the ID token's stays `stock-bff`. |
 
 The user profile is a JSON string inside `components`, because Keycloak stores it that way. To change it, edit it in the admin console (Realm settings → User profile → JSON editor) to validate it, then copy the result back here as a single escaped string.
