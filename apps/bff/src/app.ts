@@ -11,6 +11,7 @@ import { healthRoutes } from "./routes/health.routes.js";
 import { HealthService } from "./services/health.service.js";
 import { discoverOidc } from "./services/oidc.service.js";
 import { SessionCrypto } from "./services/session-crypto.js";
+import { TokenRefresher } from "./services/token-refresh.service.js";
 
 function deriveCookieSecret(sessionKey: string): Buffer {
   return Buffer.from(hkdfSync("sha256", Buffer.from(sessionKey, "base64url"), "", "bff cookie signing", 32));
@@ -50,6 +51,7 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
     publicOrigin: config.PUBLIC_ORIGIN,
     production: config.NODE_ENV === "production",
     sessions,
+    tokens: new TokenRefresher(oidc, sessions),
   });
   await app.register(healthRoutes, { healthService: new HealthService(app.redis) });
 

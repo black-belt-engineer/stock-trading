@@ -16,6 +16,7 @@ import {
 } from "../services/login.service.js";
 import { safeReturnTo } from "../services/return-to.js";
 import { sessionCookieName } from "../services/session-cookie.js";
+import type { TokenRefresher } from "../services/token-refresh.service.js";
 
 export const LOGIN_COOKIE = "login";
 const LOGIN_COOKIE_MAX_AGE_S = 10 * 60;
@@ -26,7 +27,9 @@ export type AuthRouteDeps = {
   publicOrigin: string;
   production: boolean;
   /** Only what the routes need. */
-  sessions: Pick<SessionRepository, "create" | "delete" | "get">;
+  sessions: Pick<SessionRepository, "create" | "delete">;
+  /** Reads a session and refreshes its access token when it is about to expire. */
+  tokens: Pick<TokenRefresher, "getSession">;
 };
 
 const LoginQuery = Type.Object({
@@ -42,7 +45,7 @@ const CallbackQuery = Type.Object({
 });
 
 const authRoutesImpl: FastifyPluginAsyncTypebox<AuthRouteDeps> = async (fastify, opts) => {
-  const { oidc, publicOrigin, production, sessions } = opts;
+  const { oidc, publicOrigin, production, sessions, tokens } = opts;
   const sessionCookie = sessionCookieName(production);
   const redirectUri = `${publicOrigin}/bff/callback`;
 
@@ -121,8 +124,8 @@ const authRoutesImpl: FastifyPluginAsyncTypebox<AuthRouteDeps> = async (fastify,
   });
 
   // The frontend's startup check. Only the user's identity is returned, never a token.
-  // Redis is the only dependency for now, so a Redis error is the 503. Keycloak enters
-  // when the token refresh arrives (commit 22).
+  // A session whose access token is about to expire is refreshed here. A Redis error, or Keycloak
+  // being down when the token can no longer be used, is the 503; a refused refresh is a 401.
   fastify.get("/bff/me", async (request, reply) => {
     reply.header("Cache-Control", "no-store");
 
@@ -133,9 +136,9 @@ const authRoutesImpl: FastifyPluginAsyncTypebox<AuthRouteDeps> = async (fastify,
 
     let session;
     try {
-      session = await sessions.get(id);
+      session = await tokens.getSession(id);
     } catch (error) {
-      request.log.error({ err: error }, "Session store unavailable");
+      request.log.error({ err: error }, "Session or identity provider unavailable");
       return reply.code(503).send({ error: "Sign-in is unavailable, try again", code: "SERVICE_UNAVAILABLE" });
     }
     if (session === undefined) {

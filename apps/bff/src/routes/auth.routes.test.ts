@@ -29,19 +29,21 @@ function fakeSessions() {
       return "id";
     },
     delete: async () => undefined,
-    get: async (id) => {
+  };
+  const tokens = {
+    getSession: async (id: string) => {
       if (state.fail) throw new Error("redis down");
       return state.stored.get(id);
     },
   };
-  return { repo, state };
+  return { repo, tokens, state };
 }
 
 async function build(): Promise<{ app: FastifyInstance; sessions: ReturnType<typeof fakeSessions> }> {
   const app = Fastify();
   await app.register(cookie, { secret: SECRET });
   const sessions = fakeSessions();
-  await app.register(authRoutes, { oidc, publicOrigin: ORIGIN, production: false, sessions: sessions.repo });
+  await app.register(authRoutes, { oidc, publicOrigin: ORIGIN, production: false, sessions: sessions.repo, tokens: sessions.tokens });
   return { app, sessions };
 }
 
