@@ -82,6 +82,13 @@ if (( ${#missing[@]} )); then
   } >> "$ENV_FILE"
 fi
 
+# The SSE service verifies Keycloak's tokens now (K5). A .env.local from before still points it at
+# apps/auth: move the two values over. Custom values are left alone.
+sed -i -E \
+  -e 's|^([[:space:]]*JWT_ISSUER=)stock-auth[[:space:]]*$|\1http://localhost:5173/realms/stock-platform|' \
+  -e 's|^([[:space:]]*JWKS_URL=)http://localhost:3005/\.well-known/jwks\.json[[:space:]]*$|\1http://localhost:8180/realms/stock-platform/protocol/openid-connect/certs|' \
+  "$ENV_FILE"
+
 if ! grep -qE '^[[:space:]]*JWT_PRIVATE_KEY=' "$ENV_FILE"; then
   log "Generating JWT_PRIVATE_KEY for apps/auth"
   {
@@ -213,7 +220,8 @@ cat <<'EOF'
   consumer     http://localhost:3002/health
   sse-service  http://localhost:3003/health
   user         http://localhost:3004/health
-  auth         http://localhost:3005/health
+  auth         http://localhost:3005/health  (unused: the app signs in through Keycloak and the BFF)
+  bff          http://localhost:3007/health
   frontend     http://localhost:5173
   keycloak     http://localhost:8180/admin  (admin console; bootstrap admin from .env.local)
 

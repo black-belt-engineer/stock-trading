@@ -31,7 +31,9 @@ function preloadFonts(): Plugin {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const target = env.VITE_SSE_URL ?? "http://localhost:3003";
+  // Everything the app calls goes through the BFF, which holds the session and adds the
+  // bearer token; nothing reaches the SSE service directly. 3007 until apps/auth is deleted.
+  const bffTarget = env.VITE_BFF_URL ?? "http://localhost:3007";
   // Keycloak's pages, its form posts and its cookies stay on the app's origin (K1).
   // changeOrigin stays off: with KC_HOSTNAME_BACKCHANNEL_DYNAMIC Keycloak builds the
   // token and JWKS URLs from the Host header, so the browser keeps seeing localhost:5173.
@@ -44,11 +46,12 @@ export default defineConfig(({ mode }) => {
     plugins: [react(), tailwindcss(), preloadFonts()],
     server: {
       proxy: {
+        "/bff": { target: bffTarget, changeOrigin: true },
         "/stream": {
-          target,
+          target: bffTarget,
           changeOrigin: true,
           // The dev proxy keeps the browser's side of a stream open when the
-          // SSE service goes away, so the client would only notice through its
+          // BFF goes away, so the client would only notice through its
           // silence watchdog. Close it as soon as the upstream response closes.
           configure: (proxy) => {
             proxy.on("proxyRes", (proxyRes, _req, res) => {
@@ -58,23 +61,7 @@ export default defineConfig(({ mode }) => {
             });
           },
         },
-        "/quotes": {
-          target,
-          changeOrigin: true,
-        },
-        // Same origin as the app, so the refresh cookie (Path=/auth, A3) is first-party.
-        // `xfwd` adds X-Forwarded-For, which the services trust from loopback (TRUST_PROXY)
-        // to rate-limit by the browser's IP rather than the proxy's.
-        "/auth": {
-          target: env.VITE_AUTH_URL ?? "http://localhost:3005",
-          changeOrigin: true,
-          xfwd: true,
-        },
-        "/users": {
-          target: env.VITE_USER_URL ?? "http://localhost:3004",
-          changeOrigin: true,
-          xfwd: true,
-        },
+        "/quotes": { target: bffTarget, changeOrigin: true },
         "/realms": keycloak,
         "/resources": keycloak,
       },

@@ -1,11 +1,11 @@
-/** The query parameter that carries the page to return to after login or registration. */
+/** The query parameter that carries the page to return to on the old `/login` and `/register` links. */
 export const NEXT_PARAM = "next";
 
 const AUTH_PATHS = new Set(["/login", "/register"]);
 
 /**
  * The validated place to go after login or registration: a path on this origin,
- * or `/` for anything else. Guards against open redirects (A3 edge case):
+ * or `/` for anything else. Guards against open redirects:
  * `//evil.com` and `/\evil.com` are protocol-relative URLs to another host,
  * `https://…` and `javascript:` are not paths at all. The login and register
  * pages themselves are not targets, so the redirect cannot loop.
@@ -28,7 +28,14 @@ export function safeRedirectTarget(raw: string | null, origin: string): string {
   return url.pathname + url.search + url.hash;
 }
 
-/** The login (or register) URL that returns to `target` afterwards; no parameter for `/`. */
-export function withNext(page: "/login" | "/register", target: string): string {
-  return target === "/" ? page : `${page}?${NEXT_PARAM}=${encodeURIComponent(target)}`;
+/**
+ * The BFF's login URL: `/bff/login`, with the page to return to afterwards (a path; the
+ * BFF validates it again) and `prompt=create` for registration. No `returnTo` for `/`.
+ */
+export function bffLoginUrl(returnTo: string, options: { register?: boolean } = {}): string {
+  const params = new URLSearchParams();
+  if (returnTo !== "/") params.set("returnTo", returnTo);
+  if (options.register) params.set("prompt", "create");
+  const query = params.toString();
+  return query === "" ? "/bff/login" : `/bff/login?${query}`;
 }

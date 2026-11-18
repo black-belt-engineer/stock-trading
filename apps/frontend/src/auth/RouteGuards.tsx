@@ -1,16 +1,29 @@
+import { useEffect } from "react";
 import type { JSX } from "react";
 import { Navigate, Outlet, useLocation, useSearchParams } from "react-router";
 import { Splash } from "../components/Splash";
 import { StreamProvider } from "../stream/StreamProvider";
 import { useAuth } from "./AuthProvider";
-import { NEXT_PARAM, safeRedirectTarget, withNext } from "./redirect";
+import { bffLoginUrl, NEXT_PARAM, safeRedirectTarget } from "./redirect";
 
 /**
- * Every route but login and register (A3 step 7). Without a session it sends the
- * user to login with the requested URL kept, except after a chosen logout.
+ * Leaves the SPA for the BFF's login, which redirects to Keycloak. A full navigation, not a
+ * router one: `/bff/login` is a server route. `replace`, so Back does not return to a
+ * page that would send the user straight out again.
+ */
+function LoginRedirect({ returnTo, register = false }: { returnTo: string; register?: boolean }): JSX.Element {
+  useEffect(() => {
+    window.location.replace(bffLoginUrl(returnTo, { register }));
+  }, [returnTo, register]);
+  return <Splash />;
+}
+
+/**
+ * Every route but `/login` and `/register`. Without a session it sends the user to the
+ * BFF's login with the requested URL kept.
  *
  * The stream provider lives here, inside the guard: nothing fetches or streams
- * without a session, logging out unmounts it (which closes the stream), and
+ * without a session, a session that ends unmounts it (which closes the stream), and
  * moving between the shell's pages keeps the one connection open.
  */
 export function RequireAuth(): JSX.Element {
@@ -24,21 +37,21 @@ export function RequireAuth(): JSX.Element {
       </StreamProvider>
     );
   }
-  if (state.status === "anonymous") {
-    const target = state.reason === "logout" ? "/" : pathname + search + hash;
-    return <Navigate to={withNext("/login", target)} replace />;
-  }
+  if (state.status === "anonymous") return <LoginRedirect returnTo={pathname + search + hash} />;
   return <Splash unavailable={state.status === "unavailable"} onRetry={retry} />;
 }
 
-/** Login and register: with a session, go on to the validated requested page, or `/`. */
-export function PublicOnly(): JSX.Element {
+/**
+ * `/login` and `/register` only redirect, so old links and bookmarks still work: to the
+ * BFF's login (or registration), keeping the old `?next=` target. With a session, go on
+ * to that target instead.
+ */
+export function AuthEntry({ register = false }: { register?: boolean }): JSX.Element {
   const { state, retry } = useAuth();
   const [params] = useSearchParams();
+  const target = safeRedirectTarget(params.get(NEXT_PARAM), window.location.origin);
 
-  if (state.status === "authenticated") {
-    return <Navigate to={safeRedirectTarget(params.get(NEXT_PARAM), window.location.origin)} replace />;
-  }
-  if (state.status === "anonymous") return <Outlet />;
+  if (state.status === "authenticated") return <Navigate to={target} replace />;
+  if (state.status === "anonymous") return <LoginRedirect returnTo={target} register={register} />;
   return <Splash unavailable={state.status === "unavailable"} onRetry={retry} />;
 }

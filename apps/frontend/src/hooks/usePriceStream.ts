@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { apiFetch, LoggedOutError, session } from "../api";
+import { apiFetch, LoggedOutError } from "../api";
 import { createEventStreamParser, type StreamEvent } from "../stream/eventStream";
 import type { FeedEvent, LiveQuote } from "../types";
 import { finiteOrNull, isRecord, parseDayValues, parseTickDirection } from "../utils/guards";
@@ -46,15 +46,17 @@ function parseQuote(raw: string): LiveQuote | null {
 }
 
 /**
- * The price stream, read with `fetch` so it can send the access token
- * (README Q1; `EventSource` cannot set headers).
+ * The price stream, read with `fetch` through the BFF, which adds the access token
+ * to the upstream request (the page holds none).
  *
  * How a connection ends decides what happens next:
- * - `401` that a refresh cannot fix (logged out): stop, no retry.
- * - `503` (the guard cannot fetch its keys), a network error, or a body that
+ * - `401` (the BFF has no session, or Keycloak refused the renewal): logged out,
+ *   stop, no retry.
+ * - `502` or `503` (the BFF or Keycloak is down), a network error, or a body that
  *   ends without explanation: a dropped connection, retried with backoff.
- * - `event: session-expired` before the end: the token ran out. Renew it and
- *   reconnect at once, with no backoff and no status change.
+ * - `event: session-expired` before the end: the access token ran out. The BFF
+ *   renews it on the next request, so reconnect at once, with no backoff and no
+ *   status change.
  *
  * Opens no connection while `symbols` is null or empty.
  */
@@ -121,7 +123,7 @@ export function usePriceStream(symbols: string[] | null): {
       }, delay);
     };
 
-    /** No session: stop for good, without backoff. The login flow (A3) takes over from here. */
+    /** No session: stop for good, without backoff. The route guard sends the user to the login. */
     const stopLoggedOut = (): void => {
       loggedOut = true;
       clearTimer();
@@ -161,21 +163,17 @@ export function usePriceStream(symbols: string[] | null): {
     };
 
     /**
-     * One connection: open it through the API client (which refreshes once on
-     * `401`), then read the body until it ends. Only the current connection may
+     * One connection: open it through the API client, then read the body until it ends. Only the current connection may
      * change the status or schedule a reconnect.
      */
     const run = async (controller: AbortController): Promise<void> => {
       const isCurrent = (): boolean => mounted && connectionRef.current === controller;
       let sessionExpired = false;
-      // The token this connection was opened with, once the API client has settled on one.
-      let tokenUsed: string | null = null;
       try {
         const response = await apiFetch(`/stream?symbols=${encodeURIComponent(query)}`, {
           signal: controller.signal,
           headers: { Accept: "text/event-stream" },
         });
-        tokenUsed = session.getAccessToken();
         if (!isCurrent()) return;
         if (!response.ok || !response.body) {
           scheduleReconnect();
@@ -209,7 +207,7 @@ export function usePriceStream(symbols: string[] | null): {
           stopLoggedOut();
           return;
         }
-        // A network error, a dropped connection or AuthUnavailableError.
+        // A network error or a dropped connection.
         scheduleReconnect();
         return;
       }
@@ -220,19 +218,10 @@ export function usePriceStream(symbols: string[] | null): {
         scheduleReconnect();
         return;
       }
-      // Renew the token (unless someone already has) and reconnect at once,
-      // keeping the status, so no "Connection lost" banner appears.
+      // The BFF renews the token on this request (a refused renewal answers 401, which
+      // `run` reads as a logout). Reconnect at once, keeping the status, so no
+      // "Connection lost" banner appears.
       openRef.current = false;
-      const renewed = await session.renew(tokenUsed);
-      if (!isCurrent()) return;
-      if (renewed === "logged-out") {
-        stopLoggedOut();
-        return;
-      }
-      if (renewed === "unavailable") {
-        scheduleReconnect();
-        return;
-      }
       connect({ keepStatus: true });
     };
 
@@ -268,9 +257,6 @@ export function usePriceStream(symbols: string[] | null): {
     };
     const watchdog = window.setInterval(checkSilence, 1000);
 
-    // A logout ends the stream at once instead of at the token's expiry.
-    const offLoggedOut = session.onLoggedOut(stopLoggedOut);
-
     window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisibility);
     connect();
@@ -278,7 +264,6 @@ export function usePriceStream(symbols: string[] | null): {
     return () => {
       mounted = false;
       retryRef.current = () => {};
-      offLoggedOut();
       window.clearInterval(watchdog);
       window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisibility);

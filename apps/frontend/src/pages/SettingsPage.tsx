@@ -1,13 +1,12 @@
 import type { JSX } from "react";
 import { useAuth } from "../auth/AuthProvider";
-import { DangerZone } from "./settings/DangerZone";
-import { PasswordSection } from "./settings/PasswordSection";
-import { ProfileSection } from "./settings/ProfileSection";
+import { SettingsSection } from "./settings/fields";
 
 /**
- * `/settings` (A4): profile, password and account deletion. A Preferences section
- * comes with its first setting (D3's default view, D4's theme), not before
- * (owner decision).
+ * `/settings`. Keycloak owns the account now: until the buttons for its profile,
+ * password and delete-account actions arrive (K5, next commit), the page only shows
+ * who is signed in. A Preferences section comes with its first setting (D3's default
+ * view, D4's theme), not before (owner decision).
  */
 export function SettingsPage(): JSX.Element | null {
   const { state } = useAuth();
@@ -18,9 +17,14 @@ export function SettingsPage(): JSX.Element | null {
     <>
       <h1 className="text-[18px] font-semibold text-primary">Settings</h1>
       <div className="grid w-full max-w-[560px] gap-5">
-        <ProfileSection user={user} />
-        <PasswordSection user={user} />
-        <DangerZone user={user} />
+        <SettingsSection id="settings-account" title="Account">
+          <dl className="grid gap-1 text-secondary">
+            <dt className="text-[13px]">Name</dt>
+            <dd className="text-primary">{user.name}</dd>
+            <dt className="mt-2 text-[13px]">Email</dt>
+            <dd className="font-mono wrap-anywhere text-primary">{user.email}</dd>
+          </dl>
+        </SettingsSection>
       </div>
     </>
   );

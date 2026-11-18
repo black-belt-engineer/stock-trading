@@ -6,14 +6,14 @@ import { buttonClass } from "../pageStyles";
 const SPINNER_DELAY_MS = 300;
 
 type Props = {
-  /** The startup refresh could not reach the auth service. */
+  /** `GET /bff/me` could not tell whether there is a session. */
   unavailable?: boolean;
   onRetry?: () => void;
 };
 
 /**
- * Shown while the startup refresh decides whether there is a session, so a reload
- * never flashes the login page. Under reduced motion the spinner is a still ring.
+ * Shown while `GET /bff/me` decides whether there is a session (and while the browser
+ * leaves for the login), so a reload never flashes a page that is about to go. Under reduced motion the spinner is a still ring.
  */
 export function Splash({ unavailable = false, onRetry }: Props): JSX.Element {
   const [showSpinner, setShowSpinner] = useState(false);

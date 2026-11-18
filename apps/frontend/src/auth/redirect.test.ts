@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { safeRedirectTarget, withNext } from "./redirect";
+import { bffLoginUrl, safeRedirectTarget } from "./redirect";
 
 const ORIGIN = "http://localhost:5173";
 const target = (raw: string | null): string => safeRedirectTarget(raw, ORIGIN);
@@ -46,14 +46,19 @@ describe("safeRedirectTarget", () => {
   });
 });
 
-describe("withNext", () => {
-  it("adds the encoded target, or nothing for /", () => {
-    expect(withNext("/login", "/")).toBe("/login");
-    expect(withNext("/login", "/history/AAPL?from=1&to=2")).toBe("/login?next=%2Fhistory%2FAAPL%3Ffrom%3D1%26to%3D2");
+describe("bffLoginUrl", () => {
+  it("adds the encoded returnTo, or nothing for /", () => {
+    expect(bffLoginUrl("/")).toBe("/bff/login");
+    expect(bffLoginUrl("/history/AAPL?from=1&to=2")).toBe("/bff/login?returnTo=%2Fhistory%2FAAPL%3Ffrom%3D1%26to%3D2");
   });
 
-  it("round-trips through URLSearchParams and the validation", () => {
-    const url = new URL(withNext("/login", "/chart/MSFT?interval=1h#x"), ORIGIN);
-    expect(target(url.searchParams.get("next"))).toBe("/chart/MSFT?interval=1h#x");
+  it("asks for registration with prompt=create", () => {
+    expect(bffLoginUrl("/", { register: true })).toBe("/bff/login?prompt=create");
+    expect(bffLoginUrl("/chart/MSFT", { register: true })).toBe("/bff/login?returnTo=%2Fchart%2FMSFT&prompt=create");
+  });
+
+  it("round-trips through URLSearchParams", () => {
+    const url = new URL(bffLoginUrl("/chart/MSFT?interval=1h#x"), ORIGIN);
+    expect(url.searchParams.get("returnTo")).toBe("/chart/MSFT?interval=1h#x");
   });
 });

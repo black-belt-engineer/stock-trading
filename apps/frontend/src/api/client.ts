@@ -1,6 +1,4 @@
-import type { Session } from "../auth/session";
-
-/** The session is gone: the refresh was refused, or a fresh token was still refused. */
+/** The server answered `401`: there is no session (it ended, or never was one). */
 export class LoggedOutError extends Error {
   constructor() {
     super("Logged out");
@@ -8,47 +6,27 @@ export class LoggedOutError extends Error {
   }
 }
 
-/** A `401` needed a refresh, but the auth service could not be reached. Retry later; do not log out. */
-export class AuthUnavailableError extends Error {
-  constructor() {
-    super("Authentication service unavailable");
-    this.name = "AuthUnavailableError";
-  }
-}
-
 export type ApiFetch = (path: string, init?: RequestInit) => Promise<Response>;
 
 /**
- * The one way the app calls its APIs. Attaches the access token. On `401` it
- * renews the token (single-flight, see `Session.renew`) and retries once; a second
- * `401` logs out. Every other status, `403` and `503` included, is returned to the
- * caller as it is: a wrong current password or the guard failing to fetch its keys
- * is never a reason to refresh or log out.
+ * The one way the app calls its APIs, through the BFF. The browser holds no token:
+ * the `httpOnly` session cookie travels with the request (`same-origin`), and the BFF
+ * adds the bearer token and renews it. `X-Requested-With: fetch` is on every call; the
+ * BFF requires it on the ones that change data, and a cross-site form cannot set it.
  *
- * Throws `LoggedOutError` or `AuthUnavailableError` as above, and whatever `fetch`
- * throws (a network error, an abort).
+ * A `401` means logged out: `onLoggedOut` is told and `LoggedOutError` is thrown. Every
+ * other status, `403`, `502` and `503` included, is returned to the caller as it is.
+ * Whatever `fetch` throws (a network error, an abort) is passed on.
  */
-export function createApiClient(session: Session, fetchImpl: typeof fetch = (...args) => fetch(...args)): ApiFetch {
-  const send = (path: string, init: RequestInit | undefined, token: string | null): Promise<Response> => {
-    const headers = new Headers(init?.headers);
-    if (token !== null) headers.set("Authorization", `Bearer ${token}`);
-    return fetchImpl(path, { ...init, headers });
-  };
-
+export function createApiClient(onLoggedOut: () => void, fetchImpl: typeof fetch = (...args) => fetch(...args)): ApiFetch {
   return async (path, init) => {
-    const token = session.getAccessToken();
-    const first = await send(path, init, token);
-    if (first.status !== 401) return first;
-
-    const renewed = await session.renew(token);
-    if (renewed === "logged-out") throw new LoggedOutError();
-    if (renewed === "unavailable") throw new AuthUnavailableError();
-
-    const second = await send(path, init, session.getAccessToken());
-    if (second.status === 401) {
-      session.logOut();
+    const headers = new Headers(init?.headers);
+    headers.set("X-Requested-With", "fetch");
+    const response = await fetchImpl(path, { ...init, headers, credentials: "same-origin" });
+    if (response.status === 401) {
+      onLoggedOut();
       throw new LoggedOutError();
     }
-    return second;
+    return response;
   };
 }

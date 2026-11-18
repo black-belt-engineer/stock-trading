@@ -1,108 +1,82 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { JSX, ReactNode } from "react";
-import { session } from "../api";
-import { logIn, logOutOnServer, register, type AuthResult } from "./authApi";
-import type { AuthUser } from "./session";
+import { onSessionEnded } from "../api";
+import { fetchMe, logOutOnServer } from "./bffApi";
+import { listenForLogout, postLogout } from "./logoutChannel";
+import type { AuthUser } from "./user";
 
 export type AuthState =
-  /** The startup refresh has not answered yet. */
+  /** `GET /bff/me` has not answered yet. */
   | { status: "checking" }
-  /** The startup refresh could not reach the auth service: whether there is a session is unknown. */
+  /** `GET /bff/me` could not tell: the BFF, Redis or Keycloak is down. Whether there is a session is unknown. */
   | { status: "unavailable" }
   | { status: "authenticated"; user: AuthUser }
-  /**
-   * No session. `logout` when the user (in this tab or another) chose to log out;
-   * `ended` when there never was one or it ran out, so the requested page is kept.
-   */
-  | { status: "anonymous"; reason: "logout" | "ended" };
+  /** No session: there never was one, or it ended. The route guard sends the user to the BFF's login. */
+  | { status: "anonymous" };
 
 type AuthValue = {
   state: AuthState;
-  logIn: (email: string, password: string) => Promise<AuthResult>;
-  register: (email: string, name: string, password: string) => Promise<AuthResult>;
+  /** Ends the session in the BFF, then goes to Keycloak's end-session URL. The other tabs follow. */
   logOut: () => Promise<void>;
-  /** Shows changed details (a new name from `PATCH /users/:id`) here and in the other tabs. */
-  updateUser: (user: AuthUser) => void;
-  /** Repeats the startup refresh after it found the auth service unavailable. */
+  /** Repeats the startup check after it found the BFF unavailable. */
   retry: () => void;
 };
 
 const AuthContext = createContext<AuthValue | null>(null);
 
 /**
- * The auth context (A3 step 2). It holds no token itself: the session in
- * `api/index.ts` keeps the access token in memory, and this provider mirrors its
- * user and its logouts into React state.
+ * The auth context. It holds no token and no cookie: the browser has only the BFF's
+ * `httpOnly` session cookie, so the only way to know who is signed in is to ask
+ * `GET /bff/me`. Until that answers the state is `checking`, so the login redirect
+ * never flashes on a reload.
  *
- * On start it refreshes once, through the cookie: success means logged in, a
- * refusal means logged out. Until that answers, the state is `checking`, so the
- * login page never flashes on a reload.
+ * A `401` on any later API call (the session ended, or Keycloak refused a renewal)
+ * turns the state to `anonymous`.
  */
 export function AuthProvider({ children }: { children: ReactNode }): JSX.Element {
-  const [state, setState] = useState<AuthState>(() => {
-    const user = session.getUser();
-    return user ? { status: "authenticated", user } : { status: "checking" };
-  });
+  const [state, setState] = useState<AuthState>({ status: "checking" });
   const [attempt, setAttempt] = useState(0);
-  // Set just before this tab's own logout, so that one is told apart from an expired session.
-  const loggingOut = useRef(false);
 
   useEffect(() => {
-    const offCredentials = session.onCredentials(({ user }) => setState({ status: "authenticated", user }));
-    const offUser = session.onUserUpdated((user) => setState({ status: "authenticated", user }));
-    const offLoggedOut = session.onLoggedOut((origin) => {
-      const chosen = origin === "remote" || loggingOut.current;
-      loggingOut.current = false;
-      setState({ status: "anonymous", reason: chosen ? "logout" : "ended" });
-    });
-    return () => {
-      offCredentials();
-      offUser();
-      offLoggedOut();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (session.getUser()) return;
-    let cancelled = false;
+    const controller = new AbortController();
     setState({ status: "checking" });
-    void session.renew(null).then((result) => {
-      if (cancelled) return;
-      // "ok" and "logged-out" have already reached the listeners above.
-      if (result === "unavailable") setState({ status: "unavailable" });
+    void fetchMe(controller.signal).then((result) => {
+      if (controller.signal.aborted) return;
+      if (result.kind === "ok") setState({ status: "authenticated", user: result.user });
+      else setState(result.kind === "anonymous" ? { status: "anonymous" } : { status: "unavailable" });
     });
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [attempt]);
 
-  const doLogIn = useCallback(async (email: string, password: string): Promise<AuthResult> => {
-    const result = await logIn(email, password);
-    if (result.ok) session.setCredentials(result.credentials);
-    return result;
-  }, []);
+  useEffect(
+    () =>
+      onSessionEnded(() => {
+        setState((prev) => (prev.status === "authenticated" ? { status: "anonymous" } : prev));
+      }),
+    [],
+  );
 
-  const doRegister = useCallback(async (email: string, name: string, password: string): Promise<AuthResult> => {
-    const result = await register(email, name, password);
-    if (result.ok) session.setCredentials(result.credentials);
-    return result;
-  }, []);
+  // This tab does not set the state when it logs out: it leaves the page, and a state change
+  // would send it to the login redirect before the end-session URL.
+  useEffect(() => listenForLogout((endSessionUrl) => window.location.assign(endSessionUrl ?? "/")), []);
 
-  const doLogOut = useCallback(async (): Promise<void> => {
-    await logOutOnServer();
-    loggingOut.current = true;
-    // Clears the token, aborts the stream (usePriceStream listens) and tells the other tabs.
-    session.logOut();
+  const logOut = useCallback(async (): Promise<void> => {
+    let endSessionUrl: string | null = null;
+    try {
+      endSessionUrl = await logOutOnServer();
+    } catch {
+      // The BFF could not end the session. Reloading shows where things stand: still signed in,
+      // or the "service unavailable" splash.
+      window.location.assign("/");
+      return;
+    }
+    postLogout(endSessionUrl);
+    window.location.assign(endSessionUrl ?? "/");
   }, []);
-
-  const updateUser = useCallback((user: AuthUser) => session.updateUser(user), []);
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
-  const value = useMemo(
-    () => ({ state, logIn: doLogIn, register: doRegister, logOut: doLogOut, updateUser, retry }),
-    [state, doLogIn, doRegister, doLogOut, updateUser, retry],
-  );
+  const value = useMemo(() => ({ state, logOut, retry }), [state, logOut, retry]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
