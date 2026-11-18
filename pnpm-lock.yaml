@@ -142,6 +142,9 @@ importers:
       '@radix-ui/react-visually-hidden':
         specifier: ^1.2.3
         version: 1.2.4(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@stock-platform/design-tokens':
+        specifier: workspace:*
+        version: link:../../packages/design-tokens
       react:
         specifier: ^19.0.0
         version: 19.2.6
@@ -388,6 +391,8 @@ importers:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
+
+  packages/design-tokens: {}
 
   packages/env:
     dependencies:

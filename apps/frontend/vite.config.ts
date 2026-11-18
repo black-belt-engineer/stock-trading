@@ -1,6 +1,33 @@
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+
+// The fonts live in @stock-platform/design-tokens and get hashed names, so index.html
+// cannot name them. Preload whichever .woff2 files the build emitted.
+function preloadFonts(): Plugin {
+  return {
+    name: "preload-fonts",
+    transformIndexHtml: {
+      order: "post",
+      handler(_html, ctx) {
+        if (!ctx.bundle) return [];
+        return Object.values(ctx.bundle)
+          .filter((file) => file.type === "asset" && file.fileName.endsWith(".woff2"))
+          .map((file) => ({
+            tag: "link",
+            attrs: {
+              rel: "preload",
+              href: `/${file.fileName}`,
+              as: "font",
+              type: "font/woff2",
+              crossorigin: "",
+            },
+            injectTo: "head",
+          }));
+      },
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -14,7 +41,7 @@ export default defineConfig(({ mode }) => {
   };
 
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), preloadFonts()],
     server: {
       proxy: {
         "/stream": {

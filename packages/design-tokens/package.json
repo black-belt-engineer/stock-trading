@@ -1,0 +1,15 @@
+{
+  "name": "@stock-platform/design-tokens",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CSS only: the colour tokens and the self-hosted fonts shared by the frontend and the Keycloak theme.",
+  "exports": {
+    "./tokens.css": "./src/tokens.css",
+    "./fonts.css": "./src/fonts.css",
+    "./fonts/*": "./src/fonts/*"
+  },
+  "files": [
+    "src"
+  ]
+}

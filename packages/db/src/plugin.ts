@@ -1,6 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
-import type { Pool } from "pg";
 import { closePool, createPool } from "./pool.js";
 
 export type DbPluginOptions = {
