@@ -50,8 +50,8 @@ Status: `todo` or `done`. The K1–K4 commits leave the running app unchanged. K
 | 12 | K2 | `test(theme): add Storybook error states for every page` | Wrong password, locked out, email taken, password too short, passwords not matching | done |
 | 13 | K2 | `chore(infra): build the theme JAR, mount it and set loginTheme` | `build-keycloak-theme`, compose mount into `/opt/keycloak/providers`, realm `loginTheme`, `mvn` check in `dev.sh` | done |
 | 14 | K3 | `feat(infra): add the google identity provider to the realm` | Secrets from env, the chosen behaviour without credentials, `.env.local.example` docs | done |
-| 15 | K3 | `feat(theme): add "Continue with Google" from kcContext.social.providers` | Login and register pages | todo |
-| 16 | K4 | `chore(bff): scaffold apps/bff` | Fastify, config with separate issuer and internal Keycloak URLs, health, logger | todo |
+| 15 | K3 | `feat(theme): add "Continue with Google" from kcContext.social.providers` | Login and register pages | done |
+| 16 | K4 | `chore(bff): scaffold apps/bff` | Fastify, config with separate issuer and internal Keycloak URLs, health, logger | done |
 | 17 | K4 | `feat(bff): add OIDC discovery with openid-client` | Discovery against the internal URL | todo |
 | 18 | K4 | `feat(bff): add the Redis session store` | `bff:session:*`, `bff:user-sessions:<sub>`, `bff:sid:<sid>`, encryption if chosen | todo |
 | 19 | K4 | `feat(bff): add GET /bff/login and the login cookie` | `returnTo` validation copied from `redirect.ts` with its tests, `prompt`, `idp`, `action` allow-list | todo |
@@ -80,13 +80,13 @@ Made by the owner during phase 12:
 - **2026-11-18, theme design reference:** the phase 10 pages (`AuthCard`, `pageStyles.ts`), no separate mock-up.
 - **2026-11-18, theme JAR build:** local JDK and Maven (no Docker build stage); `scripts/dev.sh` fails early without them.
 - **2026-11-18, Google without credentials:** the provider stays disabled and the button is hidden. **Button position:** above the form with an "or" divider (commit 15).
+- **2026-11-18, Q13:** token handler. The BFF keeps the tokens in the Redis session and adds the bearer token when it proxies; the browser only has the session cookie.
 - **2026-11-18, workflow:** work on `master`, one commit per session, the owner commits (this file's rules).
 
 Still open. Ask before the commit named:
 
 | Question | Before commit | Recommended |
 |---|---|---|
-| Q13: token handler or token-mediating backend | 16 | Token handler |
 | Encrypt the session value in Redis (AES-GCM, key from env) | 18 | Owner's call; cheap to add |
 
 ## Notes between commits
@@ -175,3 +175,8 @@ Still open. Ask before the commit named:
 - `src/login/SocialProviders.tsx` renders one `st-button st-button-secondary` link per entry of `kcContext.social.providers` ("Continue with {displayName}", `href` = `loginUrl`), then an "or" divider. It sits above the form on `Login` and `Register` (not through the Template's `socialProvidersNode`, which renders below). With no providers (Google disabled) it renders nothing. Copy keys `continueWith`, `orDivider`.
 - Keycloakify types `social` on the login pages only, so `KcContext.ts` declares it for `register.ftl` and `getSocialProviders` reads it with type guards. **Not verified:** that Keycloak really passes `social` to `register.ftl`; if the register page shows no button with Google enabled, that is why. Check in the compose Keycloak once Maven is installed (commit 13 note).
 - Stories `WithGoogle` on login and register. Only `tsc`, `pnpm build` and the Storybook build ran; the stories were not looked at in a browser.
+
+### After commit 16 (2026-11-18)
+- `apps/bff` is `@stock-platform/bff`: Fastify, same layout as the other services (`config/`, `routes/`, `services/`, `server.ts`, `app.ts`). Only `/health`, `/health/live` and `/health/ready` (Redis ping) exist. Default port 3007. No cookie, proxy or OIDC packages yet: each later commit adds what it needs (`openid-client` in 17, `@fastify/cookie` in 19, a proxy in 23).
+- Config: `KEYCLOAK_ISSUER_URL` (public, default `http://localhost:5173/realms/stock-platform`, for browser redirects and the `iss` check) and `KEYCLOAK_INTERNAL_URL` (default `http://localhost:8180/realms/stock-platform`, for discovery, token, JWKS, revoke), `KC_BFF_CLIENT_ID` (default `stock-bff`), `KC_BFF_CLIENT_SECRET` (required, already in `.env.local`), `PUBLIC_ORIGIN`, `REDIS_URL`. `dev.sh`, compose and the Vite proxy do not start or route to the BFF yet (K5 wires them).
+- Tested: `pnpm build`; started `dist/index.js` against the local Redis on another port: `/health/ready` returned 200 with `redis: true`, `/health/live` ok, SIGTERM shut it down cleanly. Not tested: Redis down (503 path is the copied auth code).
