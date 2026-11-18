@@ -66,6 +66,12 @@ importers:
 
   apps/bff:
     dependencies:
+      '@fastify/cookie':
+        specifier: ^11.1.5
+        version: 11.1.5
+      '@fastify/type-provider-typebox':
+        specifier: ^5.1.0
+        version: 5.2.0(@sinclair/typebox@0.34.49)
       '@sinclair/typebox':
         specifier: ^0.34.33
         version: 0.34.49
@@ -94,7 +100,7 @@ importers:
         specifier: ^5.8.1
         version: 5.10.1
       openid-client:
-        specifier: ^6
+        specifier: ^6.8.9
         version: 6.9.0
     devDependencies:
       '@types/node':
@@ -106,6 +112,9 @@ importers:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
+      vitest:
+        specifier: ^4.1.12
+        version: 4.1.12(@types/node@22.19.17)(vite@6.4.2(@types/node@22.19.17)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0))
 
   apps/consumer:
     dependencies:
