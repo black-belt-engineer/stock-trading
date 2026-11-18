@@ -64,7 +64,7 @@ Status: `todo` or `done`. The K1–K4 commits leave the running app unchanged. K
 | 26 | K5 | `feat(auth-guard): accept RS256 and a configurable JWKS URL` | SSE service `AUTH_SERVICE_URL` → `JWKS_URL`; both algorithms, so the old login keeps working | done |
 | 27 | K5 | `feat(frontend): switch authentication to the BFF` | `apiFetch` → `fetch`, `AuthProvider` on `/bff/me`, guard → `/bff/login`, logout through the BFF, Vite proxy and `dev.sh` env, `/login` and `/register` as redirects | done |
 | 28 | K5 | `feat(frontend): use keycloak actions on the settings page` | Buttons for `UPDATE_PROFILE`, `UPDATE_PASSWORD`, `delete_account`; the callback refreshes name and email | done |
-| 29 | K5 | `refactor(frontend): delete the hand-written auth code` | `session.ts`, `authApi.ts`, `credentials.ts`, token parts of `tabSync`, old pages, `AuthCard`, `api/account.ts` | todo |
+| 29 | K5 | `refactor(frontend): delete the hand-written auth code` | `session.ts`, `authApi.ts`, `credentials.ts`, token parts of `tabSync`, old pages, `AuthCard`, `api/account.ts` | done |
 | 30 | K5 | `chore: delete apps/auth and apps/user` | Internal guard, rate limiters, `JWT_PRIVATE_KEY`, `INTERNAL_API_TOKEN`, `dev.sh` blocks, drop the `users` table | todo |
 | 31 | K5 | `docs: document the /bff routes and add the ADR for Q10–Q13` | `openapi.yaml`, `api-docs.mjs`, ADR, phase 12 notes in `PHASES.md` and its status set to `done`. Then run K5's "Done when" | todo |
 
@@ -271,3 +271,7 @@ Still open. Ask before the commit named:
   - After the deletion Keycloak shows its **info page** ("deleted successfully") and does **not** redirect to the app, so the browser does not come back to `/bff/callback` and "lands on login" does not happen by itself. Keycloak also sent **no back-channel logout**, so the BFF session stayed valid (`/bff/me` 200) until its access token expires and the next refresh fails (up to 10 minutes). The deleted user's token works against the services for the same time.
   - Options for the owner: a themed `info.ftl` page with a link back to the app (login theme, K2), and/or the phase 15 Kafka listener (K6) deleting the user's BFF sessions on `DELETE_ACCOUNT`. Until then the Settings copy does not promise a sign-out.
 - Not tested: in a browser through 5173, `UPDATE_PASSWORD` (same mechanism, not run), cancel of an action, Keycloak's `kc_action_status=cancelled` path, and the theme pages (Maven missing: the default Keycloak theme was shown).
+
+### After commit 29 (2026-11-18)
+- Deleted from the frontend: `auth/session.ts`, `authApi.ts`, `credentials.ts`, `tabSync.ts` (+ test; the whole file, since nothing in it was left but the token parts), `components/AuthCard`, `api/account.ts`, `pages/settings/validation.ts` (+ test). `pages/settings/fields.tsx` keeps only `SettingsSection`; `SettingsField`, `SaveButton`, `SectionMessage` and their helpers went. `pageStyles.ts` lost the unused `inputClass` and `linkClass`.
+- Tested: `pnpm build` and the frontend Vitest suites (3 files, 38 tests; the removed tests were the deleted modules'). A grep finds no remaining reference. Not run in a browser: nothing but unused code was removed, and no remaining file imports the deleted ones (the build would fail otherwise).
