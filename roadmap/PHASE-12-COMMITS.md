@@ -39,7 +39,7 @@ Status: `todo` or `done`. The K1–K4 commits leave the running app unchanged. K
 | 1 | K1 | `chore(infra): add the keycloak service to compose` | Pinned 26.x image, `start-dev --import-realm`, port 8180, `KC_HOSTNAME`, `KC_HEALTH_ENABLED`, `extra_hosts` host-gateway, DB settings for a `keycloak` database | done |
 | 2 | K1 | `chore(scripts): create the keycloak database and the client secret in dev.sh` | DB if missing, `KC_BFF_CLIENT_SECRET`, wait for readiness, `--reset-realm`, printed URL, `.env.local.example` | done |
 | 3 | K1 | `feat(infra): add the stock-platform realm` | Realm settings, password policy, brute force, token lifetimes, one-field user profile, import mount | done |
-| 4 | K1 | `feat(infra): add the stock-bff client to the realm` | Confidential client, standard flow only, PKCE S256, redirect, post-logout and back-channel URLs, audience mapper (`stock-platform`), `delete_account` action and role in the default roles, saved events including `DELETE_ACCOUNT` | todo |
+| 4 | K1 | `feat(infra): add the stock-bff client to the realm` | Confidential client, standard flow only, PKCE S256, redirect, post-logout and back-channel URLs, audience mapper (`stock-platform`), `delete_account` action and role in the default roles, saved events including `DELETE_ACCOUNT` | done |
 | 5 | K1 | `chore(frontend): proxy /realms and /resources to keycloak` | Vite proxy. Done when: `http://localhost:5173/realms/stock-platform/.well-known/openid-configuration` shows the 5173 issuer | todo |
 | 6 | K2 | `refactor: move the design tokens and fonts into packages/design-tokens` | The frontend imports them; no visual change | todo |
 | 7 | K2 | `chore: scaffold apps/keycloak-theme with Keycloakify` | Vite, React, Storybook, turbo wiring (the monorepo guide of the current Keycloakify major) | todo |
@@ -76,13 +76,13 @@ Made by the owner during phase 12:
 
 - **2026-11-18, name field:** one "Name" field: Keycloak's `firstName` labelled "Name", `lastName` removed from the user profile.
 - **2026-11-18, password reset:** off, as before (no SMTP). The login page keeps "There is no password reset yet. Keep your password somewhere safe."
+- **2026-11-18, BFF port:** the BFF uses port **3007** until K5. The realm's back-channel URL is `http://host.docker.internal:3007/bff/backchannel-logout`, and commit 16's config defaults to 3007. When `apps/auth` is deleted (commit 30), move the BFF, the realm URL and the Vite proxy to 3005.
 - **2026-11-18, workflow:** work on `master`, one commit per session, the owner commits (this file's rules).
 
 Still open. Ask before the commit named:
 
 | Question | Before commit | Recommended |
 |---|---|---|
-| Port 3005: the BFF's planned port is still used by `apps/auth` until commit 30, and the back-channel URL in commit 4 points at it | 4 | Give the BFF a temporary port (for example 3007) in the realm and its config until K5, then move it to 3005 |
 | Q13: token handler or token-mediating backend | 16 | Token handler |
 | Encrypt the session value in Redis (AES-GCM, key from env) | 18 | Owner's call; cheap to add |
 | Design reference for the theme: the phase 10 pages or a separate mock-up | 8 | The phase 10 pages |
@@ -101,3 +101,12 @@ Still open. Ask before the commit named:
 - Brute force: tested that a lockout happens. Rapid failures less than 1 s apart trigger Keycloak's 1-minute anti-automation lock after the second failure. The 5-failure, 15-minute path itself was not tested; it needs failures spaced more than 1 s apart.
 - `pnpm build` rewrites the tracked `apps/frontend/tsconfig.app.tsbuildinfo`, and every `dev.sh` run builds. Restore it unless the commit changes the frontend.
 - Quick admin access for checks: `docker exec stock-keycloak /opt/keycloak/bin/kcadm.sh config credentials --server http://localhost:8080 --realm master --user admin --password admin`, then `kcadm.sh get realms/stock-platform`.
+
+### After commit 4 (2026-11-18)
+- Listing `requiredActions` in the realm JSON **replaces** Keycloak's defaults rather than adding to them, and declaring `defaultRole` with composites needs the realm roles it contains (`offline_access`, `uma_authorization`) declared too, or the import fails. Both are in the file now; keep the full lists when editing.
+- The access token's `aud` is `["stock-platform", "account"]` (the `account` part comes from the default `account` client roles). The guard in commit 26 must accept an array that contains `stock-platform`, not require an exact string.
+- The client secret is not echoed by `kcadm get clients` field filters; compare it with `kcadm get clients/<id>/client-secret`. It matched `.env.local`.
+- Tested with curl against 8180: the code flow with PKCE S256 gives tokens (issuer `http://localhost:5173/...`, 600 s access, ~7-day refresh, `sid` in the ID token, `name` = firstName). Without a code challenge Keycloak redirects with `invalid_request`; a foreign `redirect_uri` is `400`; password and client-credentials grants are `unauthorized_client`. An admin logout POSTed a logout token (`sid`, `sub`, `aud: stock-bff`) to a listener on host port 3007, so `host.docker.internal` works from the container.
+- The login form's `action` points at `localhost:5173` (from `KC_HOSTNAME`); for curl tests before commit 5, rewrite it to 8180.
+- Not tested: the `delete_account` action and a saved `DELETE_ACCOUNT` event (they need the confirm page; commit 28 tests them). `LOGIN` events were seen saved.
+- `08-identity.md` still says 3005 for the BFF; it is the final port, so it was left as is. The temporary 3007 lives in the decision above.

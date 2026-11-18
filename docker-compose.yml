@@ -86,7 +86,7 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}
-      # Read by the realm import as ${env.KC_BFF_CLIENT_SECRET}; scripts/dev.sh generates it.
+      # Read by the realm import as ${KC_BFF_CLIENT_SECRET}; scripts/dev.sh generates it.
       KC_BFF_CLIENT_SECRET: ${KC_BFF_CLIENT_SECRET:-}
       # Own database in the shared Postgres container; never stockdb. scripts/dev.sh creates it.
       KC_DB: postgres
