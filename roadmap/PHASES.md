@@ -25,7 +25,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 15 | Portfolio service, P1, K6 | 06-personal.md, 08-identity.md | 05, 12 | done |
 | 16 | P2 | 06-personal.md | 15 | done |
 | 17 | Migration runner, P3 | 06-personal.md | 06, 15 | done |
-| 18 | S1, S2 | 07-streaming.md | 12 | todo |
+| 18 | S1, S2 | 07-streaming.md | 12 | in progress |
 | 19 | S3 steps 2–6, M4 step 3 | 07-streaming.md, 03-market-data.md | 08 | todo |
 
 ## Phase briefs
