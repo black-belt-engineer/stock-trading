@@ -8,6 +8,7 @@ import { loadLocalEnv } from "@stock-platform/env";
 import { createLogger } from "@stock-platform/logger";
 import { createCleanup } from "./app.js";
 import { loadConfig } from "./config/index.js";
+import { AlertRepository } from "./repositories/alert.repository.js";
 import { UserDataRepository } from "./repositories/user-data.repository.js";
 import { WatchlistRepository } from "./repositories/watchlist.repository.js";
 
@@ -18,7 +19,9 @@ const pool = createPool(config.DATABASE_URL);
 try {
   const watchlist = new WatchlistRepository(pool);
   await watchlist.prepareSchema();
-  const cleanup = createCleanup(config, new UserDataRepository(pool, watchlist), log);
+  const alerts = new AlertRepository(pool);
+  await alerts.prepareSchema();
+  const cleanup = createCleanup(config, new UserDataRepository(pool, watchlist, alerts), log);
   if (!cleanup) {
     log.error("KC_PORTFOLIO_CLIENT_SECRET is not set");
     process.exitCode = 1;
