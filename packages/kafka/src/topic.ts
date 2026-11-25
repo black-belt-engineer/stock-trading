@@ -14,6 +14,8 @@ export async function ensureTopic(
     topic: string;
     numPartitions: number;
     replicationFactor: number;
+    /** Topic settings used when the topic is created, e.g. `retention.ms`. An existing topic is left as it is. */
+    configEntries?: ReadonlyArray<{ name: string; value: string }>;
   },
 ): Promise<void> {
   const topics = await admin.listTopics();
@@ -26,6 +28,7 @@ export async function ensureTopic(
         topic: params.topic,
         numPartitions: params.numPartitions,
         replicationFactor: params.replicationFactor,
+        configEntries: params.configEntries ? [...params.configEntries] : [],
       },
     ],
     waitForLeaders: true,

@@ -64,7 +64,7 @@ async function startUpstream() {
 async function startBff(upstream: string, getSession: (id: string) => Promise<Session | undefined>) {
   const app: FastifyInstance = Fastify();
   await app.register(cookie);
-  await app.register(proxyRoutes, { upstream, production: false, tokens: { getSession } });
+  await app.register(proxyRoutes, { upstream, paths: ["/quotes/*", "/stream"], production: false, tokens: { getSession } });
   const port = await listen(app.server);
   await app.ready();
   closers.push(() => app.close());
@@ -125,6 +125,28 @@ describe("proxy routes", () => {
     const res = await app.inject({ method: "GET", url: "/quotes/x", headers: { cookie: "session=good" } });
     expect(res.statusCode).toBe(502);
     expect(res.json()).toMatchObject({ code: "UPSTREAM_UNAVAILABLE" });
+  });
+
+  it("sends each service its own paths when registered once per service", async () => {
+    const sse = await startUpstream();
+    const portfolio = await startUpstream();
+    const app: FastifyInstance = Fastify();
+    await app.register(cookie);
+    const tokens = { getSession: known };
+    await app.register(proxyRoutes, { upstream: sse.url, paths: ["/quotes/*", "/stream"], production: false, tokens });
+    await app.register(proxyRoutes, { upstream: portfolio.url, paths: ["/portfolio/*"], production: false, tokens });
+    await app.ready();
+    closers.push(() => app.close());
+
+    const headers = { cookie: "session=good", "content-type": "application/json", "x-requested-with": "fetch" };
+    const put = await app.inject({ method: "PUT", url: "/portfolio/watchlist/order", headers, payload: '{"symbols":["KO"]}' });
+    expect(put.statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/quotes/x", headers })).statusCode).toBe(200);
+    expect((await app.inject({ method: "GET", url: "/portfolio", headers })).statusCode).toBe(404);
+
+    expect(portfolio.seen.map((s) => `${s.method} ${s.url} ${s.body}`)).toEqual(['PUT /portfolio/watchlist/order {"symbols":["KO"]}']);
+    expect(portfolio.seen[0]?.headers.authorization).toBe("Bearer access-1");
+    expect(sse.seen.map((s) => s.url)).toEqual(["/quotes/x"]);
   });
 
   it("does not proxy other paths", async () => {

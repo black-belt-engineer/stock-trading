@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActiveStock } from "../types";
-import { DEFAULT_SORT, matchesQuery, normaliseQuery, parseSort, searchAndSort, sortParam, SORT_OPTIONS } from "./quoteView";
+import { DEFAULT_SORT, matchesQuery, normaliseQuery, parseSort, searchAndSort, sortParam, SORT_OPTIONS, starredFirst } from "./quoteView";
 
 function stock(symbol: string, name: string, values: Partial<ActiveStock> = {}): ActiveStock {
   return {
@@ -88,5 +88,16 @@ describe("searchAndSort", () => {
     const before = symbols(list);
     expect(symbols(searchAndSort(list, "corporation", { key: "price", direction: "desc" }))).toEqual(["MSFT", "NVDA", "ORCL"]);
     expect(symbols(list)).toEqual(before);
+  });
+});
+
+describe("starredFirst", () => {
+  const list = ["AAPL", "BAC", "KO", "MSFT", "V"].map((s) => stock(s, s));
+  it("puts starred symbols first in watchlist order and keeps the rest as given", () => {
+    expect(symbols(starredFirst(list, ["V", "BAC"]))).toEqual(["V", "BAC", "AAPL", "KO", "MSFT"]);
+  });
+  it("ignores watched symbols that are not in the list", () => {
+    expect(symbols(starredFirst(list, ["GONE", "KO"]))).toEqual(["KO", "AAPL", "BAC", "MSFT", "V"]);
+    expect(symbols(starredFirst(list, []))).toEqual(symbols(list));
   });
 });

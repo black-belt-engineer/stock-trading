@@ -7,3 +7,6 @@ dist
 !.env.local.example
 
 .idea/
+
+# Provider JARs copied by scripts/dev.sh for the Keycloak container
+infra/keycloak/providers/

@@ -22,7 +22,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 12 | K1, K2, K3, K4, K5 | 08-identity.md | 11 | done |
 | 13 | D1, D2, D3 | 05-dashboard.md | 04, 06 | done |
 | 14 | D4, D5 | 05-dashboard.md | 12, 13 | done |
-| 15 | Portfolio service, P1, K6 | 06-personal.md, 08-identity.md | 05, 12 | todo |
+| 15 | Portfolio service, P1, K6 | 06-personal.md, 08-identity.md | 05, 12 | done |
 | 16 | P2 | 06-personal.md | 15 | todo |
 | 17 | Migration runner, P3 | 06-personal.md | 06, 15 | todo |
 | 18 | S1, S2 | 07-streaming.md | 12 | todo |
@@ -168,12 +168,15 @@ Each brief adds only what the plan files do not say: scope limits, decisions to 
 ### 16 · Price alerts (P2)
 - Evaluated in the browser (Q7). The UI must say alerts are only checked while the app is open.
 - The `snapshot` SSE event counts for alert evaluation.
+- From phase 15: `price_alerts` goes into `apps/portfolio` next to `watchlist_items` (repository with `prepareSchema`, routes inside the guarded scope, user id from `userIdOf(request)`). Add the table to `UserDataRepository.deleteUser` and `listUserIds`, or K6 will not delete a deleted user's alerts. Serialise a user's writes with `lockUser` (advisory lock) where a cap is checked (50 active alerts). The browser calls `/portfolio/alerts…` through the BFF; nothing else to wire. In-app messages can reuse the shell's notice slot pattern (`WatchlistNotice`, a polite `role="status"` inside `main`).
 
 ### 17 · Paper trading (P3)
 - Introduce the minimal migration runner first; the plan requires it before any money table.
 - Rules are fixed (Q8): $100,000 cash, market orders, whole shares, long only, no fees.
 - All money arithmetic in integer cents or a decimal type inside the portfolio service.
 - Day P&L uses M2's `previousClose` (phase 06); a position opened today is measured from its fill price instead.
+- From phase 15: the portfolio service exists (`apps/portfolio`, port 3006, behind the BFF) and already has `app.redis` for `price:latest:<symbol>`. The migration runner must take over `watchlist_items` (created today by `CREATE TABLE IF NOT EXISTS` in `WatchlistRepository.prepareSchema`). Every new table joins `UserDataRepository` (K6 deletes a deleted user's rows from every table in one transaction): **the owner must decide** whether orders are deleted or anonymised then (plan "Future issues"); today the code deletes. `withTransaction` and `lockUser` in `repositories/transaction.ts` fit the order transaction.
+- The Vite proxy sends `/portfolio/` (with the slash) to the BFF, so the page `/portfolio` stays the SPA's. A page route under `/portfolio/…` would be proxied instead: keep P3's pages at `/portfolio` only, or rename the API prefix.
 
 ### 18 · Stream resilience (S1, S2)
 - S2 first is easier: S1's resume is served from S2's ring buffer.
@@ -714,3 +717,44 @@ Each session appends here when it finishes: what the next phases need to know th
 - Defects noticed outside the scope, not fixed:
   - **The quote dialog (`DetailPanel`) has no z-index**, so at 360px in table view the sticky table header (`z-10`) draws over the dialog sheet. The fix is `z-40` on its overlay and content, as the help dialog has (phase 13).
   - Still open from earlier notes: the `Sparkline` defects, SSE shutdown wedging `tsx watch`, "Connection lost" on a first load, the 360 feed tab's `landmark-one-main`, Dockerfiles missing workspace dependencies, `tsconfig.app.tsbuildinfo` tracked in git (left out of the commits again), the `close` listener order in `stream.routes.ts`.
+
+### After phase 15 (2026-11-25)
+- Decided by the owner during the session:
+  - P1: one list per user, no `watchlists` table (plan as written).
+  - Reordering and the "manage view" are a **Watchlist section in Settings** (between Preferences and Danger zone): Move up, Move down and Remove buttons per symbol; a symbol that left the registry is greyed and marked "No longer listed".
+  - K6 is built with a local JDK and Maven (`openjdk-21-jdk-headless`, `maven`; a runtime alone has no `javac`, and `dev.sh` now checks for it).
+  - **Departure from the plan (K6 step 1):** Keycloak cannot reach the broker at `redpanda:9092`, because Redpanda advertised only `localhost:9092`. Redpanda now has two listeners: `localhost:9092` for apps on the host and `kafka:29092` for containers on `stock-net`. The listener uses `kafka:29092`.
+  - The provider JARs (theme and listener) are copied by `dev.sh` into `infra/keycloak/providers/` (gitignored), which compose mounts at `/opt/keycloak/providers`. `THEME_JAR_SHA` became `PROVIDERS_SHA`.
+- Groundwork, choices made here:
+  - `apps/portfolio` follows `apps/sse-service`: config, `prepareSchema` at start-up, health (`/health/ready` checks Postgres and Redis), and every API route inside the guarded scope. `userIdOf(request)` takes the id from the token only and refuses a `sub` that is not a UUID (`401`), rather than letting Postgres fail on the cast. It registers Redis per the plan, although only P3 reads it.
+  - The BFF's `proxyRoutes` is registered once per service with its `paths` (`/quotes/*`, `/stream` → SSE service; `/portfolio/*` → `PORTFOLIO_SERVICE_URL`, default `http://localhost:3006`). CSRF and the bearer handling are unchanged. The docs server and `docs/openapi.yaml` include the watchlist paths.
+  - `packages/kafka`'s `ensureTopic` takes `configEntries` for a topic it creates.
+- P1, choices made here:
+  - API: `GET /portfolio/watchlist` → `{ items: [{ symbol, addedAt, listed }] }`; `PUT` and `DELETE /portfolio/watchlist/:symbol` and `PUT /portfolio/watchlist/order` answer `204`. Adding needs a registered symbol (`400` malformed, `404` unknown). Removing takes any well-formed symbol, so delisted ones can be removed. The cap is 100 (`409`), checked under a per-user advisory lock so two adds at once cannot pass it or share a position.
+  - Reorder: a symbol not on the list or named twice is `400`. Watched symbols the request leaves out (added on another device meanwhile) keep their order after the named ones, so the result is always the whole list. Fastify's defaults apply as in the other services: a single string is coerced to a one-item array and unknown body fields are dropped, not refused.
+  - Client: `watchlist/watchlistStore.ts` (unit-tested). A star changes at once and is rolled back with a notice when refused. Writes for one symbol never overlap: clicks made while one is on its way only change the wanted state. A reload that started before a write was confirmed is ignored. The list reloads on window focus and when the tab becomes visible. If a load fails, stars become read-only (`aria-disabled`, title), and a notice with Retry says so.
+  - `WatchlistProvider` sits next to `StreamProvider` in `RequireAuth`. The notice is a polite `role="status"` inside `main` (a region outside the landmarks would fail axe).
+  - Stars: on a card, a sibling button over the top-right corner (a button cannot contain one); in a table row, before the symbol (28px); in the dialog, beside Close. Each is a toggle with the fixed name "Watch AAPL" and `aria-pressed`, and it stops the click from opening the dialog. The dialog now puts first focus on Close explicitly, so Enter right after opening does not star.
+  - The Watchlist pill sits after "All" in the sector pills' group and sets `?list=watchlist` (it replaces `?sector=`, and a sector replaces it). With nothing starred it shows "Star a symbol to add it here."
+  - Under the default sort (symbol A–Z), starred symbols come first in the watchlist's order (`starredFirst` in `utils/quoteView.ts`). Other sorts ignore stars. The settled-order hold of phase 13 also covers a starring click, so the card does not jump from under the pointer.
+- K6, choices made here:
+  - The listener (`infra/keycloak/event-listener`, id `stock-kafka`) has `kafka-clients` 3.9.1 shaded and relocated (codecs excluded, `slf4j-api` from Keycloak). It publishes only after Keycloak's transaction commits, on a background thread with a 10 s delivery limit. The producer is created at the first event, so a broker that is down never stops Keycloak starting. The realm lists `jboss-logging` and `stock-kafka` and turns admin events on, without representations.
+  - The portfolio service consumes `identity.events` (group `portfolio-identity`, from the beginning for a new group) and commits after deleting; messages it does not understand are logged and skipped. The topic has 3 partitions and 7 days' retention (`dev.sh` creates it with `rpk`, and the service would too). The consumer runs in the background, so the API starts without the broker. It reconnects every 30 s, including after a crash kafkajs does not restart from by itself.
+  - The nightly cleanup runs at `CLEANUP_HOUR_UTC` (default 3) and on demand with `pnpm --filter @stock-platform/portfolio cleanup`. It checks every user before deleting anything, and any failed lookup aborts the run. A non-zero count is logged at `warn` with the user ids. Client `stock-portfolio` (secret `KC_PORTFOLIO_CLIENT_SECRET`, generated by `dev.sh`) has only `realm-management/view-users`. Without the secret the service warns and schedules nothing.
+- Verified against `scripts/dev.sh` (it now runs end to end: the theme JAR and the listener are built and loaded in Keycloak) and `pnpm dev`:
+  - API through the BFF with a real session (23 checks plus 4 for the cap, through Playwright's request context): `401` without a session or token, `403` without `X-Requested-With`, idempotent add and remove, add order, `404`/`400`, reorder including a partial one, duplicate and not-on-list `400`, 18 concurrent adds giving 18 unique rows, a second device seeing the same list, and the cap: `409` at 100 (97 delisted rows seeded in SQL), an existing symbol still `204` at the cap, room again after a removal.
+  - Browser (headless Chromium, Playwright 1.64, axe-core 4.11, one script, every check passing on the final code): stars on cards, table rows and the dialog; the server agrees; starred first; other sorts ignore stars; the Watchlist pill and URL, a sector replacing it, a reload keeping it; a double-click; the empty state; dialog focus on Close and back to the card; another device after a focus event; a mocked `503` rolling back with the notice; everything failing making the stars read-only, and Retry recovering. Settings: keyboard moves with focus kept (and moved to the other arrow at the top), the order saved and shown first on the quotes page, a delisted symbol marked and removed, focus to the neighbouring Remove; stars kept after logout and login. axe is clean and there is no horizontal scroll at 360×740, 768×1024, 740×360 and 1440×900 (cards, table, settings), on the dialog and the notice, and in the light theme. Screenshots at 360 (table, settings), 1440 (light quotes and dialog) were looked at.
+  - K6 (16 checks in a shell script plus 3 for the self-deletion in the browser): self-deletion through Settings → rows gone 1.4 s after Confirm, published as `self`. Admin deletion → rows gone in under 0.1 s. Redpanda stopped → Keycloak still deletes (0.9 s), the listener logs the failure at `ERROR` with the user id, the rows stay, and the cleanup run removes them. A replayed event and a malformed message change nothing, with no lag left. Keycloak stopped → the cleanup exits 1 and deletes nothing; with Keycloak back it removes the ghost user's rows and keeps live users' rows.
+  - Unit tests: portfolio 12, BFF 67 (one new: two services' paths), frontend 70 (13 new: store and `starredFirst`), the listener's 4 (JUnit, run by the Maven build). `pnpm build` passes.
+- Not checked: a real phone, Firefox and Safari, a screen reader (the star toggles, the notice, the Settings list), the Keycloak login pages now that the theme JAR finally loads (only registration was used: phase 12's open theme checks are still open), the nightly timer firing at 03:00 (the same `run()` was run by hand), Google sign-in.
+- Left open:
+  - Under the Watchlist filter, unstarring a card removes it at once; there is no undo.
+  - The `userId`s of a cleanup's removals are logged at `warn`. That is fine for a dev log, but should be reviewed before a shared log store.
+  - kafkajs cannot read Snappy, LZ4 or ZSTD. `rpk topic produce` compresses with Snappy by default (use `-z none`); such a message makes the identity consumer retry every 30 s until it is skipped (`rpk group seek`). Keycloak's listener sends uncompressed.
+  - Redpanda in compose has no volume: recreating the container (as this phase's listener change did once) drops topics and consumer offsets.
+- Defects noticed outside the scope, not fixed:
+  - The BFF answers `500` (logged as "Unhandled error") for a request with `Content-Type: application/json` and an empty body. Fastify's `FST_ERR_CTP_EMPTY_JSON_BODY` carries `statusCode: 400`, but the error handler only passes `AppError` and validation errors through. The same handler pattern is in the SSE and portfolio services.
+  - The consumer app (`stock-prices`) has the same kafkajs behaviour that the identity consumer needed a fix for: after a non-retriable crash it stops for good. Not verified there.
+  - Phase 12's Docker mount had left `apps/keycloak-theme/dist_keycloak` as an empty root-owned folder, which broke the theme build. The owner removed it, and the new mount no longer causes it.
+  - `apps/bff/src/routes/proxy.routes.test.ts` has an `as AddressInfo` cast (from phase 12).
+  - Still open from earlier notes: the `DetailPanel` z-index (phase 14), the `Sparkline` defects, SSE shutdown wedging `tsx watch`, "Connection lost" on a first load, the 360 feed tab's `landmark-one-main`, Dockerfiles missing workspace dependencies (no Dockerfile for `apps/portfolio` either), `tsconfig.app.tsbuildinfo` tracked in git (left out of the commits again), the `close` listener order in `stream.routes.ts`.

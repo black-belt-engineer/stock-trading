@@ -5,6 +5,8 @@ export type KafkaTopicParams = {
   topic: string;
   numPartitions: number;
   replicationFactor: number;
+  /** Settings for a topic this call creates (an existing topic is not changed). */
+  configEntries?: ReadonlyArray<{ name: string; value: string }>;
 };
 
 export type KafkaBootstrapConfig = {
@@ -42,6 +44,7 @@ export async function createKafkaWithEnsuredTopic(
     topic: config.topic,
     numPartitions: config.numPartitions,
     replicationFactor: config.replicationFactor,
+    configEntries: config.configEntries,
   });
   return kafka;
 }

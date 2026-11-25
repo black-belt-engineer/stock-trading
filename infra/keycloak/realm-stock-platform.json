@@ -47,6 +47,9 @@
     "DELETE_ACCOUNT",
     "DELETE_ACCOUNT_ERROR"
   ],
+  "eventsListeners": ["jboss-logging", "stock-kafka"],
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": false,
 
   "roles": {
     "realm": [
@@ -153,6 +156,36 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "stock-portfolio",
+      "name": "Streamtick portfolio service",
+      "description": "K6 nightly cleanup: a service account that can only look users up (realm-management/view-users).",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${KC_PORTFOLIO_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "consentRequired": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false"
+      }
+    }
+  ],
+
+  "users": [
+    {
+      "username": "service-account-stock-portfolio",
+      "enabled": true,
+      "serviceAccountClientId": "stock-portfolio",
+      "clientRoles": { "realm-management": ["view-users"] }
     }
   ],
 

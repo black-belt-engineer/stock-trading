@@ -3,6 +3,7 @@ import type { JSX } from "react";
 import { Navigate, Outlet, useLocation, useSearchParams } from "react-router";
 import { Splash } from "../components/Splash";
 import { StreamProvider } from "../stream/StreamProvider";
+import { WatchlistProvider } from "../watchlist/WatchlistProvider";
 import { useAuth } from "./AuthProvider";
 import { bffLoginUrl, NEXT_PARAM, safeRedirectTarget } from "./redirect";
 
@@ -24,7 +25,8 @@ function LoginRedirect({ returnTo, register = false }: { returnTo: string; regis
  *
  * The stream provider lives here, inside the guard: nothing fetches or streams
  * without a session, a session that ends unmounts it (which closes the stream), and
- * moving between the shell's pages keeps the one connection open.
+ * moving between the shell's pages keeps the one connection open. The watchlist (P1) is
+ * per user in the same way.
  */
 export function RequireAuth(): JSX.Element {
   const { state, retry } = useAuth();
@@ -33,7 +35,9 @@ export function RequireAuth(): JSX.Element {
   if (state.status === "authenticated") {
     return (
       <StreamProvider>
-        <Outlet />
+        <WatchlistProvider>
+          <Outlet />
+        </WatchlistProvider>
       </StreamProvider>
     );
   }

@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from "react";
 import type { JSX } from "react";
 import { Sparkline } from "../Sparkline";
+import { StarButton } from "../../watchlist/StarButton";
 import { focusRing } from "../pageStyles";
 import {
   formatPrice,
@@ -145,7 +146,9 @@ const QuoteRow = memo(function QuoteRow({ stock, onOpen, delayed }: RowProps): J
       }}
       className="cursor-pointer transition-colors duration-150 hover:bg-elevated has-[:focus-visible]:bg-elevated [&>td]:border-b [&>td]:border-subtle last:[&>td]:border-b-0"
     >
-      <td className={cell}>
+      <td className={`${cell} py-0.5`}>
+        <span className="flex items-center gap-1">
+        <StarButton symbol={stock.symbol} size="sm" className="-ml-1" />
         <button
           type="button"
           // Found again by the detail dialog to return focus here when it closes.
@@ -160,10 +163,11 @@ const QuoteRow = memo(function QuoteRow({ stock, onOpen, delayed }: RowProps): J
           {stock.symbol}
         </button>
         {delayed && stock.currentPrice !== null && (
-          <span title="No recent updates for this symbol" className="ml-1.5 text-[11px] text-warning">
+          <span title="No recent updates for this symbol" className="ml-0.5 text-[11px] text-warning">
             Delayed
           </span>
         )}
+        </span>
       </td>
       {/* Takes whatever width the other columns leave, and cuts the name to fit. */}
       <td className={`${cell} ${WIDE_ONLY} w-full max-w-0 truncate text-secondary`} title={name}>

@@ -9,6 +9,7 @@ import { useStreamData, useStreamStatus } from "../../stream/StreamProvider";
 import { useAuth } from "../../auth/AuthProvider";
 import { ShortcutsProvider } from "../../shortcuts/ShortcutsProvider";
 import { ShellControlsProvider } from "./ShellControls";
+import { WatchlistNotice } from "../../watchlist/WatchlistNotice";
 
 /**
  * Sidebar and feed persist across routes; the centre column is the route outlet.
@@ -62,6 +63,7 @@ export function AppShell(): JSX.Element {
             }
           >
             <StaleBanner />
+            <WatchlistNotice />
             <Outlet />
           </main>
           {/* Backdrop for the medium-width drawer: a click beside the drawer closes it. */}

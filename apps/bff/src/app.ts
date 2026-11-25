@@ -57,6 +57,13 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   });
   await app.register(proxyRoutes, {
     upstream: config.SSE_SERVICE_URL,
+    paths: ["/quotes/*", "/stream"],
+    production: config.NODE_ENV === "production",
+    tokens,
+  });
+  await app.register(proxyRoutes, {
+    upstream: config.PORTFOLIO_SERVICE_URL,
+    paths: ["/portfolio/*"],
     production: config.NODE_ENV === "production",
     tokens,
   });
