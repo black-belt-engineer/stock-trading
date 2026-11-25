@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useSyncExternalStore } from "react";
 
 export type QuoteView = "cards" | "table";
 
@@ -20,7 +20,7 @@ export function isQuoteViewPreference(value: unknown): value is QuoteViewPrefere
 }
 
 /** The stored choice, or "auto" when there is none or storage is unavailable (private mode, blocked). */
-export function readViewPreference(): QuoteViewPreference {
+function readViewPreference(): QuoteViewPreference {
   try {
     const value = window.localStorage.getItem(VIEW_STORAGE_KEY);
     return isQuoteView(value) ? value : "auto";
@@ -29,8 +29,8 @@ export function readViewPreference(): QuoteViewPreference {
   }
 }
 
-/** Stores the choice; "auto" removes the key. Settings' default view and the page's toggle share it. */
-export function storeViewPreference(preference: QuoteViewPreference): void {
+/** Stores the choice; "auto" removes the key. */
+function storeViewPreference(preference: QuoteViewPreference): void {
   try {
     if (preference === "auto") window.localStorage.removeItem(VIEW_STORAGE_KEY);
     else window.localStorage.setItem(VIEW_STORAGE_KEY, preference);
@@ -39,25 +39,39 @@ export function storeViewPreference(preference: QuoteViewPreference): void {
   }
 }
 
-function defaultView(): QuoteView {
-  return window.matchMedia(NARROW_QUERY).matches ? "table" : "cards";
+function subscribeNarrow(onChange: () => void): () => void {
+  const query = window.matchMedia(NARROW_QUERY);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
 }
+
+const isNarrow = (): boolean => window.matchMedia(NARROW_QUERY).matches;
+
+export type QuoteViewState = {
+  /** What the quotes page shows. */
+  view: QuoteView;
+  /** What is stored: Settings shows "auto" as "Automatic". */
+  preference: QuoteViewPreference;
+  setPreference: (preference: QuoteViewPreference) => void;
+};
 
 /**
  * Cards or table (D3). An explicit choice is remembered in `localStorage` and
- * wins over the default; without one, phones get the table and wider screens
- * the cards. When storage fails the choice lasts until the page is left.
+ * wins over the default; without one ("auto"), phones get the table and wider
+ * screens the cards. When storage fails the choice lasts until the page is left.
+ *
+ * Called once, by the shell (`ShellControls`), so the quotes page's toggle, the
+ * `v` shortcut and Settings' default view all change the same state.
  */
-export function useQuoteView(): [QuoteView, (view: QuoteView) => void] {
-  const [view, setView] = useState<QuoteView>(() => {
-    const stored = readViewPreference();
-    return stored === "auto" ? defaultView() : stored;
-  });
+export function useQuoteViewState(): QuoteViewState {
+  const [preference, setPreferenceState] = useState<QuoteViewPreference>(readViewPreference);
+  const narrow = useSyncExternalStore(subscribeNarrow, isNarrow);
+  const view: QuoteView = preference === "auto" ? (narrow ? "table" : "cards") : preference;
 
-  const choose = useCallback((next: QuoteView) => {
-    setView(next);
+  const setPreference = useCallback((next: QuoteViewPreference) => {
+    setPreferenceState(next);
     storeViewPreference(next);
   }, []);
 
-  return [view, choose];
+  return { view, preference, setPreference };
 }

@@ -2,12 +2,13 @@ import type { JSX } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { bffActionUrl } from "../auth/redirect";
 import type { AccountAction } from "../auth/redirect";
-import { useState } from "react";
 import { buttonClass } from "../components/pageStyles";
 import { PillGroup } from "../components/PillGroup";
 import { useTheme } from "../theme/ThemeProvider";
 import { isThemeChoice, THEME_CHOICES } from "../theme/theme";
-import { isQuoteViewPreference, readViewPreference, storeViewPreference } from "../hooks/useQuoteView";
+import { isQuoteViewPreference } from "../hooks/useQuoteView";
+import { useShellControls } from "../components/AppShell/ShellControls";
+import { useShortcuts } from "../shortcuts/ShortcutsProvider";
 import type { QuoteViewPreference } from "../hooks/useQuoteView";
 import { SettingsSection } from "./settings/fields";
 
@@ -47,20 +48,21 @@ function Preference(props: { title: string; hint: string; children: JSX.Element 
   );
 }
 
+const SHORTCUT_CHOICES = [
+  { id: "on", label: "On" },
+  { id: "off", label: "Off" },
+];
+
 /**
- * Display preferences of this browser, kept in `localStorage` like the toggles they
- * mirror: the theme (D4, also in the sidebar) and the quotes view (D3, also on the
- * quotes page). Keycloak is not the place for UI state.
+ * Display preferences of this browser, kept in `localStorage` like the controls they
+ * mirror: the theme (D4, also in the sidebar), the quotes view (D3, also on the
+ * quotes page and `v`) and the single-key shortcuts (D5). Keycloak is not the place
+ * for UI state.
  */
 function PreferencesSection(): JSX.Element {
   const { choice, setChoice } = useTheme();
-  // The quotes page reads the stored view when it mounts, so there is nothing live to follow here.
-  const [view, setView] = useState<QuoteViewPreference>(readViewPreference);
-  const changeView = (next: string): void => {
-    if (!isQuoteViewPreference(next)) return;
-    setView(next);
-    storeViewPreference(next);
-  };
+  const { preference, setPreference } = useShellControls();
+  const { enabled, setEnabled, openHelp } = useShortcuts();
 
   return (
     <SettingsSection id="settings-preferences" title="Preferences">
@@ -73,8 +75,27 @@ function PreferencesSection(): JSX.Element {
         />
       </Preference>
       <Preference title="Quotes view" hint="Automatic shows the table on phones and cards on wider screens.">
-        <PillGroup pills={VIEW_CHOICES} value={view} onChange={changeView} label="Quotes view" />
+        <PillGroup
+          pills={VIEW_CHOICES}
+          value={preference}
+          onChange={(v) => isQuoteViewPreference(v) && setPreference(v)}
+          label="Quotes view"
+        />
       </Preference>
+      <Preference
+        title="Single-key shortcuts"
+        hint="Keys such as / and p act without Ctrl or Alt. Turn them off if they clash with your screen reader or speech input; arrows, Enter and Esc keep working."
+      >
+        <PillGroup
+          pills={SHORTCUT_CHOICES}
+          value={enabled ? "on" : "off"}
+          onChange={(v) => setEnabled(v === "on")}
+          label="Single-key shortcuts"
+        />
+      </Preference>
+      <button type="button" onClick={openHelp} className={`${buttonClass} justify-self-start`}>
+        Show keyboard shortcuts
+      </button>
     </SettingsSection>
   );
 }

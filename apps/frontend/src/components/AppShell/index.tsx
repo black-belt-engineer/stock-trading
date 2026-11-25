@@ -7,6 +7,8 @@ import { StaleBanner } from "../StaleBanner";
 import { BottomTabBar } from "../BottomTabBar";
 import { useStreamData, useStreamStatus } from "../../stream/StreamProvider";
 import { useAuth } from "../../auth/AuthProvider";
+import { ShortcutsProvider } from "../../shortcuts/ShortcutsProvider";
+import { ShellControlsProvider } from "./ShellControls";
 
 /**
  * Sidebar and feed persist across routes; the centre column is the route outlet.
@@ -42,31 +44,35 @@ export function AppShell(): JSX.Element {
   }, []);
 
   return (
-    <div
-      className={
-        "grid h-dvh grid-cols-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-base " +
-        "md:grid-cols-[64px_minmax(0,1fr)] md:grid-rows-1 xl:grid-cols-[220px_minmax(0,1fr)_300px]"
-      }
-    >
-      <ShellSidebar feedOpen={feedOpen} onToggleFeed={toggleFeed} feedToggleRef={feedToggleRef} />
-      <main
-        className={
-          "row-start-2 flex min-h-0 flex-col gap-3.5 overflow-y-auto px-4 py-4 md:col-start-2 md:row-start-1 md:px-5 md:py-[18px] " +
-          // On narrow screens the feed tab replaces the page. Hidden, not
-          // unmounted, so the page keeps its state while the feed is shown.
-          (feedOpen ? "max-md:hidden" : "")
-        }
-      >
-        <StaleBanner />
-        <Outlet />
-      </main>
-      {/* Backdrop for the medium-width drawer: a click beside the drawer closes it. */}
-      {feedOpen && (
-        <div aria-hidden="true" onClick={closeDrawer} className="fixed inset-0 z-20 hidden bg-overlay md:max-xl:block" />
-      )}
-      <ShellFeed open={feedOpen} onClose={closeDrawer} />
-      <BottomTabBar feedOpen={feedOpen} onShowFeed={() => setFeedOpen(true)} onShowMain={showMain} />
-    </div>
+    <ShellControlsProvider>
+      <ShortcutsProvider onNavigate={showMain}>
+        <div
+          className={
+            "grid h-dvh grid-cols-1 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-base " +
+            "md:grid-cols-[64px_minmax(0,1fr)] md:grid-rows-1 xl:grid-cols-[220px_minmax(0,1fr)_300px]"
+          }
+        >
+          <ShellSidebar feedOpen={feedOpen} onToggleFeed={toggleFeed} feedToggleRef={feedToggleRef} />
+          <main
+            className={
+              "row-start-2 flex min-h-0 flex-col gap-3.5 overflow-y-auto px-4 py-4 md:col-start-2 md:row-start-1 md:px-5 md:py-[18px] " +
+              // On narrow screens the feed tab replaces the page. Hidden, not
+              // unmounted, so the page keeps its state while the feed is shown.
+              (feedOpen ? "max-md:hidden" : "")
+            }
+          >
+            <StaleBanner />
+            <Outlet />
+          </main>
+          {/* Backdrop for the medium-width drawer: a click beside the drawer closes it. */}
+          {feedOpen && (
+            <div aria-hidden="true" onClick={closeDrawer} className="fixed inset-0 z-20 hidden bg-overlay md:max-xl:block" />
+          )}
+          <ShellFeed open={feedOpen} onClose={closeDrawer} />
+          <BottomTabBar feedOpen={feedOpen} onShowFeed={() => setFeedOpen(true)} onShowMain={showMain} />
+        </div>
+      </ShortcutsProvider>
+    </ShellControlsProvider>
   );
 }
 

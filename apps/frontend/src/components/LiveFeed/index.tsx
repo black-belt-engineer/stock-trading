@@ -3,6 +3,7 @@ import type { FocusEvent, JSX, KeyboardEvent } from "react";
 import type { FeedEvent } from "../../types";
 import { formatClockTime, formatPrice, formatQuantity } from "../../utils/format";
 import { focusRing } from "../pageStyles";
+import { useShellControls } from "../AppShell/ShellControls";
 
 /** Rows the feed shows. The stream hook keeps more, so a one-symbol filter still fills the list. */
 export const FEED_ROW_LIMIT = 100;
@@ -45,7 +46,8 @@ const controlClass =
 export function LiveFeed({ feed, symbols, openSymbol, open, onClose }: Props): JSX.Element {
   const closeRef = useRef<HTMLButtonElement>(null);
   const [filter, setFilter] = useState(ALL);
-  const [pausedByUser, setPausedByUser] = useState(false);
+  // The Pause button's state lives in the shell, so the `p` shortcut can change it (D5).
+  const { feedPaused: pausedByUser, toggleFeedPaused } = useShellControls();
   const [pointerInList, setPointerInList] = useState(false);
   const [focusInList, setFocusInList] = useState(false);
   const paused = pausedByUser || pointerInList || focusInList;
@@ -143,7 +145,7 @@ export function LiveFeed({ feed, symbols, openSymbol, open, onClose }: Props): J
         </label>
         <button
           type="button"
-          onClick={() => setPausedByUser((p) => !p)}
+          onClick={toggleFeedPaused}
           className={`${controlClass} inline-flex shrink-0 cursor-pointer items-center gap-1.5 bg-elevated px-3`}
         >
           {pausedByUser ? "Resume" : "Pause"}
