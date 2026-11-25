@@ -446,13 +446,26 @@ paths:
       summary: Live price events (Server-Sent Events)
       description: |
         Opens a `text/event-stream`. Through the BFF the stream is not buffered and has no idle
-        timeout. Events:
+        timeout. It starts with `retry: 1000`. Events:
 
-        - `snapshot`: one per requested symbol that has a quote, sent first. Data: `StreamQuote`.
-          Current state, not a trade.
-        - `price`: one per trade. Data: `StreamQuote`.
+        - `snapshot`: one per requested symbol that has a quote. Data: `StreamQuote`. Current
+          state, not a trade. Sent first when there is nothing to resume from, and again to every
+          client after the server's Redis reader reconnected (ticks may have been missed).
+        - `price`: one per trade, with `id:` set to the Redis stream id (`<ms>-<seq>`, ordered).
+          Data: `StreamQuote`.
         - `session-expired`: sent when the access token expires, then the stream closes. Empty data.
           Reconnect: the BFF refreshes the token on the new request.
+        - A `: ping` comment every 15 seconds, so idle proxies keep the connection and the client
+          can tell a dead connection (nothing for 35 seconds) from a quiet market.
+
+        **Resume.** Send the newest `price` id seen as `Last-Event-ID`. If the server still holds
+        that id (the last 60 seconds, at most 2,000 entries) it replays the newer `price` events of
+        the requested symbols, then continues live, with no snapshot. Otherwise (unknown, too old,
+        malformed) it sends a snapshot. A replay can overlap live events: drop ids that are not
+        newer than the last one seen.
+
+        A client that falls behind (more than 1 MB queued, or a socket that has not drained for
+        30 seconds) is disconnected; it can reconnect and resume.
 
         The symbol list and the token are checked before any SSE header is sent, so a rejected
         request gets a normal JSON error.
@@ -465,6 +478,13 @@ paths:
           schema:
             type: string
           example: AAPL,MSFT,BRK.B
+        - name: Last-Event-ID
+          in: header
+          description: The id of the newest `price` event received, to resume after a reconnect.
+          schema:
+            type: string
+            pattern: '^\d{1,20}-\d{1,20}$'
+          example: 1764100000000-0
       responses:
         "200":
           description: The event stream.
@@ -473,9 +493,12 @@ paths:
               schema:
                 type: string
               example: |
+                retry: 1000
+
                 event: snapshot
                 data: {"symbol":"AAPL","name":"Apple Inc.","sessionId":"2026-11-16","price":228.5, ...}
 
+                id: 1764100000000-0
                 event: price
                 data: {"symbol":"AAPL","name":"Apple Inc.","sessionId":"2026-11-16","price":228.52, ...}
 
@@ -1620,6 +1643,9 @@ components:
               type: boolean
             redis:
               type: boolean
+            streamReader:
+              type: boolean
+              description: sse-service only. False once its shared Redis stream reader has been disconnected for more than 10 seconds while a stream is open.
 
     BasicHealth:
       title: bff
@@ -1658,10 +1684,27 @@ components:
     SseHealth:
       title: sse-service
       type: object
-      required: [status, activeConnections]
+      required: [status, activeConnections, stream]
       properties:
         status:
           type: string
           const: ok
         activeConnections:
           type: integer
+          description: Open `/stream` connections.
+        stream:
+          type: object
+          required: [subscribers, reader, readerLagMs, bufferedEntries]
+          properties:
+            subscribers:
+              type: integer
+            reader:
+              type: string
+              enum: [stopped, starting, connected, disconnected]
+              description: The one Redis reader shared by every stream; `stopped` while nobody is connected.
+            readerLagMs:
+              type: [integer, "null"]
+              description: Now minus the time of the newest stream entry read.
+            bufferedEntries:
+              type: integer
+              description: Entries held in memory for resume.
