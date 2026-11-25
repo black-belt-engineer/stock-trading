@@ -30,6 +30,11 @@ export function formatVolume(n: number | null): string {
   return Math.round(value).toLocaleString("en-US");
 }
 
+/** A share count, for example "1,200". */
+export function formatQuantity(n: number): string {
+  return (Number.isFinite(n) ? Math.round(n) : 0).toLocaleString("en-US");
+}
+
 export function formatTimeAgo(ts: number): string {
   const timestamp = Number.isFinite(ts) ? ts : 0;
   const diffSec = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
@@ -67,6 +72,22 @@ const tickDateTimeFormat = new Intl.DateTimeFormat(undefined, {
   fractionalSecondDigits: 3,
   hourCycle: "h23",
 });
+
+const clockTimeFormat = new Intl.DateTimeFormat(undefined, {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+/**
+ * A time of day to the second in the user's locale and time zone, 24-hour, for
+ * example "17:53:13". The app's one convention for times (History and Chart use
+ * the same locale and clock); numbers and prices stay en-US.
+ */
+export function formatClockTime(ms: number): string {
+  return clockTimeFormat.format(ms);
+}
 
 /** A tick time in the user's locale and time zone, with milliseconds; with the date when asked. */
 export function formatTickTime(ms: number, withDate: boolean): string {
