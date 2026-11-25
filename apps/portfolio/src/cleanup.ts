@@ -9,6 +9,8 @@ import { createLogger } from "@stock-platform/logger";
 import { createCleanup } from "./app.js";
 import { loadConfig } from "./config/index.js";
 import { AlertRepository } from "./repositories/alert.repository.js";
+import { TradingRepository } from "./repositories/trading.repository.js";
+import { STARTING_CASH_CENTS } from "./models/trading.js";
 import { UserDataRepository } from "./repositories/user-data.repository.js";
 import { WatchlistRepository } from "./repositories/watchlist.repository.js";
 import { migrate } from "./migrations.js";
@@ -21,7 +23,7 @@ try {
   await migrate(pool, { info: (message) => log.info(message) });
   const watchlist = new WatchlistRepository(pool);
   const alerts = new AlertRepository(pool);
-  const cleanup = createCleanup(config, new UserDataRepository(pool, watchlist, alerts), log);
+  const cleanup = createCleanup(config, new UserDataRepository(pool, watchlist, alerts, new TradingRepository(pool, STARTING_CASH_CENTS)), log);
   if (!cleanup) {
     log.error("KC_PORTFOLIO_CLIENT_SECRET is not set");
     process.exitCode = 1;

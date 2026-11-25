@@ -313,6 +313,9 @@ importers:
       '@stock-platform/symbols':
         specifier: workspace:*
         version: link:../../packages/symbols
+      '@stock-platform/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       fastify:
         specifier: ^5.2.1
         version: 5.8.5
