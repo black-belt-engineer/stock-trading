@@ -11,16 +11,16 @@ import { loadConfig } from "./config/index.js";
 import { AlertRepository } from "./repositories/alert.repository.js";
 import { UserDataRepository } from "./repositories/user-data.repository.js";
 import { WatchlistRepository } from "./repositories/watchlist.repository.js";
+import { migrate } from "./migrations.js";
 
 const log = createLogger("portfolio-cleanup");
 loadLocalEnv({ importMetaUrl: import.meta.url, log });
 const config = loadConfig();
 const pool = createPool(config.DATABASE_URL);
 try {
+  await migrate(pool, { info: (message) => log.info(message) });
   const watchlist = new WatchlistRepository(pool);
-  await watchlist.prepareSchema();
   const alerts = new AlertRepository(pool);
-  await alerts.prepareSchema();
   const cleanup = createCleanup(config, new UserDataRepository(pool, watchlist, alerts), log);
   if (!cleanup) {
     log.error("KC_PORTFOLIO_CLIENT_SECRET is not set");

@@ -37,19 +37,6 @@ function countOf(row: unknown): number {
 export class WatchlistRepository {
   constructor(private readonly db: Pool) {}
 
-  async prepareSchema(): Promise<void> {
-    // No foreign key: users live in Keycloak. Deleting a user's rows is K6's job.
-    await this.db.query(`
-      CREATE TABLE IF NOT EXISTS watchlist_items (
-        user_id UUID NOT NULL,
-        symbol TEXT NOT NULL,
-        position INTEGER NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        PRIMARY KEY (user_id, symbol)
-      );
-    `);
-  }
-
   /** The user's symbols in their order. Ties (none in practice) fall back to when they were added. */
   async list(userId: string): Promise<WatchlistRow[]> {
     const result = await this.db.query(

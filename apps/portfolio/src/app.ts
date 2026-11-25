@@ -9,6 +9,7 @@ import type { AppConfig } from "./config/index.js";
 import { AlertRepository } from "./repositories/alert.repository.js";
 import { UserDataRepository } from "./repositories/user-data.repository.js";
 import { WatchlistRepository } from "./repositories/watchlist.repository.js";
+import { migrate } from "./migrations.js";
 import { alertRoutes } from "./routes/alert.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { watchlistRoutes } from "./routes/watchlist.routes.js";
@@ -47,11 +48,13 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   // Latest prices (`price:latest:<symbol>`) are read from here once paper trading exists (P3).
   await app.register(redisPlugin, { url: config.REDIS_URL });
 
+  // Ordered migrations (`apps/portfolio/migrations`) before anything touches a table. A failed
+  // or refused migration stops the start: the money tables must never run on an unknown schema.
+  const applied = await migrate(app.db, { info: (message) => log.info(message) });
+  log.info({ applied }, "Schema ready");
+
   const watchlistRepository = new WatchlistRepository(app.db);
-  await watchlistRepository.prepareSchema();
   const alertRepository = new AlertRepository(app.db);
-  await alertRepository.prepareSchema();
-  log.info("Schema ready");
 
   const watchlistService = new WatchlistService(watchlistRepository);
   const alertService = new AlertService(alertRepository);
