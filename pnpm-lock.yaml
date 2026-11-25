@@ -298,6 +298,9 @@ importers:
       '@stock-platform/errors':
         specifier: workspace:*
         version: link:../../packages/errors
+      '@stock-platform/kafka':
+        specifier: workspace:*
+        version: link:../../packages/kafka
       '@stock-platform/logger':
         specifier: workspace:*
         version: link:../../packages/logger
