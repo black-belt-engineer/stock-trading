@@ -1,16 +1,16 @@
 import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 import type { LivenessResponse, ReadinessResponse } from "@stock-platform/schemas";
-import type { ConnectionTrackerService } from "../services/connection-tracker.service.js";
-import { HealthService } from "../services/health.service.js";
+import type { HealthService } from "../services/health.service.js";
+import type { StreamHub } from "../services/stream-hub.service.js";
 
 export type HealthRouteDeps = {
   healthService: HealthService;
-  connectionTracker: ConnectionTrackerService;
+  streamHub: StreamHub;
 };
 
 const healthRoutesImpl: FastifyPluginAsync<HealthRouteDeps> = async (fastify, opts) => {
-  const { healthService, connectionTracker } = opts;
+  const { healthService, streamHub } = opts;
 
   fastify.get("/health/live", async (): Promise<LivenessResponse> => ({
     status: "ok",
@@ -28,10 +28,14 @@ const healthRoutesImpl: FastifyPluginAsync<HealthRouteDeps> = async (fastify, op
     return body;
   });
 
-  fastify.get("/health", async () => ({
-    status: "ok" as const,
-    activeConnections: connectionTracker.getActiveConnections(),
-  }));
+  fastify.get("/health", async () => {
+    const stream = streamHub.stats();
+    return {
+      status: "ok" as const,
+      activeConnections: stream.subscribers,
+      stream,
+    };
+  });
 };
 
 export const healthRoutes = fp(healthRoutesImpl, { name: "health-routes" });
