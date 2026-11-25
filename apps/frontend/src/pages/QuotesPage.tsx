@@ -11,10 +11,15 @@ import { buttonClass, panelClass } from "../components/pageStyles";
 import { useSettledOrder } from "../hooks/useSettledOrder";
 import { useShellControls } from "../components/AppShell/ShellControls";
 import { useQuotesShortcuts } from "../shortcuts/ShortcutsProvider";
-import { DEFAULT_SORT, parseSort, sameSort, searchAndSort, sortParam } from "../utils/quoteView";
+import { DEFAULT_SORT, parseSort, sameSort, searchAndSort, sortParam, starredFirst } from "../utils/quoteView";
+import { useWatchlist } from "../watchlist/WatchlistProvider";
 import type { QuoteSort } from "../utils/quoteView";
 import { useStreamData, useStreamStatus } from "../stream/StreamProvider";
 import { isRecord } from "../utils/guards";
+
+/** `?list=watchlist`: only starred symbols. Its pill shares the sector pills' group. */
+const WATCHLIST = "watchlist";
+const LEADING_PILLS = [{ id: WATCHLIST, label: "Watchlist" }];
 
 /** Marks a history entry the dashboard pushed itself, so closing the dialog can go back. */
 type DialogState = { openedFromList: true };
@@ -82,10 +87,23 @@ export function QuotesPage(): JSX.Element {
     [searchParams, location.state, navigate],
   );
 
+  // The pills are one choice: the watchlist (`?list=watchlist`) or a sector (`?sector=`), not both.
+  const watchOnly = searchParams.get("list") === WATCHLIST;
   const changeSector = useCallback(
-    (id: string) => setViewParam("sector", id === ALL_SECTORS ? null : id),
-    [setViewParam],
+    (id: string) => {
+      const next = new URLSearchParams(searchParams);
+      next.delete("sector");
+      next.delete("list");
+      if (id === WATCHLIST) next.set("list", WATCHLIST);
+      else if (id !== ALL_SECTORS) next.set("sector", id);
+      const search = next.toString();
+      navigate({ search: search ? `?${search}` : "" }, { replace: true, state: location.state });
+    },
+    [searchParams, location.state, navigate],
   );
+
+  const watchlist = useWatchlist();
+  const watchedKey = watchlist.items.map((entry) => entry.symbol).join(",");
 
   // Search and sort live in the URL beside the sector (`/?sector=technology&q=ms&sort=price-desc`).
   const query = searchParams.get("q")?.trim() ?? "";
@@ -126,17 +144,30 @@ export function QuotesPage(): JSX.Element {
   );
   useQuotesShortcuts(shortcuts);
 
-  // Filter, then search, then sort, in one pass over the live stocks.
+  // Filter, then search, then sort, in one pass over the live stocks. Under the default sort
+  // starred symbols come first, in the watchlist's order (P1). Symbols that left the registry
+  // are not in the stream's list, so they never show here.
   const visible = useMemo(() => {
-    const inSector = sector === ALL_SECTORS ? stocks : stocks.filter((s) => sectorId(s.sector) === sector);
-    return searchAndSort(inSector, query, parseSort(sortKey));
-  }, [sector, stocks, query, sortKey]);
+    const watched = watchedKey === "" ? [] : watchedKey.split(",");
+    const watchedSet = new Set(watched);
+    const inFilter = watchOnly
+      ? stocks.filter((s) => watchedSet.has(s.symbol))
+      : sector === ALL_SECTORS
+        ? stocks
+        : stocks.filter((s) => sectorId(s.sector) === sector);
+    const sorted = searchAndSort(inFilter, query, parseSort(sortKey));
+    return sameSort(parseSort(sortKey), DEFAULT_SORT) ? starredFirst(sorted, watched) : sorted;
+  }, [watchOnly, sector, stocks, query, sortKey, watchedKey]);
 
   // Live values re-order the grid at most every few seconds, and not at all while
   // the pointer or focus is on it, so a card does not move away from a click.
   const [pointerInGrid, setPointerInGrid] = useState(false);
   const [focusInGrid, setFocusInGrid] = useState(false);
-  const shown = useSettledOrder(visible, `${sector}|${query.toLowerCase()}|${sortKey}`, pointerInGrid || focusInGrid);
+  const shown = useSettledOrder(
+    visible,
+    `${watchOnly ? WATCHLIST : sector}|${query.toLowerCase()}|${sortKey}`,
+    pointerInGrid || focusInGrid,
+  );
 
   // The open symbol lives in the URL (`/?symbol=AAPL`), so the dialog is linkable.
   const rawSymbol = searchParams.get("symbol")?.trim() || null;
@@ -195,8 +226,12 @@ export function QuotesPage(): JSX.Element {
     }
   };
 
-  // Only a search can empty a list that has symbols: every sector pill comes from a listed symbol.
-  const noMatches = listStatus === "ready" && stocks.length > 0 && visible.length === 0;
+  // With the watchlist filter, an empty watchlist has its own message; otherwise only a search
+  // can empty a list that has symbols (every sector pill comes from a listed symbol).
+  const watchedListed = watchOnly ? stocks.filter((s) => watchlist.starred.has(s.symbol)).length : 0;
+  const watchlistEmpty = watchOnly && listStatus === "ready" && watchlist.status !== "loading" && watchedListed === 0;
+  const noMatches = !watchlistEmpty && listStatus === "ready" && stocks.length > 0 && visible.length === 0;
+  const gridStatus = watchOnly && watchlist.status === "loading" ? "loading" : listStatus;
 
   return (
     <>
@@ -208,8 +243,19 @@ export function QuotesPage(): JSX.Element {
         <SortSelect value={sort} onChange={changeSort} />
         <ViewToggle value={view} onChange={setView} />
       </QuoteToolbar>
-      {sectors.length > 1 && <SectorFilter sectors={sectors} value={sector} onChange={changeSector} />}
-      {noMatches ? (
+      {sectors.length > 0 && (
+        <SectorFilter
+          sectors={sectors.length > 1 ? sectors : []}
+          leading={LEADING_PILLS}
+          value={watchOnly ? WATCHLIST : sector}
+          onChange={changeSector}
+        />
+      )}
+      {watchlistEmpty ? (
+        <section className={panelClass}>
+          {watchlist.status === "unavailable" ? "Your watchlist could not be loaded." : "Star a symbol to add it here."}
+        </section>
+      ) : noMatches ? (
         <section className={panelClass}>
           <p className="mb-2.5">No symbols match ‘{query}’</p>
           <button type="button" onClick={clearSearch} className={buttonClass}>
@@ -225,7 +271,7 @@ export function QuotesPage(): JSX.Element {
         >
           <PriceGrid
             stocks={shown}
-            status={listStatus}
+            status={gridStatus}
             onRetry={retryList}
             onOpen={openDetail}
             stale={stale}

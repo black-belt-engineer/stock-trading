@@ -6,6 +6,7 @@ import { Link } from "react-router";
 import { Sparkline } from "../Sparkline";
 import { StaleBanner } from "../StaleBanner";
 import type { ActiveStock, ListStatus } from "../../types";
+import { StarButton } from "../../watchlist/StarButton";
 import { formatChange, formatPrice, formatTimeAgo, formatVolume, NO_VALUE } from "../../utils/format";
 
 type Props = {
@@ -54,6 +55,7 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
   // control that opened it if that is still on the page, otherwise to the
   // symbol's card (also when the dialog was opened from a link). If neither
   // exists (symbol not found, or filtered out), Radix's default applies.
+  const closeRef = useRef<HTMLButtonElement>(null);
   const returnFocus = (event: Event): void => {
     const opener = openerRef.current;
     openerRef.current = null;
@@ -72,6 +74,13 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
         <Dialog.Content
           aria-describedby="detail-panel-description"
           onCloseAutoFocus={returnFocus}
+          // Focus starts on Close, as before the star joined the header: Enter right after
+          // opening should not change the watchlist.
+          onOpenAutoFocus={(event) => {
+            if (!closeRef.current) return;
+            event.preventDefault();
+            closeRef.current.focus();
+          }}
           className={
             // Narrow: a full-screen sheet, clear of the home indicator. From md up: a centred card.
             "fixed inset-0 overflow-y-auto bg-surface pb-[env(safe-area-inset-bottom)] " +
@@ -90,12 +99,16 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
               <div className="font-mono text-[20px] font-semibold">{symbol ?? "-"}</div>
               <div className="text-secondary">{stock?.name || symbol || ""}</div>
             </div>
+            <div className="-mt-1.5 -mr-1.5 flex shrink-0 items-start gap-1">
+            {stock && <StarButton symbol={stock.symbol} className="size-10!" />}
             <Dialog.Close
+              ref={closeRef}
               aria-label="Close"
-              className={`-mt-1.5 -mr-1.5 inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md text-[24px] text-secondary transition-colors duration-150 hover:text-primary ${focusRing}`}
+              className={`inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md text-[24px] text-secondary transition-colors duration-150 hover:text-primary ${focusRing}`}
             >
               ×
             </Dialog.Close>
+            </div>
           </header>
 
           {!stock && listStatus === "loading" && (

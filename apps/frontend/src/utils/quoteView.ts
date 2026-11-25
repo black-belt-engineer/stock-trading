@@ -100,6 +100,18 @@ export function compareStocks(sort: QuoteSort): (a: ActiveStock, b: ActiveStock)
   };
 }
 
+/**
+ * Starred symbols first, in the watchlist's order, then the rest in the order given (P1).
+ * Applied under the default sort only; any other sort is the user asking for that order.
+ */
+export function starredFirst(stocks: readonly ActiveStock[], watchlist: readonly string[]): ActiveStock[] {
+  if (watchlist.length === 0) return [...stocks];
+  const rank = new Map(watchlist.map((symbol, index) => [symbol, index]));
+  const starred = stocks.filter((s) => rank.has(s.symbol));
+  starred.sort((a, b) => (rank.get(a.symbol) ?? 0) - (rank.get(b.symbol) ?? 0));
+  return [...starred, ...stocks.filter((s) => !rank.has(s.symbol))];
+}
+
 /** Search, then sort; the caller has already applied the sector filter. Returns a new array. */
 export function searchAndSort(stocks: ActiveStock[], query: string, sort: QuoteSort): ActiveStock[] {
   const normalised = normaliseQuery(query);

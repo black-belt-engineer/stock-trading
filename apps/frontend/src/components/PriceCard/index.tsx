@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 import { Sparkline } from "../Sparkline";
+import { StarButton } from "../../watchlist/StarButton";
 import { formatChange, formatPrice } from "../../utils/format";
 import type { ActiveStock } from "../../types";
 
@@ -48,7 +49,9 @@ function PriceCardBase({ stock, onOpen, delayed }: Props): JSX.Element {
 
   // A button, so it is focusable and opens with Enter and Space. Buttons only
   // hold phrasing content, hence spans styled as blocks instead of divs.
+  // The star is a sibling laid over the corner, not a child: a button cannot hold another.
   return (
+    <div className="relative">
     <button
       type="button"
       onClick={() => onOpen(stock.symbol)}
@@ -61,7 +64,8 @@ function PriceCardBase({ stock, onOpen, delayed }: Props): JSX.Element {
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
       }
     >
-      <span className="flex justify-between gap-2">
+      {/* Room on the right for the star. */}
+      <span className="flex justify-between gap-2 pr-8">
         <span className="block min-w-0">
           <span className="block font-mono font-semibold">{stock.symbol}</span>
           {/* Long names ("Microsoft Corporation") are cut with an ellipsis; the title shows them whole. */}
@@ -100,6 +104,8 @@ function PriceCardBase({ stock, onOpen, delayed }: Props): JSX.Element {
         <Sparkline prices={stock.sparkline} height={40} />
       </span>
     </button>
+    <StarButton symbol={stock.symbol} className="absolute top-2.5 right-2" />
+    </div>
   );
 }
 

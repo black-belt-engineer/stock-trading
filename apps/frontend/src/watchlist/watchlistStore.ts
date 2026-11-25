@@ -85,7 +85,6 @@ export class WatchlistStore {
   private notice: string | null = null;
   private writes = 0;
   private loading: Promise<void> | null = null;
-  private disposed = false;
   private readonly listeners = new Set<() => void>();
   private snapshot: WatchlistSnapshot;
 
@@ -101,12 +100,6 @@ export class WatchlistStore {
   };
 
   getSnapshot = (): WatchlistSnapshot => this.snapshot;
-
-  /** Stops notifying; answers that arrive later change nothing. */
-  dispose(): void {
-    this.disposed = true;
-    this.listeners.clear();
-  }
 
   /** (Re)loads the list from the server. Concurrent calls share one request. */
   load(): Promise<void> {
@@ -180,7 +173,6 @@ export class WatchlistStore {
           return;
         }
         const result = wanted ? await this.api.add(symbol) : await this.api.remove(symbol);
-        if (this.disposed) return;
         this.writes += 1;
         if (result !== "ok") {
           // Roll back to what the server has; a click made meanwhile is dropped with it.
@@ -208,7 +200,6 @@ export class WatchlistStore {
         // Only symbols the server already has; one still being added is appended there anyway.
         const payload = order.filter((symbol) => this.onServer(symbol));
         const result = await this.api.saveOrder(payload);
-        if (this.disposed) return;
         this.writes += 1;
         if (result !== "ok") {
           this.order = null;
@@ -240,7 +231,6 @@ export class WatchlistStore {
   }
 
   private emit(): void {
-    if (this.disposed) return;
     this.snapshot = this.build();
     for (const listener of [...this.listeners]) listener();
   }

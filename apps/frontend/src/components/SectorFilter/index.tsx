@@ -20,6 +20,8 @@ export const ALL_SECTORS = "all";
 
 type Props = {
   sectors: SectorOption[];
+  /** Pills between "All" and the sectors, such as the watchlist (P1). */
+  leading?: readonly SectorOption[];
   value: string;
   onChange: (value: string) => void;
 };
@@ -32,8 +34,8 @@ export function sectorId(sector: string): string {
     .replace(/^-|-$/g, "");
 }
 
-export function SectorFilter({ sectors, value, onChange }: Props): JSX.Element {
-  const pills = [{ id: ALL_SECTORS, label: "All" }, ...sectors];
+export function SectorFilter({ sectors, leading = [], value, onChange }: Props): JSX.Element {
+  const pills = [{ id: ALL_SECTORS, label: "All" }, ...leading, ...sectors];
   const rootRef = useRef<HTMLDivElement>(null);
 
   // On a narrow screen the row scrolls sideways; bring the selected pill into
@@ -56,7 +58,7 @@ export function SectorFilter({ sectors, value, onChange }: Props): JSX.Element {
       value={value}
       // Clicking the selected pill would empty the group; one pill is always on.
       onValueChange={(v) => v && onChange(v)}
-      aria-label="Filter by sector"
+      aria-label={leading.length > 0 ? "Filter by watchlist or sector" : "Filter by sector"}
       // Narrow: one row that scrolls sideways. From md up the pills wrap.
       className="-mx-1 flex shrink-0 gap-2 overflow-x-auto px-1 py-1 md:flex-wrap md:overflow-visible"
     >
