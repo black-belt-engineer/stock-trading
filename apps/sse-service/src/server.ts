@@ -1,4 +1,4 @@
-import { loadLocalEnv } from "@stock-platform/env";
+import { loadLocalEnv, registerShutdownHandlers } from "@stock-platform/env";
 import { createLogger } from "@stock-platform/logger";
 import { loadConfig } from "./config/index.js";
 import { buildApp } from "./app.js";
@@ -19,14 +19,15 @@ async function start(): Promise<void> {
   await app.listen({ port: config.PORT, host: "0.0.0.0" });
   log.info({ port: config.PORT }, "SSE service listening");
 
-  const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
-    log.info({ signal }, "Shutting down SSE service");
-    await app.close();
-    process.exit(0);
-  };
-
-  process.on("SIGTERM", () => void shutdown("SIGTERM"));
-  process.on("SIGINT", () => void shutdown("SIGINT"));
+  // `app.close()` ends the open streams first (the `preClose` hook in app.ts), so it no longer
+  // waits for connected browsers.
+  registerShutdownHandlers({
+    onShutdown: async (signal) => {
+      log.info({ signal }, "Shutting down SSE service");
+      await app.close();
+      process.exit(0);
+    },
+  });
 }
 
 start().catch((err: unknown) => {

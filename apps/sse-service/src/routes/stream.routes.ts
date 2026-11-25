@@ -2,9 +2,11 @@ import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import fp from "fastify-plugin";
 import { UnauthorizedError } from "@stock-platform/errors";
 import type { Logger } from "@stock-platform/logger";
+import { retryFrame, SESSION_EXPIRED_FRAME } from "../models/sse-frames.js";
+import { lastEventIdFromHeader } from "../models/stream-ids.js";
 import { parseSymbolList } from "../models/symbols.js";
-import type { ConnectionTrackerService } from "../services/connection-tracker.service.js";
-import type { StreamSubscriptionService } from "../services/stream-subscription.service.js";
+import { SseConnection } from "../services/sse-connection.js";
+import type { StreamHub } from "../services/stream-hub.service.js";
 
 function setSseHeaders(reply: FastifyReply): void {
   reply.raw.setTimeout(0);
@@ -18,14 +20,16 @@ function setSseHeaders(reply: FastifyReply): void {
 // setTimeout fires at once for delays above 2^31 - 1 ms; tokens live minutes, but stay safe.
 const MAX_TIMER_MS = 2_147_483_647;
 
+/** Sent once at connect (S1 step 6): the first step of the client's own backoff. */
+const RETRY_HINT_MS = 1000;
+
 export type StreamRouteDeps = {
-  connectionTracker: ConnectionTrackerService;
   log: Logger;
-  streamSubscriptionService: StreamSubscriptionService;
+  streamHub: StreamHub;
 };
 
 const streamRoutesImpl: FastifyPluginAsync<StreamRouteDeps> = async (fastify, opts) => {
-  const { connectionTracker, log, streamSubscriptionService } = opts;
+  const { log, streamHub } = opts;
 
   fastify.get<{ Querystring: { symbols?: string } }>("/stream", async (request, reply) => {
     // Validated before any SSE header is sent, so a bad list gets a normal 400 or 404.
@@ -35,38 +39,38 @@ const streamRoutesImpl: FastifyPluginAsync<StreamRouteDeps> = async (fastify, op
     if (expiresAt === undefined) {
       throw new UnauthorizedError("Missing token expiry");
     }
+    // S1 resume. Client-controlled: anything but `<digits>-<digits>` counts as no id (a snapshot).
+    const lastEventId = lastEventIdFromHeader(request.headers["last-event-id"]);
 
     request.raw.setTimeout(0);
     setSseHeaders(reply);
-    connectionTracker.increment();
+    const connection = new SseConnection(reply.raw, { log });
+    connection.write(retryFrame(RETRY_HINT_MS));
 
-    const initialQuotes = await streamSubscriptionService.getInitialQuotes(symbols);
-    // Current state, not trades: sent as `snapshot` so clients keep them out of the feed.
-    for (const payload of initialQuotes) {
-      reply.raw.write(`event: snapshot\ndata: ${JSON.stringify(payload)}\n\n`);
-    }
-
-    const unsubscribe = streamSubscriptionService.subscribe(symbols, (quote) => {
-      try {
-        reply.raw.write(`event: price\ndata: ${JSON.stringify(quote)}\n\n`);
-      } catch (err) {
-        log.error({ err }, "Failed to write SSE event");
-      }
-    });
+    // The hub sends a replay of what this client missed, or a `snapshot` (current state, which
+    // clients keep out of the feed), then live `price` events.
+    const unsubscribe = streamHub.subscribe(
+      {
+        symbols: new Set(symbols),
+        send: (frame) => connection.write(frame),
+        end: () => connection.end(),
+      },
+      lastEventId,
+    );
 
     // A stream must not outlive its token, or it would stay open after logout. At `exp` the
     // server says why it closes, so the client refreshes and reconnects at once instead of
-    // treating the close as a dropped connection.
-    const expiryTimer = setTimeout(() => {
-      if (reply.raw.writableEnded || reply.raw.destroyed) return;
-      reply.raw.write("event: session-expired\ndata:\n\n");
-      reply.raw.end();
-    }, Math.min(Math.max(expiresAt - Date.now(), 0), MAX_TIMER_MS));
+    // treating the close as a dropped connection. This ends the heartbeat too: it takes precedence.
+    const expiryTimer = setTimeout(
+      () => connection.end(SESSION_EXPIRED_FRAME),
+      Math.min(Math.max(expiresAt - Date.now(), 0), MAX_TIMER_MS),
+    );
 
-    request.raw.on("close", () => {
+    // Attached before anything is awaited, so a client leaving at once is still cleaned up.
+    reply.raw.on("close", () => {
       clearTimeout(expiryTimer);
+      connection.dispose();
       unsubscribe();
-      connectionTracker.decrement();
     });
 
     return reply;
