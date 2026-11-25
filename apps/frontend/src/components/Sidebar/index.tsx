@@ -1,4 +1,5 @@
 import { NavLink } from "react-router";
+import { AlertsBell } from "../../alerts/AlertsBell";
 import { AccountControls } from "../AccountControls";
 import { ConnectionStatus } from "../ConnectionStatus";
 import { FeedIcon } from "../icons";
@@ -30,8 +31,8 @@ export function Sidebar({ status, attempts, feedOpen, onToggleFeed, feedToggleRe
   return (
     <aside
       className={
-        "row-start-1 flex items-center justify-between gap-3 border-b border-subtle bg-sidebar px-4 py-2.5 md:col-start-1 " +
-        "md:flex-col md:items-stretch md:border-r md:border-b-0 md:px-2 md:pt-[18px] md:pb-3.5 xl:px-3.5"
+        "row-start-1 flex items-center justify-between gap-2 border-b border-subtle bg-sidebar px-4 py-2.5 md:col-start-1 " +
+        "md:flex-col md:items-stretch md:gap-3 md:border-r md:border-b-0 md:px-2 md:pt-[18px] md:pb-3.5 xl:px-3.5"
       }
     >
       <div className="md:grid md:gap-[18px]">
@@ -83,7 +84,8 @@ export function Sidebar({ status, attempts, feedOpen, onToggleFeed, feedToggleRe
           </button>
         </nav>
       </div>
-      <div className="flex min-w-0 items-center gap-2 md:grid md:gap-3">
+      <div className="flex min-w-0 items-center gap-1.5 md:grid md:gap-3">
+        <AlertsBell />
         <ThemeMenu />
         <AccountControls name={userName} onLogOut={onLogOut} />
         <ConnectionStatus status={status} attempts={attempts} />

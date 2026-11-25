@@ -2,6 +2,7 @@ import type { JSX } from "react";
 import { Route, Routes } from "react-router";
 import { AuthEntry, RequireAuth } from "./auth/RouteGuards";
 import { AppShell } from "./components/AppShell";
+import { AlertsPage } from "./pages/AlertsPage";
 import { ChartPage } from "./pages/ChartPage";
 import { QuotesPage } from "./pages/QuotesPage";
 import { HistoryPage } from "./pages/HistoryPage";
@@ -22,6 +23,7 @@ export default function App(): JSX.Element {
           <Route index element={<QuotesPage />} />
           <Route path="chart/:symbol?" element={<ChartPage />} />
           <Route path="history/:symbol?" element={<HistoryPage />} />
+          <Route path="alerts" element={<AlertsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>

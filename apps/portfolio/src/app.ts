@@ -6,10 +6,13 @@ import { redisPlugin } from "@stock-platform/redis";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { AppConfig } from "./config/index.js";
+import { AlertRepository } from "./repositories/alert.repository.js";
 import { UserDataRepository } from "./repositories/user-data.repository.js";
 import { WatchlistRepository } from "./repositories/watchlist.repository.js";
+import { alertRoutes } from "./routes/alert.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { watchlistRoutes } from "./routes/watchlist.routes.js";
+import { AlertService } from "./services/alert.service.js";
 import { CleanupService, scheduleDaily } from "./services/cleanup.service.js";
 import { HealthService } from "./services/health.service.js";
 import { IdentityEventsService } from "./services/identity-events.service.js";
@@ -17,8 +20,8 @@ import { KeycloakUsers } from "./services/keycloak-users.js";
 import { WatchlistService } from "./services/watchlist.service.js";
 
 /**
- * The portfolio service (Q4): per-user data for the watchlist (P1), later alerts (P2) and paper
- * trading (P3). The browser reaches it only through the BFF, which adds the bearer token.
+ * The portfolio service (Q4): per-user data for the watchlist (P1), price alerts (P2) and, later,
+ * paper trading (P3). The browser reaches it only through the BFF, which adds the bearer token.
  */
 export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   const log = createLogger("portfolio", {
@@ -46,10 +49,13 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
 
   const watchlistRepository = new WatchlistRepository(app.db);
   await watchlistRepository.prepareSchema();
+  const alertRepository = new AlertRepository(app.db);
+  await alertRepository.prepareSchema();
   log.info("Schema ready");
 
   const watchlistService = new WatchlistService(watchlistRepository);
-  const userData = new UserDataRepository(app.db, watchlistRepository);
+  const alertService = new AlertService(alertRepository);
+  const userData = new UserDataRepository(app.db, watchlistRepository, alertRepository);
 
   // K6: account deletions in Keycloak reach this service through Kafka, and a nightly job
   // removes whatever that missed. Neither blocks the start: the API works without them.
@@ -87,6 +93,7 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   await app.register(async (protectedScope) => {
     protectedScope.addHook("preHandler", jwtGuard);
     await protectedScope.register(watchlistRoutes, { watchlistService });
+    await protectedScope.register(alertRoutes, { alertService });
   });
 
   return app;

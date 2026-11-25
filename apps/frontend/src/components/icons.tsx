@@ -121,3 +121,24 @@ export function SystemIcon(): JSX.Element {
     </Icon>
   );
 }
+
+/** A bell: alert notifications. */
+export function BellIcon(): JSX.Element {
+  return (
+    <Icon>
+      <path d="M5 13.5V9a5 5 0 0 1 10 0v4.5l1.5 2h-13z" />
+      <path d="M8.3 17.5a1.8 1.8 0 0 0 3.4 0" />
+    </Icon>
+  );
+}
+
+/** A price line crossing a dashed level: price alerts. */
+export function AlertsIcon(): JSX.Element {
+  return (
+    <Icon>
+      <path d="M2.5 8h2M7 8h2M11.5 8h2M16 8h1.5" />
+      <path d="M2.5 15.5 7 11l3 2.5 7.5-9" />
+      <circle cx="13.6" cy="9" r="1.4" />
+    </Icon>
+  );
+}

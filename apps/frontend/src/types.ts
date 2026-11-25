@@ -30,8 +30,9 @@ export type LiveQuote = DayValues & {
 };
 
 /**
- * A row of the Live Feed. Only trades exist today; alerts and order fills (P2,
- * P3) will be further `type`s sharing the panel.
+ * A row of the Live Feed. Only trades exist today. Triggered alerts (P2) are
+ * toasts and the bell, not feed rows (owner's decision); order fills (P3) may
+ * become a further `type` sharing the panel.
  */
 export type FeedEvent = LiveQuote & {
   type: "trade";
