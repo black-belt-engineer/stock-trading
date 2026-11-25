@@ -11,6 +11,7 @@ import { useShellControls } from "../components/AppShell/ShellControls";
 import { useShortcuts } from "../shortcuts/ShortcutsProvider";
 import type { QuoteViewPreference } from "../hooks/useQuoteView";
 import { SettingsSection } from "./settings/fields";
+import { WatchlistSection } from "./settings/WatchlistSection";
 
 const SETTINGS_PATH = "/settings";
 
@@ -133,6 +134,7 @@ export function SettingsPage(): JSX.Element | null {
           <ActionLink action="UPDATE_PASSWORD" returnTo={SETTINGS_PATH} label="Change password" />
         </SettingsSection>
         <PreferencesSection />
+        <WatchlistSection />
         <SettingsSection id="settings-danger" title="Danger zone" tone="danger">
           <p className="text-secondary">
             Deleting your account removes it for good and cannot be undone. Keycloak asks for your password first.
