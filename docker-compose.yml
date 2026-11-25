@@ -60,10 +60,13 @@ services:
     command:
       - redpanda
       - start
+      # Two listeners: apps on the host use localhost:9092; containers on stock-net (Keycloak's
+      # event listener, K6) use kafka:29092. A client gets the advertised address of the
+      # listener it came in on, and localhost would point a container at itself.
       - --kafka-addr
-      - PLAINTEXT://0.0.0.0:9092
+      - external://0.0.0.0:9092,internal://0.0.0.0:29092
       - --advertise-kafka-addr
-      - PLAINTEXT://localhost:9092
+      - external://localhost:9092,internal://kafka:29092
       - --mode
       - dev-container
       - --smp
@@ -77,7 +80,12 @@ services:
     image: quay.io/keycloak/keycloak:26.8.1
     container_name: stock-keycloak
     restart: unless-stopped
-    command: ["start-dev", "--import-realm"]
+    command:
+      - start-dev
+      - --import-realm
+      # K6: the stock-kafka event listener publishes account deletions to this topic.
+      - --spi-events-listener--stock-kafka--bootstrap-servers=kafka:29092
+      - --spi-events-listener--stock-kafka--topic=identity.events
     ports:
       - "8180:8080"
     env_file:
@@ -88,6 +96,8 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}
       # Read by the realm import as ${KC_BFF_CLIENT_SECRET}; scripts/dev.sh generates it.
       KC_BFF_CLIENT_SECRET: ${KC_BFF_CLIENT_SECRET:-}
+      # Read by the realm import as ${KC_PORTFOLIO_CLIENT_SECRET}: the cleanup's service account (K6).
+      KC_PORTFOLIO_CLIENT_SECRET: ${KC_PORTFOLIO_CLIENT_SECRET:-}
       # Read by the realm import as ${GOOGLE_CLIENT_ID} / ${GOOGLE_CLIENT_SECRET}. Optional:
       # without them the Google provider stays disabled (scripts/dev.sh decides).
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
@@ -107,20 +117,24 @@ services:
       KC_HOSTNAME_ADMIN: http://localhost:8180
       # Health endpoints on the management port 9000 (not published; used by the healthcheck).
       KC_HEALTH_ENABLED: "true"
-      # Only here to recreate the container when the theme JAR changes (scripts/dev.sh sets it).
-      THEME_JAR_SHA: ${THEME_JAR_SHA:-}
+      # Only here to recreate the container when a provider JAR changes (scripts/dev.sh sets it).
+      PROVIDERS_SHA: ${PROVIDERS_SHA:-}
     volumes:
       # Realm as code; imported only when the realm does not exist (scripts/dev.sh --reset-realm).
       - ./infra/keycloak:/opt/keycloak/data/import:ro
-      # The login theme JAR from `pnpm build-keycloak-theme`. The folder is mounted, not the
-      # file, so a missing build does not make Docker create a directory in its place.
-      - ./apps/keycloak-theme/dist_keycloak:/opt/keycloak/providers:ro
+      # The provider JARs, copied here by scripts/dev.sh: the login theme (`pnpm
+      # build-keycloak-theme`) and the stock-kafka event listener (infra/keycloak/event-listener).
+      # The folder is mounted, not the files, so a missing build does not make Docker create
+      # directories in their place.
+      - ./infra/keycloak/providers:/opt/keycloak/providers:ro
     extra_hosts:
       # Lets Keycloak reach the BFF on the host for back-channel logout (Linux needs this entry).
       - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
+      kafka:
+        condition: service_started
     networks:
       - stock-net
     healthcheck:
