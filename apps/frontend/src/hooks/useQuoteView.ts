@@ -2,6 +2,9 @@ import { useCallback, useState } from "react";
 
 export type QuoteView = "cards" | "table";
 
+/** The stored preference: a view, or "auto" (no stored choice) for the width-based default. */
+export type QuoteViewPreference = QuoteView | "auto";
+
 /** Where the choice is kept: a display preference of this browser, not personal data. */
 export const VIEW_STORAGE_KEY = "streamtick.quotes.view";
 
@@ -12,13 +15,27 @@ export function isQuoteView(value: unknown): value is QuoteView {
   return value === "cards" || value === "table";
 }
 
-/** The stored choice, or null when there is none or storage is unavailable (private mode, blocked). */
-function readStored(): QuoteView | null {
+export function isQuoteViewPreference(value: unknown): value is QuoteViewPreference {
+  return value === "auto" || isQuoteView(value);
+}
+
+/** The stored choice, or "auto" when there is none or storage is unavailable (private mode, blocked). */
+export function readViewPreference(): QuoteViewPreference {
   try {
     const value = window.localStorage.getItem(VIEW_STORAGE_KEY);
-    return isQuoteView(value) ? value : null;
+    return isQuoteView(value) ? value : "auto";
   } catch {
-    return null;
+    return "auto";
+  }
+}
+
+/** Stores the choice; "auto" removes the key. Settings' default view and the page's toggle share it. */
+export function storeViewPreference(preference: QuoteViewPreference): void {
+  try {
+    if (preference === "auto") window.localStorage.removeItem(VIEW_STORAGE_KEY);
+    else window.localStorage.setItem(VIEW_STORAGE_KEY, preference);
+  } catch {
+    // Not remembered; the page still switches.
   }
 }
 
@@ -32,15 +49,14 @@ function defaultView(): QuoteView {
  * the cards. When storage fails the choice lasts until the page is left.
  */
 export function useQuoteView(): [QuoteView, (view: QuoteView) => void] {
-  const [view, setView] = useState<QuoteView>(() => readStored() ?? defaultView());
+  const [view, setView] = useState<QuoteView>(() => {
+    const stored = readViewPreference();
+    return stored === "auto" ? defaultView() : stored;
+  });
 
   const choose = useCallback((next: QuoteView) => {
     setView(next);
-    try {
-      window.localStorage.setItem(VIEW_STORAGE_KEY, next);
-    } catch {
-      // Not remembered; the page still switches.
-    }
+    storeViewPreference(next);
   }, []);
 
   return [view, choose];

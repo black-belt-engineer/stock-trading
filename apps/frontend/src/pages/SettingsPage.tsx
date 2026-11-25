@@ -2,7 +2,13 @@ import type { JSX } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { bffActionUrl } from "../auth/redirect";
 import type { AccountAction } from "../auth/redirect";
+import { useState } from "react";
 import { buttonClass } from "../components/pageStyles";
+import { PillGroup } from "../components/PillGroup";
+import { useTheme } from "../theme/ThemeProvider";
+import { isThemeChoice, THEME_CHOICES } from "../theme/theme";
+import { isQuoteViewPreference, readViewPreference, storeViewPreference } from "../hooks/useQuoteView";
+import type { QuoteViewPreference } from "../hooks/useQuoteView";
 import { SettingsSection } from "./settings/fields";
 
 const SETTINGS_PATH = "/settings";
@@ -20,11 +26,63 @@ function ActionLink(props: { action: AccountAction; returnTo: string; label: str
   );
 }
 
+const VIEW_CHOICES: readonly { id: QuoteViewPreference; label: string }[] = [
+  { id: "auto", label: "Automatic" },
+  { id: "cards", label: "Cards" },
+  { id: "table", label: "Table" },
+];
+
+const THEME_PILLS = THEME_CHOICES.map(({ value, label }) => ({ id: value, label }));
+
+/** One choice in Preferences: a caption (the pills carry the same name), the pills, and a line on what it does. */
+function Preference(props: { title: string; hint: string; children: JSX.Element }): JSX.Element {
+  return (
+    <div className="grid gap-2">
+      <p aria-hidden="true" className="text-[13px] text-primary">
+        {props.title}
+      </p>
+      {props.children}
+      <p className="text-[13px] text-secondary">{props.hint}</p>
+    </div>
+  );
+}
+
+/**
+ * Display preferences of this browser, kept in `localStorage` like the toggles they
+ * mirror: the theme (D4, also in the sidebar) and the quotes view (D3, also on the
+ * quotes page). Keycloak is not the place for UI state.
+ */
+function PreferencesSection(): JSX.Element {
+  const { choice, setChoice } = useTheme();
+  // The quotes page reads the stored view when it mounts, so there is nothing live to follow here.
+  const [view, setView] = useState<QuoteViewPreference>(readViewPreference);
+  const changeView = (next: string): void => {
+    if (!isQuoteViewPreference(next)) return;
+    setView(next);
+    storeViewPreference(next);
+  };
+
+  return (
+    <SettingsSection id="settings-preferences" title="Preferences">
+      <Preference title="Theme" hint="System follows your device's light or dark setting.">
+        <PillGroup
+          pills={THEME_PILLS}
+          value={choice}
+          onChange={(v) => isThemeChoice(v) && setChoice(v)}
+          label="Theme"
+        />
+      </Preference>
+      <Preference title="Quotes view" hint="Automatic shows the table on phones and cards on wider screens.">
+        <PillGroup pills={VIEW_CHOICES} value={view} onChange={changeView} label="Quotes view" />
+      </Preference>
+    </SettingsSection>
+  );
+}
+
 /**
  * `/settings`. Keycloak owns the account: each section describes what it does and
  * has a button that opens Keycloak's page for it, then comes back here with the
- * session's name and email refreshed. A Preferences section comes with its first
- * setting (D3's default view, D4's theme), not before (owner decision).
+ * session's name and email refreshed. Preferences are this browser's display settings.
  */
 export function SettingsPage(): JSX.Element | null {
   const { state } = useAuth();
@@ -53,6 +111,7 @@ export function SettingsPage(): JSX.Element | null {
           </p>
           <ActionLink action="UPDATE_PASSWORD" returnTo={SETTINGS_PATH} label="Change password" />
         </SettingsSection>
+        <PreferencesSection />
         <SettingsSection id="settings-danger" title="Danger zone" tone="danger">
           <p className="text-secondary">
             Deleting your account removes it for good and cannot be undone. Keycloak asks for your password first.
