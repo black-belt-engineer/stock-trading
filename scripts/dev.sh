@@ -142,6 +142,21 @@ if ! docker exec stock-redpanda rpk topic list 2>/dev/null | grep -qE '^identity
     || die "could not create the topic identity.events"
 fi
 
+# Price ticks: keep 12 hours in 1-hour segments, well under the consumer's 24-hour idempotency
+# marker (ADR-003). Same values as packages/kafka/src/price-topic.ts, which only applies them
+# when a service creates the topic; an existing topic is altered here.
+PRICE_TOPIC_CONFIG=(retention.ms=43200000 segment.ms=3600000)
+if docker exec stock-redpanda rpk topic list 2>/dev/null | grep -qE '^stock-prices[[:space:]]'; then
+  docker exec stock-redpanda rpk topic alter-config stock-prices --set "${PRICE_TOPIC_CONFIG[0]}" \
+    --set "${PRICE_TOPIC_CONFIG[1]}" >/dev/null \
+    || die "could not set retention on the topic stock-prices"
+else
+  log "Creating the Kafka topic stock-prices (12 hours retention)"
+  docker exec stock-redpanda rpk topic create stock-prices -p 6 -c "${PRICE_TOPIC_CONFIG[0]}" \
+    -c "${PRICE_TOPIC_CONFIG[1]}" >/dev/null \
+    || die "could not create the topic stock-prices"
+fi
+
 # apps/user's table is gone with the service; the accounts live in Keycloak now.
 docker exec stock-postgres psql -U stockuser -d stockdb -qc "DROP TABLE IF EXISTS users" >/dev/null
 

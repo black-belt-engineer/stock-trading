@@ -33,6 +33,10 @@ services:
     image: redis:7-alpine
     container_name: stock-redis
     restart: unless-stopped
+    # A deliberate ceiling, no eviction (ADR-003). Every key that grows per tick expires, so
+    # reaching 256 MB means a bug; Redis then refuses writes loudly instead of silently
+    # evicting BFF sessions (logging users out) or idempotency markers (double-applying ticks).
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
     ports:
       - "6379:6379"
     env_file:
