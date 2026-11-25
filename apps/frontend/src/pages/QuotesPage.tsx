@@ -1,11 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { JSX } from "react";
+import type { FocusEvent, JSX } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { Topbar } from "../components/Topbar";
 import { PriceGrid } from "../components/PriceGrid";
 import { DetailPanel } from "../components/DetailPanel";
 import { ALL_SECTORS, SectorFilter, sectorId } from "../components/SectorFilter";
 import type { SectorOption } from "../components/SectorFilter";
+import { QuoteSearch, QuoteToolbar, SortSelect, ViewToggle } from "../components/QuoteToolbar";
+import { buttonClass, panelClass } from "../components/pageStyles";
+import { useSettledOrder } from "../hooks/useSettledOrder";
+import { useQuoteView } from "../hooks/useQuoteView";
+import { DEFAULT_SORT, parseSort, sameSort, searchAndSort, sortParam } from "../utils/quoteView";
+import type { QuoteSort } from "../utils/quoteView";
 import { useStreamData, useStreamStatus } from "../stream/StreamProvider";
 import { isRecord } from "../utils/guards";
 
@@ -60,22 +66,57 @@ export function QuotesPage(): JSX.Element {
     navigate({ search: search ? `?${search}` : "" }, { replace: true, state: location.state });
   }, [rawSector, sector, listStatus, searchParams, location.state, navigate]);
 
-  const changeSector = useCallback(
-    (id: string) => {
+  /**
+   * Sets one view parameter (sector, search, sort); `null` removes it. Replaced,
+   * not pushed: Back leaves the page instead of stepping through filters.
+   */
+  const setViewParam = useCallback(
+    (name: "sector" | "q" | "sort", value: string | null) => {
       const next = new URLSearchParams(searchParams);
-      if (id === ALL_SECTORS) next.delete("sector");
-      else next.set("sector", id);
+      if (value === null) next.delete(name);
+      else next.set(name, value);
       const search = next.toString();
-      // Replaced, not pushed: Back leaves the page instead of stepping through filters.
       navigate({ search: search ? `?${search}` : "" }, { replace: true, state: location.state });
     },
     [searchParams, location.state, navigate],
   );
 
-  const filtered = useMemo(
-    () => (sector === ALL_SECTORS ? stocks : stocks.filter((s) => sectorId(s.sector) === sector)),
-    [sector, stocks],
+  const changeSector = useCallback(
+    (id: string) => setViewParam("sector", id === ALL_SECTORS ? null : id),
+    [setViewParam],
   );
+
+  // Search and sort live in the URL beside the sector (`/?sector=technology&q=ms&sort=price-desc`).
+  const query = searchParams.get("q")?.trim() ?? "";
+  const sort = parseSort(searchParams.get("sort"));
+  const sortKey = sortParam(sort);
+
+  const changeQuery = useCallback((q: string) => setViewParam("q", q === "" ? null : q), [setViewParam]);
+  const changeSort = useCallback(
+    (next: QuoteSort) => setViewParam("sort", sameSort(next, DEFAULT_SORT) ? null : sortParam(next)),
+    [setViewParam],
+  );
+
+  // Cards or table: a per-browser preference, not part of the URL.
+  const [view, setView] = useQuoteView();
+
+  const searchRef = useRef<HTMLInputElement>(null);
+  const clearSearch = useCallback(() => {
+    changeQuery("");
+    searchRef.current?.focus();
+  }, [changeQuery]);
+
+  // Filter, then search, then sort, in one pass over the live stocks.
+  const visible = useMemo(() => {
+    const inSector = sector === ALL_SECTORS ? stocks : stocks.filter((s) => sectorId(s.sector) === sector);
+    return searchAndSort(inSector, query, parseSort(sortKey));
+  }, [sector, stocks, query, sortKey]);
+
+  // Live values re-order the grid at most every few seconds, and not at all while
+  // the pointer or focus is on it, so a card does not move away from a click.
+  const [pointerInGrid, setPointerInGrid] = useState(false);
+  const [focusInGrid, setFocusInGrid] = useState(false);
+  const shown = useSettledOrder(visible, `${sector}|${query.toLowerCase()}|${sortKey}`, pointerInGrid || focusInGrid);
 
   // The open symbol lives in the URL (`/?symbol=AAPL`), so the dialog is linkable.
   const rawSymbol = searchParams.get("symbol")?.trim() || null;
@@ -99,14 +140,14 @@ export function QuotesPage(): JSX.Element {
   // it through a ref keeps `openDetail` stable, so memo(PriceCard) still skips
   // cards whose stock did not change.
   const navigateRef = useRef(navigate);
-  const searchRef = useRef(searchParams);
+  const paramsRef = useRef(searchParams);
   useEffect(() => {
     navigateRef.current = navigate;
-    searchRef.current = searchParams;
+    paramsRef.current = searchParams;
   }, [navigate, searchParams]);
 
   const openDetail = useCallback((symbol: string) => {
-    const next = new URLSearchParams(searchRef.current);
+    const next = new URLSearchParams(paramsRef.current);
     next.set("symbol", symbol);
     const state: DialogState = { openedFromList: true };
     navigateRef.current({ search: `?${next.toString()}` }, { state });
@@ -126,23 +167,56 @@ export function QuotesPage(): JSX.Element {
     navigate({ search: search ? `?${search}` : "" }, { replace: true });
   }, [location.state, navigate, searchParams]);
 
-  const lastUpdated = useMemo(() => filtered.reduce((acc, s) => Math.max(acc, s.lastUpdated), 0), [filtered]);
+  const lastUpdated = useMemo(() => visible.reduce((acc, s) => Math.max(acc, s.lastUpdated), 0), [visible]);
+
+  const onGridBlur = (event: FocusEvent<HTMLDivElement>): void => {
+    if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) {
+      setFocusInGrid(false);
+    }
+  };
+
+  // Only a search can empty a list that has symbols: every sector pill comes from a listed symbol.
+  const noMatches = listStatus === "ready" && stocks.length > 0 && visible.length === 0;
 
   return (
     <>
       {/* The page heading, for screen reader navigation; sighted users see the active nav item. */}
       <h1 className="sr-only">Quotes</h1>
-      <Topbar stocks={filtered} allStocks={stocks} lastUpdate={lastUpdated} onOpen={openDetail} />
+      <Topbar stocks={visible} allStocks={stocks} lastUpdate={lastUpdated} onOpen={openDetail} />
+      <QuoteToolbar>
+        <QuoteSearch ref={searchRef} value={query} onChange={changeQuery} />
+        <SortSelect value={sort} onChange={changeSort} />
+        <ViewToggle value={view} onChange={setView} />
+      </QuoteToolbar>
       {sectors.length > 1 && <SectorFilter sectors={sectors} value={sector} onChange={changeSector} />}
-      <PriceGrid
-        stocks={filtered}
-        status={listStatus}
-        onRetry={retryList}
-        onOpen={openDetail}
-        stale={stale}
-        live={status === "live"}
-        now={now}
-      />
+      {noMatches ? (
+        <section className={panelClass}>
+          <p className="mb-2.5">No symbols match ‘{query}’</p>
+          <button type="button" onClick={clearSearch} className={buttonClass}>
+            Clear search
+          </button>
+        </section>
+      ) : (
+        <div
+          onPointerEnter={() => setPointerInGrid(true)}
+          onPointerLeave={() => setPointerInGrid(false)}
+          onFocus={() => setFocusInGrid(true)}
+          onBlur={onGridBlur}
+        >
+          <PriceGrid
+            stocks={shown}
+            status={listStatus}
+            onRetry={retryList}
+            onOpen={openDetail}
+            stale={stale}
+            live={status === "live"}
+            now={now}
+            view={view}
+            sort={sort}
+            onSortChange={changeSort}
+          />
+        </div>
+      )}
       <DetailPanel
         symbol={selected}
         stock={selectedStock}

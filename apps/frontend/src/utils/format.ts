@@ -30,6 +30,26 @@ export function formatVolume(n: number | null): string {
   return Math.round(value).toLocaleString("en-US");
 }
 
+const compactVolumeFormat = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+
+/** A volume in short form for narrow columns, for example "21.6M". */
+export function formatVolumeCompact(n: number | null): string {
+  if (n === null) return NO_VALUE;
+  return compactVolumeFormat.format(Number.isFinite(n) ? n : 0);
+}
+
+/** "+1.23" or "-1.23": a signed amount without a currency sign. */
+export function formatSignedAmount(n: number | null): string {
+  if (n === null) return NO_VALUE;
+  const value = Number.isFinite(n) ? n : 0;
+  return `${value >= 0 ? "+" : "-"}${Math.abs(value).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/** A share count, for example "1,200". */
+export function formatQuantity(n: number): string {
+  return (Number.isFinite(n) ? Math.round(n) : 0).toLocaleString("en-US");
+}
+
 export function formatTimeAgo(ts: number): string {
   const timestamp = Number.isFinite(ts) ? ts : 0;
   const diffSec = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
@@ -67,6 +87,22 @@ const tickDateTimeFormat = new Intl.DateTimeFormat(undefined, {
   fractionalSecondDigits: 3,
   hourCycle: "h23",
 });
+
+const clockTimeFormat = new Intl.DateTimeFormat(undefined, {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+/**
+ * A time of day to the second in the user's locale and time zone, 24-hour, for
+ * example "17:53:13". The app's one convention for times (History and Chart use
+ * the same locale and clock); numbers and prices stay en-US.
+ */
+export function formatClockTime(ms: number): string {
+  return clockTimeFormat.format(ms);
+}
 
 /** A tick time in the user's locale and time zone, with milliseconds; with the date when asked. */
 export function formatTickTime(ms: number, withDate: boolean): string {

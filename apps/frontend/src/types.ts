@@ -29,7 +29,12 @@ export type LiveQuote = DayValues & {
   timestamp: number;
 };
 
+/**
+ * A row of the Live Feed. Only trades exist today; alerts and order fills (P2,
+ * P3) will be further `type`s sharing the panel.
+ */
 export type FeedEvent = LiveQuote & {
+  type: "trade";
   id: string;
 };
 

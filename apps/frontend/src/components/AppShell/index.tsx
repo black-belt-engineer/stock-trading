@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX, RefObject } from "react";
-import { Outlet, useLocation } from "react-router";
+import { Outlet, useLocation, useSearchParams } from "react-router";
 import { Sidebar } from "../Sidebar";
 import { LiveFeed } from "../LiveFeed";
 import { StaleBanner } from "../StaleBanner";
@@ -84,6 +84,12 @@ function ShellSidebar(props: {
 }
 
 function ShellFeed({ open, onClose }: { open: boolean; onClose: () => void }): JSX.Element {
-  const { feed } = useStreamData();
-  return <LiveFeed feed={feed} open={open} onClose={onClose} />;
+  const { feed, stocks } = useStreamData();
+  const { pathname } = useLocation();
+  const [searchParams] = useSearchParams();
+  // The quote dialog exists only on the quotes page, as `/?symbol=AAPL`.
+  const openSymbol = pathname === "/" ? searchParams.get("symbol")?.trim().toUpperCase() || null : null;
+  const symbolsKey = stocks.map((s) => s.symbol).sort().join(",");
+  const symbols = useMemo(() => (symbolsKey === "" ? [] : symbolsKey.split(",")), [symbolsKey]);
+  return <LiveFeed feed={feed} symbols={symbols} openSymbol={openSymbol} open={open} onClose={onClose} />;
 }

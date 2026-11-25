@@ -18,6 +18,15 @@ const MAX_BACKOFF_MS = 30000;
  */
 const SILENCE_LIMIT_MS = 15_000;
 
+/**
+ * How many recent trades the hook keeps, newest first, across all symbols. Only a
+ * memory bound: the Live Feed decides how many rows to show (D2). It is large so
+ * that a feed filtered to one symbol still finds its rows (18 symbols tick about
+ * once a second each, so this is close to two minutes of trades), and so that a
+ * paused feed can count what arrived meanwhile.
+ */
+export const FEED_BUFFER_LIMIT = 2000;
+
 /** Returns null for a malformed message so one bad frame cannot throw inside a listener. */
 function parseQuote(raw: string): LiveQuote | null {
   let data: unknown;
@@ -156,9 +165,10 @@ export function usePriceStream(symbols: string[] | null): {
       setFeed((prev) => {
         const next: FeedEvent = {
           ...safeData,
+          type: "trade",
           id: `${safeData.symbol}-${safeData.timestamp}-${Math.random().toString(16).slice(2)}`,
         };
-        return [next, ...prev].slice(0, 20);
+        return [next, ...prev].slice(0, FEED_BUFFER_LIMIT);
       });
     };
 
