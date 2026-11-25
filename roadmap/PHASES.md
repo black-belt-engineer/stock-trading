@@ -1,6 +1,6 @@
 # Phases
 
-The roadmap cut into pieces that each fit one working session. `README.md` gives the reasons for the order; this file is the tracker. To run a phase, start a fresh chat and say: **Read roadmap/PROMPT.md and follow it.**
+The roadmap cut into pieces that each fit one working session. `README.md` gives the reasons for the order; this file is the tracker. To run a phase, start a fresh chat and type **`/next-phase`** (or `/next-phase 14` for a specific phase). The skill is `.claude/skills/next-phase/SKILL.md`.
 
 ## Status
 

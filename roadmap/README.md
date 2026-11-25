@@ -130,7 +130,7 @@ Work these decisions add that is not a feature of its own:
 | File | Contents |
 |---|---|
 | [PHASES.md](PHASES.md) | The work cut into session-sized phases, with status and hand-over notes |
-| [PROMPT.md](PROMPT.md) | The one prompt used to start every phase in a fresh chat |
+| [`/next-phase`](../.claude/skills/next-phase/SKILL.md) | The skill used to start every phase in a fresh chat (replaces `PROMPT.md`) |
 | [01-bug-fixes.md](01-bug-fixes.md) | B1–B3: defects that make current data look wrong |
 | [02-ui-foundation.md](02-ui-foundation.md) | U1–U5: styling, layout, accessibility, states, routing |
 | [03-market-data.md](03-market-data.md) | M1–M6: symbols, daily stats, history, candles, movers, export |
