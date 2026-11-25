@@ -21,7 +21,9 @@ const RETRY_MS = 30_000;
  * skipped, so one bad message cannot stop the consumer.
  *
  * Runs in the background: the HTTP API starts even with the broker down, and the consumer keeps
- * trying to connect. A new group starts at the beginning of the topic, so deletions published
+ * trying to connect, also after a crash kafkajs does not recover from itself. Producers must not
+ * compress with Snappy, LZ4 or ZSTD: kafkajs only has gzip built in (Keycloak's listener sends
+ * uncompressed). A new group starts at the beginning of the topic, so deletions published
  * before the service first ran are not missed.
  */
 export class IdentityEventsService {
@@ -50,7 +52,12 @@ export class IdentityEventsService {
       const consumer = kafka.consumer({ groupId });
       this.consumer = consumer;
       consumer.on("consumer.crash", (event) => {
-        log.error({ error: event.payload.error, restart: event.payload.restart }, "identity.events consumer crashed");
+        log.error({ err: event.payload.error, restart: event.payload.restart }, "identity.events consumer crashed");
+        // kafkajs restarts itself after a retriable error only. After any other (for example a
+        // message compressed with a codec it lacks, such as Snappy) it stops for good; start
+        // again after a pause instead of going quiet. The bad message is retried, so the error
+        // repeats in the log until someone looks.
+        if (!event.payload.restart) void this.reconnectLater(consumer);
       });
       await consumer.connect();
       await consumer.subscribe({ topic, fromBeginning: true });
@@ -72,13 +79,18 @@ export class IdentityEventsService {
       log.info({ topic, groupId }, "Consuming identity events");
     } catch (err) {
       log.error({ err }, `Could not start the identity.events consumer; retrying in ${RETRY_MS / 1000} s`);
-      await this.consumer?.disconnect().catch(() => undefined);
-      this.consumer = undefined;
-      if (!this.stopped) {
-        this.retry = setTimeout(() => void this.connect(), RETRY_MS);
-        this.retry.unref();
-      }
+      await this.reconnectLater(this.consumer);
     }
+  }
+
+  private async reconnectLater(consumer: Consumer | undefined): Promise<void> {
+    if (consumer !== this.consumer) return;
+    await consumer?.disconnect().catch(() => undefined);
+    this.consumer = undefined;
+    if (this.stopped) return;
+    clearTimeout(this.retry);
+    this.retry = setTimeout(() => void this.connect(), RETRY_MS);
+    this.retry.unref();
   }
 
   async stop(): Promise<void> {
