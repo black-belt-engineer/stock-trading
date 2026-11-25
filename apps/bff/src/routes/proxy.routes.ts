@@ -5,8 +5,10 @@ import { sessionCookieName } from "../services/session-cookie.js";
 import type { TokenRefresher } from "../services/token-refresh.service.js";
 
 export type ProxyRouteDeps = {
-  /** Base URL of the service behind `/quotes/*` and `/stream`. */
+  /** Base URL of the service behind `paths`. */
   upstream: string;
+  /** Route patterns sent to `upstream`, for example `/quotes/*` and `/stream`. */
+  paths: readonly string[];
   production: boolean;
   /** Reads a session and refreshes its access token when it is about to expire. */
   tokens: Pick<TokenRefresher, "getSession">;
@@ -15,14 +17,15 @@ export type ProxyRouteDeps = {
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"] as const;
 
 /**
- * Forwards `/quotes/*` and `/stream` to the SSE service with `Authorization: Bearer`. The browser
+ * Forwards `paths` to one service with `Authorization: Bearer` (registered once per service:
+ * `/quotes/*` and `/stream` to the SSE service, `/portfolio/*` to the portfolio service). The browser
  * only has the session cookie; the token comes from the Redis session and never reaches the page.
  * The service still verifies the token itself, so this hop is not a trust boundary.
  *
  * Encapsulated on purpose: the raw body parser below must not touch the `/bff/*` routes.
  */
 export const proxyRoutes: FastifyPluginAsync<ProxyRouteDeps> = async (fastify, opts) => {
-  const { upstream, production, tokens } = opts;
+  const { upstream, paths, production, tokens } = opts;
   const sessionCookie = sessionCookieName(production);
 
   await fastify.register(replyFrom, {
@@ -34,18 +37,14 @@ export const proxyRoutes: FastifyPluginAsync<ProxyRouteDeps> = async (fastify, o
   // Bodies of any type go through as they came instead of being parsed (JSON keeps its parser).
   fastify.addContentTypeParser("*", (_request, payload, done) => done(null, payload));
 
-  fastify.route({
-    method: [...METHODS],
-    url: "/quotes/*",
-    preHandler: requireCsrfHeader,
-    handler: (request, reply) => forward(request, reply),
-  });
-  fastify.route({
-    method: [...METHODS],
-    url: "/stream",
-    preHandler: requireCsrfHeader,
-    handler: (request, reply) => forward(request, reply),
-  });
+  for (const url of paths) {
+    fastify.route({
+      method: [...METHODS],
+      url,
+      preHandler: requireCsrfHeader,
+      handler: (request, reply) => forward(request, reply),
+    });
+  }
 
   async function forward(
     request: Parameters<typeof requireCsrfHeader>[0],

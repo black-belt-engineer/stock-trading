@@ -9,7 +9,9 @@ info:
     | Service       | Port | Paths                                                        |
     |---------------|------|--------------------------------------------------------------|
     | bff           | 3005 | `/bff/*`, and `/quotes/*` and `/stream` forwarded to sse-service |
+    |               |      | and `/portfolio/*` forwarded to portfolio                    |
     | sse-service   | 3003 | `/quotes/*`, `/stream` (behind the BFF)                      |
+    | portfolio     | 3006 | `/portfolio/*` (behind the BFF)                              |
     | consumer      | 3002 | health only                                                  |
     | ingestor      | 3001 | health only                                                  |
 
@@ -20,7 +22,7 @@ info:
 
     **Authentication.** The browser never sees a token. `/bff/login` starts the Keycloak login, and
     `/bff/callback` stores the tokens in a Redis session and sets the `session` cookie (`HttpOnly`,
-    `SameSite=Strict`, holding only a session id). For `/quotes/*` and `/stream` the BFF refreshes
+    `SameSite=Strict`, holding only a session id). For `/quotes/*`, `/stream` and `/portfolio/*` the BFF refreshes
     the access token when it is within 30 seconds of expiry, then forwards the request with
     `Authorization: Bearer <access token>`. The cookie and any `Authorization` header the browser
     sent are dropped. The services still verify the token themselves, against Keycloak's keys.
@@ -46,6 +48,8 @@ servers:
     description: bff
   - url: http://localhost:3003
     description: sse-service (needs a bearer token; use the BFF instead)
+  - url: http://localhost:3006
+    description: portfolio (needs a bearer token; use the BFF instead)
   - url: http://localhost:3002
     description: consumer
   - url: http://localhost:3001
@@ -58,6 +62,8 @@ tags:
     description: Latest quotes, tick history and candles (sse-service, through the BFF). All need a session.
   - name: Stream
     description: Server-sent price events (sse-service, through the BFF).
+  - name: Watchlist
+    description: The user's starred symbols (portfolio service, through the BFF). The user is always the session's; no path takes a user id.
   - name: Health
     description: Probes, present on every service.
 
@@ -477,6 +483,128 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /portfolio/watchlist:
+    get:
+      tags: [Watchlist]
+      operationId: getWatchlist
+      summary: The user's watchlist, in their order
+      description: |
+        Symbols that have left the registry stay on the list with `listed: false`, so the user can
+        remove them; the app does not show them in the grid.
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: The watchlist, possibly empty.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchlistResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /portfolio/watchlist/order:
+    put:
+      tags: [Watchlist]
+      operationId: reorderWatchlist
+      summary: Set the order of the watchlist
+      description: |
+        Send the whole list in the new order. Watched symbols the request leaves out (added on
+        another device meanwhile) keep their relative order after the named ones. A symbol that is
+        not on the list, or named twice, is a `400`. Two devices reordering at once: the last write wins.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [symbols]
+              properties:
+                symbols:
+                  type: array
+                  maxItems: 100
+                  items:
+                    type: string
+            example: { symbols: [TSLA, AAPL, KO] }
+      responses:
+        "204":
+          description: Reordered.
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfRejected"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /portfolio/watchlist/{symbol}:
+    put:
+      tags: [Watchlist]
+      operationId: addToWatchlist
+      summary: Star a symbol (idempotent)
+      description: Adds the symbol at the end of the list. A symbol already on it changes nothing. At most 100 symbols.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Symbol"
+        - $ref: "#/components/parameters/XRequestedWith"
+      responses:
+        "204":
+          description: On the watchlist.
+        "400":
+          $ref: "#/components/responses/InvalidSymbol"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfRejected"
+        "404":
+          $ref: "#/components/responses/UnknownSymbol"
+        "409":
+          description: The watchlist already has 100 symbols (`CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    delete:
+      tags: [Watchlist]
+      operationId: removeFromWatchlist
+      summary: Unstar a symbol (idempotent)
+      description: Any well-formed symbol is accepted, also one no longer in the registry. Not on the list is not an error.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Symbol"
+        - $ref: "#/components/parameters/XRequestedWith"
+      responses:
+        "204":
+          description: Not on the watchlist (any more).
+        "400":
+          $ref: "#/components/responses/InvalidSymbol"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfRejected"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /health:
     get:
       tags: [Health]
@@ -620,6 +748,28 @@ components:
             $ref: "#/components/schemas/Error"
 
   schemas:
+    WatchlistItem:
+      type: object
+      required: [symbol, addedAt, listed]
+      properties:
+        symbol:
+          type: string
+          example: AAPL
+        addedAt:
+          type: string
+          format: date-time
+          description: When the symbol was starred.
+        listed:
+          type: boolean
+          description: False once the symbol has left the registry.
+    WatchlistResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WatchlistItem"
     Error:
       type: object
       required: [error, code]

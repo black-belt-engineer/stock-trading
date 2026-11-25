@@ -278,6 +278,67 @@ importers:
         specifier: ^6.0.11
         version: 6.4.2(@types/node@22.19.17)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)
 
+  apps/portfolio:
+    dependencies:
+      '@fastify/type-provider-typebox':
+        specifier: ^5.1.0
+        version: 5.2.0(@sinclair/typebox@0.34.49)
+      '@sinclair/typebox':
+        specifier: ^0.34.33
+        version: 0.34.49
+      '@stock-platform/auth-guard':
+        specifier: workspace:*
+        version: link:../../packages/auth-guard
+      '@stock-platform/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@stock-platform/env':
+        specifier: workspace:*
+        version: link:../../packages/env
+      '@stock-platform/errors':
+        specifier: workspace:*
+        version: link:../../packages/errors
+      '@stock-platform/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
+      '@stock-platform/redis':
+        specifier: workspace:*
+        version: link:../../packages/redis
+      '@stock-platform/schemas':
+        specifier: workspace:*
+        version: link:../../packages/schemas
+      '@stock-platform/symbols':
+        specifier: workspace:*
+        version: link:../../packages/symbols
+      fastify:
+        specifier: ^5.2.1
+        version: 5.8.5
+      fastify-plugin:
+        specifier: ^5.0.1
+        version: 5.1.0
+      ioredis:
+        specifier: ^5.8.1
+        version: 5.10.1
+      pg:
+        specifier: ^8.20.0
+        version: 8.20.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.17
+      '@types/pg':
+        specifier: ^8.15.6
+        version: 8.20.0
+      tsx:
+        specifier: ^4.19.3
+        version: 4.21.0
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.12
+        version: 4.1.12(@types/node@22.19.17)(vite@6.4.2(@types/node@22.19.17)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0))
+
   apps/sse-service:
     dependencies:
       '@fastify/type-provider-typebox':

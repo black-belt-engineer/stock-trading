@@ -206,6 +206,7 @@ cat <<'EOF'
   ingestor     http://localhost:3001/health
   consumer     http://localhost:3002/health
   sse-service  http://localhost:3003/health
+  portfolio    http://localhost:3006/health
   bff          http://localhost:3005/health
   frontend     http://localhost:5173
   keycloak     http://localhost:8180/admin  (admin console; bootstrap admin from .env.local)

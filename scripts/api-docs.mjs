@@ -22,6 +22,7 @@ const ROUTES = [
   ["/bff/", BFF],
   ["/quotes/", BFF],
   ["/stream", BFF],
+  ["/portfolio/", BFF],
 ];
 
 const PAGE = `<!doctype html>
@@ -113,6 +114,6 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Swagger UI: http://localhost:${PORT}`);
-  console.log(`Proxying /bff, /quotes, /stream → ${BFF}`);
+  console.log(`Proxying /bff, /quotes, /stream, /portfolio → ${BFF}`);
   console.log(`Log in to the app on http://localhost:5173 first in the same browser: the session cookie is shared across ports`);
 });

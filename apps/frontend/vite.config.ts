@@ -32,7 +32,7 @@ function preloadFonts(): Plugin {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   // Everything the app calls goes through the BFF, which holds the session and adds the
-  // bearer token; nothing reaches the SSE service directly.
+  // bearer token; nothing reaches the SSE or portfolio service directly.
   const bffTarget = env.VITE_BFF_URL ?? "http://localhost:3005";
   // Keycloak's pages, its form posts and its cookies stay on the app's origin (K1).
   // changeOrigin stays off: with KC_HOSTNAME_BACKCHANNEL_DYNAMIC Keycloak builds the
@@ -62,6 +62,8 @@ export default defineConfig(({ mode }) => {
           },
         },
         "/quotes": { target: bffTarget, changeOrigin: true },
+        // With the slash: the bare `/portfolio` stays free for the app's own page (P3).
+        "/portfolio/": { target: bffTarget, changeOrigin: true },
         "/realms": keycloak,
         "/resources": keycloak,
       },
