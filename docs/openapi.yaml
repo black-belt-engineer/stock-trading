@@ -64,6 +64,10 @@ tags:
     description: Server-sent price events (sse-service, through the BFF).
   - name: Watchlist
     description: The user's starred symbols (portfolio service, through the BFF). The user is always the session's; no path takes a user id.
+  - name: Alerts
+    description: |
+      The user's price alerts (portfolio service, through the BFF). Evaluated by the browser while the app is open
+      (decision Q7); the server only stores them and decides, through the trigger call, which tab notifies.
   - name: Health
     description: Probes, present on every service.
 
@@ -605,6 +609,166 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /portfolio/alerts:
+    get:
+      tags: [Alerts]
+      operationId: listAlerts
+      summary: The user's active alerts and recent triggered ones
+      description: |
+        `active`: not yet triggered, oldest first. `history`: triggered, most recent first, at most 50 (older
+        ones stay stored). An alert whose symbol left the registry has `listed: false`; it gets no quotes, so it cannot fire.
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Both lists, possibly empty.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    post:
+      tags: [Alerts]
+      operationId: createAlert
+      summary: Create a price alert
+      description: |
+        One-shot: it fires once when the price is at or above (`above`) or at or below (`below`) the threshold.
+        Amounts are decimal strings with at most two decimals, never JSON numbers. A threshold the price is
+        already past is accepted; the app warns first, and the alert fires on the next quote. At most 50 active alerts.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [symbol, direction, threshold]
+              properties:
+                symbol:
+                  type: string
+                direction:
+                  type: string
+                  enum: [above, below]
+                threshold:
+                  $ref: "#/components/schemas/Amount"
+            example: { symbol: AAPL, direction: above, threshold: "230.00" }
+      responses:
+        "201":
+          description: Created and active.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceAlert"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfRejected"
+        "404":
+          $ref: "#/components/responses/UnknownSymbol"
+        "409":
+          description: The user already has 50 active alerts (`CONFLICT`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /portfolio/alerts/{id}:
+    delete:
+      tags: [Alerts]
+      operationId: deleteAlert
+      summary: Delete an alert, active or triggered (idempotent)
+      description: An unknown id, or another user's, is not an error and changes nothing.
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/AlertId"
+        - $ref: "#/components/parameters/XRequestedWith"
+      responses:
+        "204":
+          description: Gone.
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfRejected"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /portfolio/alerts/{id}/trigger:
+    post:
+      tags: [Alerts]
+      operationId: triggerAlert
+      summary: Report that the price met the alert
+      description: |
+        Sets `triggeredAt` and `triggeredPrice` only if the alert is still active, in one conditional update.
+        `first` is true only for the call that set it: of two tabs or devices seeing the same crossing, exactly
+        one gets `true` and notifies. Later calls get `false` and the alert as the first call left it.
+        `price` must meet the alert's condition (`400` otherwise).
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/AlertId"
+        - $ref: "#/components/parameters/XRequestedWith"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [price]
+              properties:
+                price:
+                  $ref: "#/components/schemas/Amount"
+            example: { price: "230.12" }
+      responses:
+        "200":
+          description: Triggered (by this call or an earlier one).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [first, alert]
+                properties:
+                  first:
+                    type: boolean
+                  alert:
+                    $ref: "#/components/schemas/PriceAlert"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfRejected"
+        "404":
+          description: No such alert for this user (deleted meanwhile, `NOT_FOUND`). The app ignores it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          $ref: "#/components/responses/BadGateway"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /health:
     get:
       tags: [Health]
@@ -677,6 +841,14 @@ components:
       schema:
         type: string
         enum: [fetch]
+    AlertId:
+      name: id
+      in: path
+      required: true
+      description: The alert's id. Another user's id behaves like an unknown one.
+      schema:
+        type: string
+        format: uuid
     Symbol:
       name: symbol
       in: path
@@ -770,6 +942,50 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/WatchlistItem"
+    Amount:
+      type: string
+      pattern: "^(0|[1-9][0-9]{0,11})(\\.[0-9]{1,2})?$"
+      description: A dollar amount as a decimal string, at most two decimals, no sign or exponent.
+      examples: ["230.00", "0.5"]
+    PriceAlert:
+      type: object
+      required: [id, symbol, direction, threshold, createdAt, triggeredAt, triggeredPrice, listed]
+      properties:
+        id:
+          type: string
+          format: uuid
+        symbol:
+          type: string
+        direction:
+          type: string
+          enum: [above, below]
+        threshold:
+          type: string
+          description: Two decimals.
+          example: "230.00"
+        createdAt:
+          type: string
+          format: date-time
+        triggeredAt:
+          type: [string, "null"]
+          format: date-time
+        triggeredPrice:
+          type: [string, "null"]
+          description: The price the triggering browser saw, two decimals.
+        listed:
+          type: boolean
+    AlertsResponse:
+      type: object
+      required: [active, history]
+      properties:
+        active:
+          type: array
+          items:
+            $ref: "#/components/schemas/PriceAlert"
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/PriceAlert"
     Error:
       type: object
       required: [error, code]
