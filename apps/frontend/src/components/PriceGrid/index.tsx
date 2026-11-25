@@ -1,6 +1,9 @@
 import { PriceCard } from "../PriceCard";
+import { QuoteTable } from "../QuoteTable";
 import type { JSX } from "react";
 import type { ActiveStock, ListStatus } from "../../types";
+import type { QuoteView } from "../../hooks/useQuoteView";
+import type { QuoteSort } from "../../utils/quoteView";
 
 /**
  * A card counts as delayed when its symbol has had no tick for this long while
@@ -19,12 +22,18 @@ type Props = {
   /** Whether per-card delay markers apply: only while the stream is live. */
   live: boolean;
   now: number;
+  view: QuoteView;
+  /** The table's header sort; shared with the toolbar's Sort control. */
+  sort: QuoteSort;
+  onSortChange: (sort: QuoteSort) => void;
 };
 
 const SKELETON_CARDS = 6;
 const gridClass = "grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3";
 
-export function PriceGrid({ stocks, status, onRetry, onOpen, stale, live, now }: Props): JSX.Element {
+export function PriceGrid({ stocks, status, onRetry, onOpen, stale, live, now, view, sort, onSortChange }: Props): JSX.Element {
+  const isDelayed = (stock: ActiveStock): boolean => live && now - stock.lastUpdated > DELAYED_AFTER_MS;
+
   if (status === "loading" && stocks.length === 0) {
     return (
       <section aria-busy="true" aria-label="Loading quotes" className={gridClass}>
@@ -64,17 +73,22 @@ export function PriceGrid({ stocks, status, onRetry, onOpen, stale, live, now }:
     );
   }
 
+  // Stale quotes lose their colour rather than fade: fading would take the text
+  // below AA contrast while they are still usable.
+  const staleClass = `transition-[filter] duration-300 ${stale ? "grayscale" : ""}`;
+
+  if (view === "table") {
+    return (
+      <section aria-label="Quotes" className={staleClass}>
+        <QuoteTable stocks={stocks} sort={sort} onSortChange={onSortChange} onOpen={onOpen} isDelayed={isDelayed} />
+      </section>
+    );
+  }
+
   return (
-    // Stale cards lose their colour rather than fade: fading would take the text
-    // below AA contrast while the cards are still usable.
-    <section className={`${gridClass} transition-[filter] duration-300 ${stale ? "grayscale" : ""}`}>
+    <section className={`${gridClass} ${staleClass}`}>
       {stocks.map((stock) => (
-        <PriceCard
-          key={stock.symbol}
-          stock={stock}
-          onOpen={onOpen}
-          delayed={live && now - stock.lastUpdated > DELAYED_AFTER_MS}
-        />
+        <PriceCard key={stock.symbol} stock={stock} onOpen={onOpen} delayed={isDelayed(stock)} />
       ))}
     </section>
   );

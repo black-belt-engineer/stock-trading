@@ -6,9 +6,10 @@ import { PriceGrid } from "../components/PriceGrid";
 import { DetailPanel } from "../components/DetailPanel";
 import { ALL_SECTORS, SectorFilter, sectorId } from "../components/SectorFilter";
 import type { SectorOption } from "../components/SectorFilter";
-import { QuoteSearch, QuoteToolbar, SortSelect } from "../components/QuoteToolbar";
+import { QuoteSearch, QuoteToolbar, SortSelect, ViewToggle } from "../components/QuoteToolbar";
 import { buttonClass, panelClass } from "../components/pageStyles";
 import { useSettledOrder } from "../hooks/useSettledOrder";
+import { useQuoteView } from "../hooks/useQuoteView";
 import { DEFAULT_SORT, parseSort, sameSort, searchAndSort, sortParam } from "../utils/quoteView";
 import type { QuoteSort } from "../utils/quoteView";
 import { useStreamData, useStreamStatus } from "../stream/StreamProvider";
@@ -96,6 +97,9 @@ export function QuotesPage(): JSX.Element {
     [setViewParam],
   );
 
+  // Cards or table: a per-browser preference, not part of the URL.
+  const [view, setView] = useQuoteView();
+
   const searchRef = useRef<HTMLInputElement>(null);
   const clearSearch = useCallback(() => {
     changeQuery("");
@@ -182,6 +186,7 @@ export function QuotesPage(): JSX.Element {
       <QuoteToolbar>
         <QuoteSearch ref={searchRef} value={query} onChange={changeQuery} />
         <SortSelect value={sort} onChange={changeSort} />
+        <ViewToggle value={view} onChange={setView} />
       </QuoteToolbar>
       {sectors.length > 1 && <SectorFilter sectors={sectors} value={sector} onChange={changeSector} />}
       {noMatches ? (
@@ -206,6 +211,9 @@ export function QuotesPage(): JSX.Element {
             stale={stale}
             live={status === "live"}
             now={now}
+            view={view}
+            sort={sort}
+            onSortChange={changeSort}
           />
         </div>
       )}
