@@ -32,7 +32,7 @@ export function AccountControls({ name, onLogOut }: Props): JSX.Element {
         disabled={busy}
         title={`Log out ${name}`}
         className={
-          "flex h-8 cursor-pointer items-center gap-2.5 rounded-md border border-default px-3 text-[13px] text-secondary transition-colors duration-150 " +
+          "flex h-8 cursor-pointer items-center gap-2.5 rounded-md border border-default px-2 text-[13px] whitespace-nowrap md:px-3 text-secondary transition-colors duration-150 " +
           "hover:text-primary disabled:cursor-default disabled:opacity-60 " +
           "md:h-10 md:w-full md:rounded-lg md:border-transparent md:text-[14px] md:hover:bg-elevated md:max-xl:justify-center md:max-xl:px-0 " +
           focusRing

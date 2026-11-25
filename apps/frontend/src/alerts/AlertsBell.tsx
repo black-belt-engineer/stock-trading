@@ -34,9 +34,9 @@ export function AlertsBell(): JSX.Element {
         aria-label={name}
         title={name}
         className={
-          "relative flex h-8 cursor-pointer items-center gap-2.5 rounded-md border border-default px-2 text-[13px] text-secondary transition-colors duration-150 " +
+          "relative flex h-8 w-8 cursor-pointer items-center justify-center gap-2.5 rounded-md border border-default text-[13px] text-secondary transition-colors duration-150 " +
           "hover:text-primary data-[state=open]:text-primary " +
-          "md:h-10 md:w-full md:rounded-lg md:border-transparent md:px-3 md:text-[14px] md:hover:bg-elevated md:max-xl:justify-center md:max-xl:px-0 " +
+          "md:h-10 md:w-full md:rounded-lg md:border-transparent md:px-3 md:text-[14px] md:hover:bg-elevated md:max-xl:px-0 xl:justify-start " +
           focusRing
         }
       >
