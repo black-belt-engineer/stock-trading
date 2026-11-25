@@ -638,7 +638,7 @@ paths:
       summary: Create a price alert
       description: |
         One-shot: it fires once when the price is at or above (`above`) or at or below (`below`) the threshold.
-        Amounts are decimal strings with at most two decimals, never JSON numbers. A threshold the price is
+        Amounts are decimal strings with at most two decimals (a JSON number is coerced to its string). A threshold the price is
         already past is accepted; the app warns first, and the alert fires on the next quote. At most 50 active alerts.
       security:
         - sessionCookie: []

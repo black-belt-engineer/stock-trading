@@ -8,7 +8,9 @@ export type AlertDirection = "above" | "below";
 
 /**
  * A money amount as the API carries it: a decimal string with at most two decimals, no sign,
- * no exponent ("228.5", "0.01", "1200"). Never a JSON number, so no value goes through a float.
+ * no exponent ("228.5", "0.01", "1200"). The service never does arithmetic on a float. (Fastify's
+ * default type coercion turns a JSON number into its shortest decimal string first, so `230.1`
+ * is accepted as "230.1"; the app always sends strings.)
  */
 export const PRICE_PATTERN = "^(0|[1-9][0-9]{0,11})(\\.[0-9]{1,2})?$";
 const PRICE_REGEX = new RegExp(PRICE_PATTERN);

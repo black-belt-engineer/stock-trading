@@ -13,7 +13,7 @@ const UUID_PATTERN = "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{
 
 const IdParams = Type.Object({ id: Type.String({ pattern: UUID_PATTERN }) });
 
-/** Amounts are decimal strings, never JSON numbers (see `PRICE_PATTERN`). */
+/** Amounts are decimal strings (see `PRICE_PATTERN`). */
 const Amount = Type.String({ pattern: PRICE_PATTERN });
 
 const CreateBody = Type.Object(
