@@ -20,7 +20,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 10 | A2, A3 | 04-auth.md | 03, 09 | done |
 | 11 | A4 | 04-auth.md | 10 | done |
 | 12 | K1, K2, K3, K4, K5 | 08-identity.md | 11 | done |
-| 13 | D1, D2, D3 | 05-dashboard.md | 04, 06 | todo |
+| 13 | D1, D2, D3 | 05-dashboard.md | 04, 06 | in progress |
 | 14 | D4, D5 | 05-dashboard.md | 12, 13 | todo |
 | 15 | Portfolio service, P1, K6 | 06-personal.md, 08-identity.md | 05, 12 | todo |
 | 16 | P2 | 06-personal.md | 15 | todo |
