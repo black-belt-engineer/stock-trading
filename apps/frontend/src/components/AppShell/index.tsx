@@ -10,6 +10,8 @@ import { useAuth } from "../../auth/AuthProvider";
 import { ShortcutsProvider } from "../../shortcuts/ShortcutsProvider";
 import { ShellControlsProvider } from "./ShellControls";
 import { WatchlistNotice } from "../../watchlist/WatchlistNotice";
+import { AlertsNotice } from "../../alerts/AlertsNotice";
+import { AlertToasts } from "../../alerts/AlertToasts";
 
 /**
  * Sidebar and feed persist across routes; the centre column is the route outlet.
@@ -64,6 +66,7 @@ export function AppShell(): JSX.Element {
           >
             <StaleBanner />
             <WatchlistNotice />
+            <AlertsNotice />
             <Outlet />
           </main>
           {/* Backdrop for the medium-width drawer: a click beside the drawer closes it. */}
@@ -72,6 +75,7 @@ export function AppShell(): JSX.Element {
           )}
           <ShellFeed open={feedOpen} onClose={closeDrawer} />
           <BottomTabBar feedOpen={feedOpen} onShowFeed={() => setFeedOpen(true)} onShowMain={showMain} />
+          <AlertToasts />
         </div>
       </ShortcutsProvider>
     </ShellControlsProvider>

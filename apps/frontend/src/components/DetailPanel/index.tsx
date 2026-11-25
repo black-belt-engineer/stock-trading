@@ -7,6 +7,7 @@ import { Sparkline } from "../Sparkline";
 import { StaleBanner } from "../StaleBanner";
 import type { ActiveStock, ListStatus } from "../../types";
 import { StarButton } from "../../watchlist/StarButton";
+import { SymbolAlerts } from "../../alerts/SymbolAlerts";
 import { formatChange, formatPrice, formatTimeAgo, formatVolume, NO_VALUE } from "../../utils/format";
 
 type Props = {
@@ -91,7 +92,7 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
           <VisuallyHidden.Root>
             <Dialog.Title>{`Stock details for ${symbol ?? "symbol"}`}</Dialog.Title>
             <Dialog.Description id="detail-panel-description">
-              Live price, change since the previous close and recent trend, with today's open, high, low and volume.
+              Live price, change since the previous close and recent trend, with today's open, high, low and volume, and your price alerts for the symbol.
             </Dialog.Description>
           </VisuallyHidden.Root>
           <header className="flex justify-between gap-3 border-b border-subtle p-5">
@@ -165,6 +166,8 @@ export function DetailPanel({ symbol, stock, listStatus, onRetryList, stale, onO
                   ))}
                 </section>
               )}
+
+              <SymbolAlerts key={stock.symbol} symbol={stock.symbol} currentPrice={stock.currentPrice} />
 
               <footer className="px-5 pb-5">
                 <Link to={`/chart/${encodeURIComponent(stock.symbol)}`} className={`${buttonClass} block text-center`}>

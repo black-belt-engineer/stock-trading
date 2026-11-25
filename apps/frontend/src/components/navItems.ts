@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { ChartIcon, HistoryIcon, QuotesIcon, SettingsIcon } from "./icons";
+import { AlertsIcon, ChartIcon, HistoryIcon, QuotesIcon, SettingsIcon } from "./icons";
 
 export type NavItem = {
   label: string;
@@ -17,5 +17,6 @@ export const navItems: NavItem[] = [
   { label: "Quotes", to: "/", Icon: QuotesIcon, end: true },
   { label: "Chart", to: "/chart", Icon: ChartIcon, end: false },
   { label: "History", to: "/history", Icon: HistoryIcon, end: false },
+  { label: "Alerts", to: "/alerts", Icon: AlertsIcon, end: true },
   { label: "Settings", to: "/settings", Icon: SettingsIcon, end: true },
 ];

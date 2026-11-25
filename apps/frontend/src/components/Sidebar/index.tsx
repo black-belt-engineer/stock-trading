@@ -1,4 +1,5 @@
 import { NavLink } from "react-router";
+import { AlertsBell } from "../../alerts/AlertsBell";
 import { AccountControls } from "../AccountControls";
 import { ConnectionStatus } from "../ConnectionStatus";
 import { FeedIcon } from "../icons";
@@ -84,6 +85,7 @@ export function Sidebar({ status, attempts, feedOpen, onToggleFeed, feedToggleRe
         </nav>
       </div>
       <div className="flex min-w-0 items-center gap-2 md:grid md:gap-3">
+        <AlertsBell />
         <ThemeMenu />
         <AccountControls name={userName} onLogOut={onLogOut} />
         <ConnectionStatus status={status} attempts={attempts} />

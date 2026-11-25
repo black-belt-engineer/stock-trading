@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { JSX } from "react";
 import { Navigate, Outlet, useLocation, useSearchParams } from "react-router";
 import { Splash } from "../components/Splash";
+import { AlertsProvider } from "../alerts/AlertsProvider";
 import { StreamProvider } from "../stream/StreamProvider";
 import { WatchlistProvider } from "../watchlist/WatchlistProvider";
 import { useAuth } from "./AuthProvider";
@@ -25,8 +26,8 @@ function LoginRedirect({ returnTo, register = false }: { returnTo: string; regis
  *
  * The stream provider lives here, inside the guard: nothing fetches or streams
  * without a session, a session that ends unmounts it (which closes the stream), and
- * moving between the shell's pages keeps the one connection open. The watchlist (P1) is
- * per user in the same way.
+ * moving between the shell's pages keeps the one connection open. The watchlist (P1) and the
+ * price alerts (P2) are per user in the same way; alerts need the stream to be checked.
  */
 export function RequireAuth(): JSX.Element {
   const { state, retry } = useAuth();
@@ -36,7 +37,9 @@ export function RequireAuth(): JSX.Element {
     return (
       <StreamProvider>
         <WatchlistProvider>
-          <Outlet />
+          <AlertsProvider>
+            <Outlet />
+          </AlertsProvider>
         </WatchlistProvider>
       </StreamProvider>
     );
