@@ -24,7 +24,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 14 | D4, D5 | 05-dashboard.md | 12, 13 | done |
 | 15 | Portfolio service, P1, K6 | 06-personal.md, 08-identity.md | 05, 12 | done |
 | 16 | P2 | 06-personal.md | 15 | done |
-| 17 | Migration runner, P3 | 06-personal.md | 06, 15 | in progress |
+| 17 | Migration runner, P3 | 06-personal.md | 06, 15 | done |
 | 18 | S1, S2 | 07-streaming.md | 12 | todo |
 | 19 | S3 steps 2–6, M4 step 3 | 07-streaming.md, 03-market-data.md | 08 | todo |
 
@@ -805,3 +805,61 @@ Each session appends here when it finishes: what the next phases need to know th
 - Defects noticed outside the scope, not fixed:
   - When the dev run was stopped with SIGINT, the portfolio and consumer `tsx watch` processes stayed behind and had to be killed by PID (the same family as the SSE shutdown note).
   - Still open from earlier notes: the `DetailPanel` z-index (phase 14; toasts are `z-40` and show over the dialog sheet), the BFF's `500` for an empty JSON body (phase 15; the portfolio service has the same error handler), the `Sparkline` defects, SSE shutdown wedging `tsx watch`, "Connection lost" on a first load, the 360 feed tab's `landmark-one-main`, Dockerfiles missing workspace dependencies (none for `apps/portfolio`), `tsconfig.app.tsbuildinfo` tracked in git (left out of the commits again), the `close` listener order in `stream.routes.ts`, the `as AddressInfo` cast in the BFF's proxy test.
+
+### After phase 17 (2026-11-25)
+- Decided by the owner during the session (all four were the recommended options):
+  - **K6 deletes paper-trading orders** with the rest of the user's rows; they are not anonymised (closes the P3 "Future issues" question).
+  - **Migration runner: hand-written and small**, in `packages/db`, no library.
+  - **Order rules:** a price older than **5 s** refuses the order; at most **10,000 shares** per order; a position sold in full is **deleted** (realised P&L lives on the sell orders).
+  - **Navigation:** Portfolio comes after Quotes in the sidebar. The **phone tab bar drops Alerts** (`sidebarOnly` in `navItems.ts`), which stays reachable through the bell in the phone header, so the bar keeps 6 tabs. Shortcut **`g p`** opens the portfolio. Before, `g` then `p` fell through to pause the feed; `p` alone still pauses.
+- Migration runner, choices made here:
+  - `runMigrations(pool, { dir, table, log })` in `@stock-platform/db`. Files are `NNNN_name.sql` (a `.sql` file named otherwise is an error), run in name order, **one transaction each** together with their row, and recorded with a sha256 checksum. A session advisory lock makes a second instance wait and then find nothing to do. It is forward only and strict: an edited applied file, an applied migration the code does not have, or a new file numbered before the last applied one stops the start. `CREATE INDEX CONCURRENTLY` cannot be used (it refuses a transaction).
+  - The services share one database, so the history table is **per service**: `portfolio_schema_migrations`. The SSE service and the consumer still use `prepareSchema`; moving them over would be a later item.
+  - `apps/portfolio/migrations/0001_watchlist_and_alerts.sql` takes over phases 15 and 16's tables with `IF NOT EXISTS` (existing databases keep their rows; verified on the dev database and on an empty one). `0002_paper_trading.sql` is plain DDL. The repositories' `prepareSchema` methods are gone; `app.ts` and `cleanup.ts` call `migrate()` first. **A new table means a new migration file, never an edit to an old one.**
+  - The folder is found from `import.meta.url` (`../migrations/` from `src/` and from `dist/`), so a Docker image for the service must copy `migrations/` next to `dist/`.
+- P3 server, choices made here:
+  - Tables as in the plan, plus `orders.realized_pnl` (sells only, enforced by a CHECK) and an index on `(user_id, created_at DESC, id DESC)`. `cash >= 0`, `quantity > 0` and `avg_cost > 0` are CHECKs too.
+  - Money is `bigint` in units of 10^-scale (`models/money.ts`): cents for cash, totals and P&L, scale 4 for prices and average cost. NUMERIC is read as text. The fill price comes from Redis as a float and is rounded to whole cents once (`centsFromQuote`). The total is therefore exact. The average cost is rounded half away from zero to 4 decimals, and realised P&L to cents. The fill logic is pure (`models/trading.ts`, `fillOrder`) and unit-tested.
+  - `TradingRepository.withAccount` creates the account if needed (`INSERT … ON CONFLICT DO NOTHING`) and locks its row `FOR UPDATE`. The order runs inside that lock: it checks `clientOrderId`, reads the price, then validates and writes. A retry arriving while the first attempt is still running therefore waits and then gets the original. The phase 15 `lockUser` advisory lock is not used for orders; K6's `deleteUser` still takes it, and deleting a locked account row waits for the order.
+  - API: `GET /portfolio/account` gives `{ cash, startingCash, realizedPnl, createdAt, positions[{ symbol, quantity, avgCost, listed, lastPrice, lastPriceAt }], sessionActivity[] }`. `POST /portfolio/account/reset` returns the fresh account. `GET /portfolio/orders?limit&before` returns `{ items, nextBefore }`, keyset paging by order id. `POST /portfolio/orders` answers `201` for a new order and `200` for a replayed `clientOrderId`. The error codes are `INSUFFICIENT_FUNDS`, `INSUFFICIENT_SHARES`, `CLIENT_ORDER_ID_REUSED` (409) and `MARKET_DATA_UNAVAILABLE` (503). An unknown or delisted symbol is `404`, so a delisted position cannot be sold.
+  - **The order body is validated by TypeBox's own compiler on that route only** (`strictValidatorCompiler` in `trading.routes.ts`), not Fastify's coercing Ajv: `"5"`, `1.5`, extra fields (a `price`) are `400`. The other routes keep the defaults described in phases 15 and 16.
+  - Redis reads have a 1 s limit (`PriceReader`; ioredis would otherwise queue commands while it reconnects, with the account lock held). With Redis down, orders are `503` and the account reads still work, with each position priced at its last fill.
+  - Day P&L: the server returns, per symbol traded in its current session (`sessionStartFor` per symbol, every registry symbol, so a position opened and closed today counts), the shares and totals bought and sold. The client computes `held_now × price − held_at_start × previous_close + sold_today − bought_today`. This measures older shares from `previousClose` and shares bought today from their fill, as the brief asks. Activity whose `sessionId` differs from the quote's is ignored (the session rolled over since the account was loaded).
+- P3 client, choices made here:
+  - `portfolio/money.ts` mirrors the server's bigint helpers. The alerts' number-based helpers are unchanged. `portfolio/valuation.ts` (unit-tested) values positions at live prices, falling back to the server's last price, which is labelled "last known". A delisted position is "Untradeable: no longer listed" and has no day P&L.
+  - `PortfolioProvider` sits inside `AlertsProvider` in `RequireAuth`. It reloads on focus and visibility, after a fill, and **after a refusal** (another tab probably traded). Only the newest reload's answer is applied.
+  - Trade ticket (in the quote dialog, above the alert form): Buy/Sell pills, shares, the estimated cost with the cash or the shares held, "Review order", then a confirm step that says the fill may differ, then the actual fill. One `clientOrderId` is made per review. A request with no answer is retried once with the same id. If it still fails, the ticket stays on Confirm ("Try again: the order will not run twice."). A refusal goes back to editing, and the next attempt gets a new id. The ticket checks shares and cash itself before sending, and the server checks again.
+  - `/portfolio`: five summary tiles (total value, cash, market value, total P&L with %, day P&L), a positions table and the order history, 50 per page with "Load older orders". Some columns are hidden below `sm`/`md`.
+  - Settings has a **Portfolio** section between Watchlist and Danger zone. "Reset portfolio" asks first; Cancel and the reset return focus to the button.
+- Verified against `pnpm dev` (turbo, without the theme's dev server) with the compose infra, as a throwaway user registered on the sign-up page and deleted afterwards through Settings:
+  - Migrations: two concurrent runs on the dev database apply 0001 once. An empty database gets both tables. An edited applied file stops the run with "changed after it ran". 0002 applied at the service's start.
+  - API through the BFF, 54 checks, run twice:
+    - `401` without a session and `403` without `X-Requested-With`; `400` for 11 malformed bodies (string, fraction, zero, negative, `1e9`, 10,001, a client `price`, bad side, bad id, a missing field, a malformed symbol); `404` for an unknown symbol; `409` for selling without a position.
+    - Buy at Redis's price with an exact total; avg cost, cash and session activity; a repeat returns `200` with the original; the same id for another order is `409`; **8 parallel requests with one id give one `201`, seven `200` and one row**.
+    - A partial sell keeps the avg cost and realises `(price − avg) × qty`; overselling is `409`; selling the rest deletes the row and stays in session activity.
+    - **3 parallel buys of 60% of the cash each: one `201`, two `409`.**
+    - After 24 mixed orders: **cash = start − buys + sells exactly**, positions = Σ bought − Σ sold per symbol, and cash + cost basis = start + realised P&L (drift −$0.004, from rounding the avg cost).
+    - Paging; a stale price (ingestor stopped with SIGSTOP for 7 s) gives `503` while the account stays readable; reset; one account row.
+  - Redis down, checked against the service directly (real Postgres, Redis paused): an order is `503` in 1.0 s, the account reads with last-fill prices, and both are logged at `warn`. Through the BFF this cannot be tested, because the BFF's sessions are in the same Redis.
+  - Browser (headless Chromium, Playwright 1.64), 34 checks, run three times:
+    - The ticket: estimate, focus on Confirm, a **double-click placing one order**, the result showing the server's fill price and total, focus on the result.
+    - Sell, and Back returning focus to Shares; the client-side refusals.
+    - A first attempt aborted is retried with the same `clientOrderId`. Answers lost twice keep Confirm, and a manual retry gets "already been placed" with one row.
+    - **Two tabs buying 60% each at once: one fills, the other says "Not enough cash for this order" and reloads its cash.**
+    - The page's tiles match the server, and the total value moves with the stream; 55 orders page as 50 + 5; `g p`; the sidebar order; Settings reset with Cancel and focus; the phone tab bar with 6 tabs, Portfolio and no Alerts.
+  - axe clean and no horizontal scroll (page and dialog) at 360×740, 768×1024, 740×360 and 1440×900 in dark, and at 360 and 1440 in light: the Portfolio page with positions, the ticket on its confirm step and with an error, Settings asking to reset. 48 checks. Screenshots looked at: the page at 1440 and 360 (dark), the confirm step at 360 (light), the error at 1440, Settings at 1440 (light).
+  - K6: deleting the account through Settings removed its 1 account, 3 position and 4 order rows (`removed: 8`, `source: self`). The nightly cleanup removed a ghost user who had only an account and an order.
+  - Unit tests: db 9 (new), portfolio 28 (11 new), frontend 97 (14 new, the shortcut test adjusted), BFF 67. `pnpm build` passes.
+- Not checked: a real phone, Firefox and Safari, and a screen reader (the ticket's steps, the result status, the tables). Not checked either: the session rolling over at UTC midnight with the Portfolio page open (the valuation's session check is unit-tested only), and two different users' first visits at the same moment (`ON CONFLICT DO NOTHING`, not raced).
+- Left open:
+  - **Day P&L assumes one session for the whole day.** `created_at` comes from the database's `now()` and the session start from the service's clock. They are the same machine today.
+  - The trade ticket has no "max" button, and nothing shows when the price moved between Review and Confirm beyond the "estimate" label.
+  - Orders are refused, not queued, outside a session; that does not matter while the market is 24/7 (P3 "Future issues": `MarketCalendar`).
+  - Positions have no `INTEGER` overflow guard. 2^31 shares would need about $21M at $0.01, and above that Postgres would refuse the write (`500`).
+  - The SSE service and the consumer still create their tables with `prepareSchema`, not migrations.
+  - `docs/openapi.yaml` documents the new endpoints; the reset must be sent without a JSON `Content-Type` (see the BFF defect below).
+- Defects noticed outside the scope, not fixed:
+  - **The BFF needs Redis for every request** (sessions), so "Redis down: reads still work" from the P3 plan holds for the service only, not end to end.
+  - **Pausing Redis for about 30 s crashed the consumer for good** (kafkajs "The coordinator is not aware of this member", `restart: false`), and prices went stale until it was restarted. This is the consumer defect suspected in phase 15's notes, now seen.
+  - The BFF's `500` for an empty JSON body (phase 15) was hit again by a test calling the reset with `Content-Type: application/json` and no body.
+  - Still open from earlier notes: the `DetailPanel` z-index, the `Sparkline` defects, SSE shutdown wedging `tsx watch`, "Connection lost" on a first load, the 360 feed tab's `landmark-one-main`, Dockerfiles missing workspace dependencies (none for `apps/portfolio`, which now also needs `migrations/`), `tsconfig.app.tsbuildinfo` tracked in git (left out of the commits again), the `close` listener order in `stream.routes.ts`, the `as AddressInfo` cast in the BFF's proxy test.
