@@ -20,10 +20,11 @@ describe("matchKey", () => {
   it("arms a sequence on its first key and completes it on the second", () => {
     expect(matchKey(press("g"), null, true)).toEqual({ kind: "pending", prefix: "g" });
     expect(matchKey(press("h"), "g", true)).toEqual({ kind: "action", action: "goHistory", key: "h" });
+    expect(matchKey(press("p"), "g", true)).toEqual({ kind: "action", action: "goPortfolio", key: "p" });
   });
 
   it("matches a key that does not complete the sequence on its own", () => {
-    expect(matchKey(press("p"), "g", true)).toEqual({ kind: "action", action: "togglePause", key: "p" });
+    expect(matchKey(press("v"), "g", true)).toEqual({ kind: "action", action: "toggleView", key: "v" });
     expect(matchKey(press("x"), "g", true)).toEqual({ kind: "none" });
   });
 

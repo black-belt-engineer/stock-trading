@@ -12,6 +12,7 @@ export type ShortcutAction =
   | "moveFocus"
   | "openFocused"
   | "goQuotes"
+  | "goPortfolio"
   | "goChart"
   | "goHistory"
   | "goSettings"
@@ -65,6 +66,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   },
   { action: "toggleView", sequences: [["v"]], description: "Switch between cards and table", group: "Quotes", characterKey: true },
   { action: "goQuotes", sequences: [["g", "q"]], description: "Quotes", group: "Go to", characterKey: true },
+  { action: "goPortfolio", sequences: [["g", "p"]], description: "Portfolio", group: "Go to", characterKey: true },
   { action: "goChart", sequences: [["g", "c"]], description: "Chart", group: "Go to", characterKey: true },
   { action: "goHistory", sequences: [["g", "h"]], description: "History", group: "Go to", characterKey: true },
   { action: "goSettings", sequences: [["g", "s"]], description: "Settings", group: "Go to", characterKey: true },

@@ -7,6 +7,7 @@ import { ChartPage } from "./pages/ChartPage";
 import { QuotesPage } from "./pages/QuotesPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { PortfolioPage } from "./pages/PortfolioPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 /**
@@ -21,6 +22,8 @@ export default function App(): JSX.Element {
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
           <Route index element={<QuotesPage />} />
+          {/* Only `/portfolio` itself: the Vite proxy and the BFF own `/portfolio/…` (the API). */}
+          <Route path="portfolio" element={<PortfolioPage />} />
           <Route path="chart/:symbol?" element={<ChartPage />} />
           <Route path="history/:symbol?" element={<HistoryPage />} />
           <Route path="alerts" element={<AlertsPage />} />

@@ -28,7 +28,7 @@ export function BottomTabBar({ feedOpen, onShowFeed, onShowMain }: Props): JSX.E
       // Clears the home indicator on phones; the viewport meta sets viewport-fit=cover.
       className="row-start-3 flex border-t border-subtle bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      {navItems.map(({ label, to, Icon, end }) => (
+      {navItems.filter((item) => !item.sidebarOnly).map(({ label, to, Icon, end }) => (
         <NavLink
           key={to}
           to={to}

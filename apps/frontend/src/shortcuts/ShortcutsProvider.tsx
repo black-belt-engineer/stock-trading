@@ -150,6 +150,8 @@ export function ShortcutsProvider({ children, onNavigate }: { children: ReactNod
           return true;
         case "goQuotes":
           return go("/");
+        case "goPortfolio":
+          return go("/portfolio");
         case "goChart":
           return go("/chart");
         case "goHistory":
