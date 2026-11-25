@@ -39,7 +39,7 @@ export function Sparkline({ prices, height }: Props): JSX.Element | null {
       preserveAspectRatio="none"
       className="pointer-events-none block overflow-hidden"
     >
-      <polygon points={shape.polygon} fill={shape.color} opacity={0.08} />
+      <polygon points={shape.polygon} fill={shape.color} className="opacity-(--sparkline-fill-opacity)" />
       <polyline points={shape.polyline} fill="none" stroke={shape.color} strokeWidth={1.5} />
     </svg>
   );

@@ -1,4 +1,11 @@
+/*
+ * The dark theme is the default. The frontend sets `data-theme="light"` on <html> for
+ * the light theme (D4), before the first paint; a page that never sets it (the
+ * Keycloak theme) stays dark.
+ */
 :root {
+  color-scheme: dark;
+
   --bg-base: #0c0e12;
   --bg-surface: #13161d;
   --bg-elevated: #1a1e28;
@@ -17,7 +24,7 @@
   --text-muted: #363d52;
   --text-inverse: #0c0e12;
 
-  /* Role names, not colour names: the light theme (D4) changes the values. */
+  /* Role names, not colour names: the light theme changes the values. */
   --accent-brand: #e2f73f;
   --accent-brand-dim: rgba(226, 247, 63, 0.16);
   --positive: #22c55e;
@@ -27,4 +34,50 @@
 
   --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   --dialog-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+
+  /* The area under a sparkline. */
+  --sparkline-fill-opacity: 0.08;
+}
+
+/*
+ * Light theme. Ratios are against the lowest-contrast surface each colour sits on,
+ * usually --bg-sidebar; AA needs 4.5:1 for text.
+ */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-base: #f3f4f7;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f0f2f5;
+  --bg-sidebar: #eaedf2;
+  --bg-input: #ffffff;
+  --bg-overlay: rgba(18, 21, 28, 0.45);
+
+  --border-subtle: rgba(12, 14, 18, 0.08);
+  --border-default: rgba(12, 14, 18, 0.14);
+  --border-strong: rgba(12, 14, 18, 0.3);
+
+  --text-primary: #12151c;
+  /* 5.73:1 on --bg-sidebar. */
+  --text-secondary: #525c70;
+  /* Decoration only, like the dark value. */
+  --text-muted: #c3c8d4;
+  --text-inverse: #ffffff;
+
+  /*
+   * Lime is unreadable on white (1.2:1), so the brand is a dark olive for text,
+   * borders and the focus ring (6.6:1 on its own tint over --bg-sidebar), and lime
+   * survives only in the tint behind it.
+   */
+  --accent-brand: #4a5700;
+  --accent-brand-dim: rgba(226, 247, 63, 0.45);
+  /* Each 4.5:1 or more as text on its own 15% tint over --bg-sidebar, and white on it as a fill. */
+  --positive: #0d6b31;
+  --negative: #b3192a;
+  --warning: #8f4800;
+
+  --card-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
+  --dialog-shadow: 0 24px 60px rgba(16, 24, 40, 0.22);
+
+  --sparkline-fill-opacity: 0.14;
 }

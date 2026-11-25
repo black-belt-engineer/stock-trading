@@ -7,6 +7,22 @@
     <meta name="theme-color" content="#0c0e12" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Streamtick</title>
+    <script>
+      // The theme (D4), set before the first paint so a reload never flashes the wrong
+      // one. The same rules as src/theme/theme.ts: keep the key, values and colours in step.
+      (function () {
+        var choice = null;
+        try {
+          choice = localStorage.getItem("streamtick.theme");
+        } catch (e) {}
+        if (choice !== "light" && choice !== "dark") {
+          choice = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        }
+        document.documentElement.dataset.theme = choice;
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute("content", choice === "light" ? "#f3f4f7" : "#0c0e12");
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

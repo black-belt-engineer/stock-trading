@@ -9,7 +9,8 @@ import type { SectorOption } from "../components/SectorFilter";
 import { QuoteSearch, QuoteToolbar, SortSelect, ViewToggle } from "../components/QuoteToolbar";
 import { buttonClass, panelClass } from "../components/pageStyles";
 import { useSettledOrder } from "../hooks/useSettledOrder";
-import { useQuoteView } from "../hooks/useQuoteView";
+import { useShellControls } from "../components/AppShell/ShellControls";
+import { useQuotesShortcuts } from "../shortcuts/ShortcutsProvider";
 import { DEFAULT_SORT, parseSort, sameSort, searchAndSort, sortParam } from "../utils/quoteView";
 import type { QuoteSort } from "../utils/quoteView";
 import { useStreamData, useStreamStatus } from "../stream/StreamProvider";
@@ -97,14 +98,33 @@ export function QuotesPage(): JSX.Element {
     [setViewParam],
   );
 
-  // Cards or table: a per-browser preference, not part of the URL.
-  const [view, setView] = useQuoteView();
+  // Cards or table: a per-browser preference, not part of the URL. Kept by the
+  // shell, so the `v` shortcut and Settings change the same state.
+  const { view, setPreference: setView } = useShellControls();
 
   const searchRef = useRef<HTMLInputElement>(null);
   const clearSearch = useCallback(() => {
     changeQuery("");
     searchRef.current?.focus();
   }, [changeQuery]);
+
+  // `/` focuses the search; Esc outside it clears a search (D5). Esc inside the box is QuoteSearch's.
+  const queryRef = useRef(query);
+  useEffect(() => {
+    queryRef.current = query;
+  }, [query]);
+  const shortcuts = useMemo(
+    () => ({
+      focusSearch: () => searchRef.current?.focus(),
+      clearSearch: () => {
+        if (queryRef.current === "") return false;
+        changeQuery("");
+        return true;
+      },
+    }),
+    [changeQuery],
+  );
+  useQuotesShortcuts(shortcuts);
 
   // Filter, then search, then sort, in one pass over the live stocks.
   const visible = useMemo(() => {

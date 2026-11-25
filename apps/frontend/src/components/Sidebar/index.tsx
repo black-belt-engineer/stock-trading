@@ -3,6 +3,7 @@ import { AccountControls } from "../AccountControls";
 import { ConnectionStatus } from "../ConnectionStatus";
 import { FeedIcon } from "../icons";
 import { navItems } from "../navItems";
+import { ThemeMenu } from "../ThemeMenu";
 import type { JSX, RefObject } from "react";
 
 type Props = {
@@ -83,6 +84,7 @@ export function Sidebar({ status, attempts, feedOpen, onToggleFeed, feedToggleRe
         </nav>
       </div>
       <div className="flex min-w-0 items-center gap-2 md:grid md:gap-3">
+        <ThemeMenu />
         <AccountControls name={userName} onLogOut={onLogOut} />
         <ConnectionStatus status={status} attempts={attempts} />
       </div>

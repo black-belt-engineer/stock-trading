@@ -92,3 +92,32 @@ export function SettingsIcon(): JSX.Element {
     </Icon>
   );
 }
+
+/** A sun: the light theme. */
+export function SunIcon(): JSX.Element {
+  return (
+    <Icon>
+      <circle cx="10" cy="10" r="3.2" />
+      <path d="M10 2.5v1.8M10 15.7v1.8M2.5 10h1.8M15.7 10h1.8M4.7 4.7l1.3 1.3M14 14l1.3 1.3M4.7 15.3 6 14M14 6l1.3-1.3" />
+    </Icon>
+  );
+}
+
+/** A crescent moon: the dark theme. */
+export function MoonIcon(): JSX.Element {
+  return (
+    <Icon>
+      <path d="M16 12.2A6.5 6.5 0 0 1 7.8 4a6.5 6.5 0 1 0 8.2 8.2Z" />
+    </Icon>
+  );
+}
+
+/** A monitor: follow the system's theme. */
+export function SystemIcon(): JSX.Element {
+  return (
+    <Icon>
+      <rect x="2.5" y="3.5" width="15" height="10" rx="1.5" />
+      <path d="M7 16.5h6M10 13.5v3" />
+    </Icon>
+  );
+}

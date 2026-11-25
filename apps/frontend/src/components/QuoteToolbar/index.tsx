@@ -1,6 +1,6 @@
 import * as ToggleGroup from "@radix-ui/react-toggle-group";
 import { useEffect, useState } from "react";
-import type { ChangeEvent, JSX, ReactNode, Ref } from "react";
+import type { ChangeEvent, JSX, KeyboardEvent, ReactNode, Ref } from "react";
 import { focusRing } from "../pageStyles";
 import { parseSort, sortParam, SORT_OPTIONS } from "../../utils/quoteView";
 import type { QuoteSort } from "../../utils/quoteView";
@@ -43,6 +43,14 @@ export function QuoteSearch({ value, onChange, ref }: SearchProps): JSX.Element 
     onChange(event.target.value.trim());
   };
 
+  // Esc empties the box. Chrome does this for type="search" by itself; Firefox does not.
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+    if (event.key !== "Escape" || text === "") return;
+    event.preventDefault();
+    setText("");
+    onChange("");
+  };
+
   return (
     <label className={`${labelClass} grow basis-56`}>
       Search
@@ -51,6 +59,7 @@ export function QuoteSearch({ value, onChange, ref }: SearchProps): JSX.Element 
         type="search"
         value={text}
         onChange={onInput}
+        onKeyDown={onKeyDown}
         placeholder="Symbol or company"
         autoComplete="off"
         spellCheck={false}
