@@ -72,6 +72,8 @@ export function TradeTicket({ symbol, currentPrice }: { symbol: string; currentP
   const confirmRef = useRef<HTMLButtonElement>(null);
   const resultRef = useRef<HTMLParagraphElement>(null);
   const ids = useId();
+  // Set by Back, so focus returns to the quantity once the form is shown again.
+  const backToForm = useRef(false);
 
   const held = account?.positions.find((p) => p.symbol === symbol)?.quantity ?? 0;
   const priceCents = centsFromPrice(currentPrice);
@@ -84,6 +86,8 @@ export function TradeTicket({ symbol, currentPrice }: { symbol: string; currentP
   useEffect(() => {
     if (step.kind === "review" && !step.sending) confirmRef.current?.focus();
     if (step.kind === "done") resultRef.current?.focus();
+    if (step.kind === "edit" && backToForm.current) inputRef.current?.focus();
+    backToForm.current = false;
   }, [step]);
 
   const edited = (): void => {
@@ -224,9 +228,9 @@ export function TradeTicket({ symbol, currentPrice }: { symbol: string; currentP
             <button
               type="button"
               onClick={() => {
+                backToForm.current = true;
                 setStep({ kind: "edit" });
                 setError(null);
-                setTimeout(() => inputRef.current?.focus(), 0);
               }}
               disabled={step.sending}
               className={`${buttonClass} h-9`}

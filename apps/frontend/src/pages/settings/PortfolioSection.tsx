@@ -19,10 +19,14 @@ export function PortfolioSection(): JSX.Element {
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const startRef = useRef<HTMLButtonElement>(null);
+  // Set when the question closes, so focus goes back to the button that opened it.
+  const refocus = useRef(false);
   const starting = account ? formatMoney(account.startingCash) : "$100,000.00";
 
   useEffect(() => {
     if (asking) confirmRef.current?.focus();
+    else if (refocus.current) startRef.current?.focus();
+    refocus.current = false;
   }, [asking]);
 
   const onReset = async (): Promise<void> => {
@@ -35,8 +39,8 @@ export function PortfolioSection(): JSX.Element {
       setMessage({ text: "The portfolio could not be reset. Nothing was changed; try again.", ok: false });
     } finally {
       setBusy(false);
+      refocus.current = true;
       setAsking(false);
-      setTimeout(() => startRef.current?.focus(), 0);
     }
   };
 
@@ -61,8 +65,8 @@ export function PortfolioSection(): JSX.Element {
             <button
               type="button"
               onClick={() => {
+                refocus.current = true;
                 setAsking(false);
-                setTimeout(() => startRef.current?.focus(), 0);
               }}
               disabled={busy}
               className={`${buttonClass} h-10`}

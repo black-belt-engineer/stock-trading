@@ -77,6 +77,8 @@ export function PortfolioProvider({ children, api: given }: { children: ReactNod
         setRevision((r) => r + 1);
         reload();
       }
+      // A refusal for cash or shares usually means another tab or device traded meanwhile.
+      if (result.kind === "refused") reload();
       return result;
     },
     [api, reload],
