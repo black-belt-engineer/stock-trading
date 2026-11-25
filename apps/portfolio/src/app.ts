@@ -7,9 +7,13 @@ import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { AppConfig } from "./config/index.js";
 import { AlertRepository } from "./repositories/alert.repository.js";
+import { TradingRepository } from "./repositories/trading.repository.js";
 import { UserDataRepository } from "./repositories/user-data.repository.js";
 import { WatchlistRepository } from "./repositories/watchlist.repository.js";
+import { migrate } from "./migrations.js";
+import { STARTING_CASH_CENTS } from "./models/trading.js";
 import { alertRoutes } from "./routes/alert.routes.js";
+import { tradingRoutes } from "./routes/trading.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { watchlistRoutes } from "./routes/watchlist.routes.js";
 import { AlertService } from "./services/alert.service.js";
@@ -17,10 +21,12 @@ import { CleanupService, scheduleDaily } from "./services/cleanup.service.js";
 import { HealthService } from "./services/health.service.js";
 import { IdentityEventsService } from "./services/identity-events.service.js";
 import { KeycloakUsers } from "./services/keycloak-users.js";
+import { PriceReader } from "./services/price-reader.js";
+import { TradingService } from "./services/trading.service.js";
 import { WatchlistService } from "./services/watchlist.service.js";
 
 /**
- * The portfolio service (Q4): per-user data for the watchlist (P1), price alerts (P2) and, later,
+ * The portfolio service (Q4): per-user data for the watchlist (P1), price alerts (P2) and
  * paper trading (P3). The browser reaches it only through the BFF, which adds the bearer token.
  */
 export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
@@ -44,18 +50,22 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
   });
 
   await app.register(dbPlugin, { connectionString: config.DATABASE_URL });
-  // Latest prices (`price:latest:<symbol>`) are read from here once paper trading exists (P3).
+  // Latest prices (`price:latest:<symbol>`): paper trading fills orders at them (P3).
   await app.register(redisPlugin, { url: config.REDIS_URL });
 
+  // Ordered migrations (`apps/portfolio/migrations`) before anything touches a table. A failed
+  // or refused migration stops the start: the money tables must never run on an unknown schema.
+  const applied = await migrate(app.db, { info: (message) => log.info(message) });
+  log.info({ applied }, "Schema ready");
+
   const watchlistRepository = new WatchlistRepository(app.db);
-  await watchlistRepository.prepareSchema();
   const alertRepository = new AlertRepository(app.db);
-  await alertRepository.prepareSchema();
-  log.info("Schema ready");
+  const tradingRepository = new TradingRepository(app.db, STARTING_CASH_CENTS);
 
   const watchlistService = new WatchlistService(watchlistRepository);
   const alertService = new AlertService(alertRepository);
-  const userData = new UserDataRepository(app.db, watchlistRepository, alertRepository);
+  const tradingService = new TradingService(tradingRepository, new PriceReader(app.redis), log);
+  const userData = new UserDataRepository(app.db, watchlistRepository, alertRepository, tradingRepository);
 
   // K6: account deletions in Keycloak reach this service through Kafka, and a nightly job
   // removes whatever that missed. Neither blocks the start: the API works without them.
@@ -94,6 +104,7 @@ export async function buildApp(config: AppConfig): Promise<FastifyInstance> {
     protectedScope.addHook("preHandler", jwtGuard);
     await protectedScope.register(watchlistRoutes, { watchlistService });
     await protectedScope.register(alertRoutes, { alertService });
+    await protectedScope.register(tradingRoutes, { tradingService });
   });
 
   return app;

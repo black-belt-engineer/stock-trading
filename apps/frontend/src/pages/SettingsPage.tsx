@@ -12,6 +12,7 @@ import { useShortcuts } from "../shortcuts/ShortcutsProvider";
 import type { QuoteViewPreference } from "../hooks/useQuoteView";
 import { SettingsSection } from "./settings/fields";
 import { WatchlistSection } from "./settings/WatchlistSection";
+import { PortfolioSection } from "./settings/PortfolioSection";
 
 const SETTINGS_PATH = "/settings";
 
@@ -135,6 +136,7 @@ export function SettingsPage(): JSX.Element | null {
         </SettingsSection>
         <PreferencesSection />
         <WatchlistSection />
+        <PortfolioSection />
         <SettingsSection id="settings-danger" title="Danger zone" tone="danger">
           <p className="text-secondary">
             Deleting your account removes it for good and cannot be undone. Keycloak asks for your password first.

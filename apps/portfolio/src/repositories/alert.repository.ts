@@ -71,26 +71,6 @@ function countOf(row: unknown): number {
 export class AlertRepository {
   constructor(private readonly db: Pool) {}
 
-  async prepareSchema(): Promise<void> {
-    // No foreign key: users live in Keycloak. Deleting a user's rows is K6's job.
-    await this.db.query(`
-      CREATE TABLE IF NOT EXISTS price_alerts (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID NOT NULL,
-        symbol TEXT NOT NULL,
-        direction TEXT NOT NULL CHECK (direction IN ('above', 'below')),
-        threshold NUMERIC(18, 2) NOT NULL CHECK (threshold > 0),
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        triggered_at TIMESTAMPTZ NULL,
-        triggered_price NUMERIC(18, 2) NULL
-      );
-      CREATE INDEX IF NOT EXISTS price_alerts_user_active
-        ON price_alerts (user_id, created_at) WHERE triggered_at IS NULL;
-      CREATE INDEX IF NOT EXISTS price_alerts_user_history
-        ON price_alerts (user_id, triggered_at DESC) WHERE triggered_at IS NOT NULL;
-    `);
-  }
-
   /** Active alerts oldest first, then the newest `historyLimit` triggered ones. */
   async list(userId: string, historyLimit: number): Promise<{ active: AlertRow[]; history: AlertRow[] }> {
     const active = await this.db.query(

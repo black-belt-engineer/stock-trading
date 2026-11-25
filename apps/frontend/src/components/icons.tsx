@@ -34,6 +34,17 @@ export function QuotesIcon(): JSX.Element {
   );
 }
 
+/** A briefcase: the paper-trading portfolio. */
+export function PortfolioIcon(): JSX.Element {
+  return (
+    <Icon>
+      <rect x="2.5" y="6" width="15" height="10.5" rx="1.6" />
+      <path d="M7 6V4.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V6" />
+      <path d="M2.5 10.5h15" />
+    </Icon>
+  );
+}
+
 /** A pulse line: the live feed. */
 export function FeedIcon(): JSX.Element {
   return (

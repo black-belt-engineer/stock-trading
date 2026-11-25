@@ -26,6 +26,7 @@
     "@stock-platform/redis": "workspace:*",
     "@stock-platform/schemas": "workspace:*",
     "@stock-platform/symbols": "workspace:*",
+    "@stock-platform/types": "workspace:*",
     "fastify": "^5.2.1",
     "fastify-plugin": "^5.0.1",
     "ioredis": "^5.8.1",

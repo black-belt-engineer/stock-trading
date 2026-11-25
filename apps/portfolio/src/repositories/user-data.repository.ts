@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 import type { AlertRepository } from "./alert.repository.js";
 import { lockUser, withTransaction } from "./transaction.js";
+import type { TradingRepository } from "./trading.repository.js";
 import type { WatchlistRepository } from "./watchlist.repository.js";
 
 function userIdOf(row: unknown): string | null {
@@ -11,13 +12,15 @@ function userIdOf(row: unknown): string | null {
 
 /**
  * Everything the portfolio service keeps per user, for account deletion (K6). Every table with
- * a `user_id` must be listed here and in {@link listUserIds}: P3 adds its tables.
+ * a `user_id` must be listed here and in {@link listUserIds}. Paper-trading orders are deleted
+ * too, not anonymised (owner's decision, phase 17).
  */
 export class UserDataRepository {
   constructor(
     private readonly db: Pool,
     private readonly watchlist: WatchlistRepository,
     private readonly alerts: AlertRepository,
+    private readonly trading: TradingRepository,
   ) {}
 
   /** Deletes all of the user's rows in one transaction. Rows already gone are not an error. */
@@ -26,7 +29,8 @@ export class UserDataRepository {
       await lockUser(client, userId);
       const watched = await this.watchlist.deleteUser(client, userId);
       const alerts = await this.alerts.deleteUser(client, userId);
-      return watched + alerts;
+      const trading = await this.trading.deleteUser(client, userId);
+      return watched + alerts + trading;
     });
   }
 
@@ -34,7 +38,13 @@ export class UserDataRepository {
   async listUserIds(): Promise<string[]> {
     const result = await this.db.query(`SELECT user_id::text AS user_id FROM watchlist_items
        UNION
-       SELECT user_id::text AS user_id FROM price_alerts`);
+       SELECT user_id::text AS user_id FROM price_alerts
+       UNION
+       SELECT user_id::text AS user_id FROM accounts
+       UNION
+       SELECT user_id::text AS user_id FROM positions
+       UNION
+       SELECT user_id::text AS user_id FROM orders`);
     return result.rows.map(userIdOf).filter((id): id is string => id !== null);
   }
 }
