@@ -1,4 +1,4 @@
-import { createKafkaWithEnsuredTopic, type Producer } from "@stock-platform/kafka";
+import { createKafkaWithEnsuredTopic, PRICE_TOPIC_CONFIG_ENTRIES, type Producer } from "@stock-platform/kafka";
 import { priceEventMessageKey, type PriceEvent } from "@stock-platform/types";
 import type { Logger } from "@stock-platform/logger";
 import type { AppConfig } from "../config/index.js";
@@ -18,6 +18,7 @@ export class KafkaProducerService {
       topic: this.config.KAFKA_TOPIC,
       numPartitions: this.config.KAFKA_TOPIC_PARTITIONS,
       replicationFactor: this.config.KAFKA_REPLICATION_FACTOR,
+      configEntries: PRICE_TOPIC_CONFIG_ENTRIES,
     });
 
     const producer = kafka.producer();

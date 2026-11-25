@@ -319,6 +319,7 @@ paths:
       description: |
         `from` defaults to 15 minutes before `to`, `to` defaults to now and is clamped to now.
         The range may not exceed 24 hours. Page on with `nextCursor` and the same `from` and `to`.
+        Raw ticks are kept for 30 days; an older range is empty.
       security:
         - sessionCookie: []
       parameters:
@@ -405,6 +406,9 @@ paths:
       description: |
         Without `from` the window is the latest 120 bars. At most 500 bars per request. `to` is
         exclusive and clamped to now. A `1d` bar is one market session of the symbol's exchange.
+        Bars are rolled up from the 1-minute aggregate `candles_1m`, which is kept after raw ticks
+        are dropped (30 days), so candles reach further back than tick history. `501` when the
+        database has no such aggregate (no TimescaleDB).
       security:
         - sessionCookie: []
       parameters:

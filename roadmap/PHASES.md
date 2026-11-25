@@ -26,7 +26,7 @@ Statuses: `todo`, `in progress`, `done`. The next phase is the first row that is
 | 16 | P2 | 06-personal.md | 15 | done |
 | 17 | Migration runner, P3 | 06-personal.md | 06, 15 | done |
 | 18 | S1, S2 | 07-streaming.md | 12 | done |
-| 19 | S3 steps 2–6, M4 step 3 | 07-streaming.md, 03-market-data.md | 08 | todo |
+| 19 | S3 steps 2–6, M4 step 3 | 07-streaming.md, 03-market-data.md | 08 | done |
 
 ## Phase briefs
 
@@ -872,3 +872,35 @@ Each session appends here when it finishes: what the next phases need to know th
 - **Not verified:** the backpressure drop with a real slow client (unit-tested only). Through the BFF it hardly applies: undici reads the SSE service eagerly, so a slow browser fills the BFF's memory, not the SSE service's socket. The BFF has no backpressure rule of its own; worth an item if the BFF is ever exposed to slow clients at scale. Also not verified: a resume across a `session-expired` reconnect (the same code path as any reconnect; the access token lives 10 minutes), and the 2,000-entry bound in a real burst.
 - For later phases: per-user events (P2 server alerts, P3 fills) would add a second registry keyed by user id on `StreamHub` (plan, S2 "Future issues"). Conflation for a real feed would change what the buffer replays. Phase 19's Kafka retention does not touch the Redis stream (`MAXLEN ~ 10000`), which is all the resume needs.
 - Defects outside the scope: the consumer stopped processing for good after a ~60 s Redis outage (phase 17 note, seen again; restarted by touching its entry file). `/health/ready` blocks for 10–30 s while Redis is down (`pingRedis` has no timeout). The throwaway user `phase18@example.test` was deleted through Settings at the end (a fresh login is refused).
+
+### After phase 19 (2026-11-25)
+- Decided by the owner (all four were the recommended options; reasons in `docs/adr/ADR-003-data-retention.md`):
+  - **Kafka `stock-prices`: 12 h retention in 1 h segments** (`retention.ms=43200000`, `segment.ms=3600000`). Redpanda's defaults were 7 days and 14-day segments (checked on the broker). Retention deletes only closed segments, so `retention.ms` alone would have deleted nothing.
+  - **Raw ticks: kept 30 days, compressed after 2 days, 1-day chunks** for new data.
+  - **Candles: one aggregate, `candles_1m`, kept forever**, refreshed every minute over [now − 3 days, now − 1 min], with real-time aggregation on. 5m, 1h and 1d are rolled up from it at query time. No `1h` aggregate.
+  - **Redis: `maxmemory 256mb`, `noeviction`.**
+- Built:
+  - `apps/consumer/src/repositories/tick-housekeeping.ts`, called from `StockTickRepository.prepareSchema` once the hypertable exists. It creates the aggregate `WITH DATA` first, then compression, then retention. If the aggregate fails, retention is not added. Without TimescaleDB or a hypertable, the warning names everything that was skipped. Every policy is added with `if_not_exists`, and the consumer warns at start when a policy in the database differs from the constants (`alter_job` on the dev database showed the warning).
+  - **A changed constant does not take effect until the old policy is removed by hand** (ADR-003 §2).
+  - Compression uses `segmentby symbol`, `orderby time DESC, idempotency_key`; the key is there so the unique index is cheap on compressed chunks.
+  - `CandleRepository` reads only `candles_1m`; `lastPriceBefore` (fill=previous) reads it as well. `42P01` (no aggregate) is `501` like `42883`.
+  - `PRICE_TOPIC_CONFIG_ENTRIES` in `packages/kafka`, passed by the ingestor and the consumer when they create the topic. `scripts/dev.sh` runs `rpk topic alter-config` on an existing topic, or creates it with 6 partitions.
+  - The Redis limit is on the compose service's command line.
+- Verified:
+  - Dev database: the 2019 test chunk was dropped, the 12–19 Nov chunk compressed, all three jobs succeeded, a restart was idempotent.
+  - Scratch database: 40 days of synthetic ticks. The background retention job dropped chunks older than 30 days while `candles_1m` kept their rows. A policy refresh over its window did not remove them. A duplicate tick into a compressed chunk was ignored. A late tick was accepted.
+  - With the name `candles_1m` already taken, the consumer warned and added no policies.
+  - Kafka: the live topic was altered; a fresh topic created by the consumer got both values.
+  - Candles: 401 bars (AAPL, BRK.B, MSFT × 1m/5m/1h/1d, compressed week included) equal raw SQL exactly, in 2–9 ms.
+  - Headless Chromium, through the BFF as a throwaway user (deleted afterwards through Settings): all four intervals rendered, a closed bar of each matched SQL, the last bar is `complete: false`, the 1m and 1d charts change with the stream. A 1m bar newer than the aggregate's watermark (the real-time path) matched SQL. axe was clean and there was no horizontal scroll at 1440.
+  - `pnpm build`; sse-service 40 tests.
+  - All `consumer:processed:*` markers have a TTL (cleanup dry run: 0 without expiry of 158,646).
+- **Not verified, by its nature:** the S3 "Done when" over time. The marker count levelling off after 24 h, and the Postgres volume no longer growing after 30 days, need days of running. What stands in for it: every marker expires, and on the scratch database the retention job removed data older than 30 days while the aggregate kept it. Not verified either: Redis refusing writes at 256 MB (only applied with `CONFIG SET` on the running instance, not filled up), and the 1-day chunks (the current 7-day chunk ends on 26 Nov, and the next one will be 1 day).
+- **One-time effect on the next `pnpm dev:all`:** compose sees the Redis service's new command and recreates the container, which has no volume. Sessions (everyone logged out), latest prices, sparklines and markers are lost once. The consumer rebuilds the day values from Postgres.
+- Open:
+  - Tick history (M3) and CSV export (M6) return nothing older than 30 days; candles go further back. Nothing in the UI says so yet.
+  - A tick more than a minute late is missing from its 1m bar until the next refresh, at most one minute later. Never run `refresh_continuous_aggregate('candles_1m', NULL, NULL)` once raw ticks have been dropped: it deletes aggregate rows for good (ADR-003 §1).
+  - Deployments other than `dev.sh` (`infra/k8s`, `infra/terraform`) must set the topic config and the Redis limit themselves; not changed here.
+  - Two consumer instances starting at once could race on `CREATE MATERIALIZED VIEW IF NOT EXISTS`. The loser logs a warning and skips the policies; the winner adds them. The same race existed for the table before.
+  - This was the last phase in the table.
+- Defects outside the scope, not fixed: the compose Redis has no volume (any recreation logs everyone out); still open from earlier notes: the consumer stopping for good after a long Redis outage, `/health/ready` blocking while Redis is down, Dockerfiles missing workspace dependencies, `tsconfig.app.tsbuildinfo` tracked in git (left out of the commits again).

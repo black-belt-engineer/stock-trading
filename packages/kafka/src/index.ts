@@ -20,3 +20,4 @@ export {
 } from "./bootstrap.js";
 export { kafkaEnvSchemaProperties } from "./env-schema.js";
 export { kafkaBrokerEnvSchema, type KafkaBrokerEnv } from "./env-typebox.js";
+export { PRICE_TOPIC_CONFIG_ENTRIES } from "./price-topic.js";

@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import type { PriceEvent } from "@stock-platform/types";
 import type { Logger } from "@stock-platform/logger";
 import type { SessionBaseline } from "./price-redis.repository.js";
+import { configureTickHousekeeping } from "./tick-housekeeping.js";
 
 /** A numeric column value: `pg` returns DOUBLE PRECISION as a number and NUMERIC as a string. */
 function numberOrNull(value: unknown): number | null {
@@ -60,7 +61,10 @@ export class StockTickRepository {
     try {
       await this.db.query("CREATE EXTENSION IF NOT EXISTS timescaledb;");
     } catch (err) {
-      this.log.warn({ err }, "TimescaleDB extension unavailable, using regular table");
+      this.log.warn(
+        { err },
+        "TimescaleDB extension unavailable, using regular table: no retention, no compression, no candle aggregate",
+      );
       return;
     }
 
@@ -70,7 +74,17 @@ export class StockTickRepository {
       `);
       this.log.info("stock_ticks configured as Timescale hypertable");
     } catch (err) {
-      this.log.warn({ err }, "Could not configure hypertable, using regular table");
+      this.log.warn(
+        { err },
+        "Could not configure hypertable, using regular table: no retention, no compression, no candle aggregate",
+      );
+      return;
+    }
+
+    try {
+      await configureTickHousekeeping(this.db, this.log);
+    } catch (err) {
+      this.log.warn({ err }, "Could not configure stock_ticks housekeeping; raw ticks are kept without limit");
     }
   }
 

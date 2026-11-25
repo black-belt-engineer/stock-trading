@@ -1,4 +1,4 @@
-import { createKafkaWithEnsuredTopic, type Consumer } from "@stock-platform/kafka";
+import { createKafkaWithEnsuredTopic, PRICE_TOPIC_CONFIG_ENTRIES, type Consumer } from "@stock-platform/kafka";
 import {
   parseJson,
   priceEventMessageKey,
@@ -26,6 +26,7 @@ export class KafkaConsumerService {
       topic: this.config.KAFKA_TOPIC,
       numPartitions: this.config.KAFKA_TOPIC_PARTITIONS,
       replicationFactor: this.config.KAFKA_REPLICATION_FACTOR,
+      configEntries: PRICE_TOPIC_CONFIG_ENTRIES,
     });
 
     const consumer = kafka.consumer({ groupId: this.config.KAFKA_GROUP_ID });
